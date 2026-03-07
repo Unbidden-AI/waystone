@@ -9,8 +9,29 @@ import click
 
 from .config import get_db_path, get_project_dir, load_config
 from .extractor import extract
-from .retriever import retrieve
+from .retriever import retrieve, retrieve_with_stats
 from .store import GraphStore
+
+
+def _parse_strategy_overrides(enable, disable, confidence, token_budget):
+    """Build a strategy override dict from CLI flags."""
+    overrides = {}
+    for name in (enable or []):
+        overrides[name] = True
+    for name in (disable or []):
+        overrides[name] = False
+    if confidence is not None:
+        overrides["confidence_threshold"] = confidence
+    if token_budget is not None:
+        overrides["token_budget"] = token_budget
+    return overrides
+
+
+def _resolve_strategies(config, overrides):
+    """Merge config strategies with CLI overrides."""
+    strats = dict(config.get("strategies", {}))
+    strats.update(overrides)
+    return strats
 
 
 def _load_cfg(config_path):
@@ -103,8 +124,13 @@ def extract_cmd(ctx, project, transcript_file):
 @click.argument("task")
 @click.option("--hops", default=None, type=int, help="Graph traversal depth")
 @click.option("--top-k", default=None, type=int, help="Max nodes to return")
+@click.option("--enable", "-e", multiple=True, help="Enable a strategy (e.g. -e superseded_pruning -e recency_decay)")
+@click.option("--disable", "-d", multiple=True, help="Disable a strategy (e.g. -d relevance_scoring)")
+@click.option("--confidence", type=float, default=None, help="Min confidence threshold (e.g. 0.6)")
+@click.option("--token-budget", type=int, default=None, help="Max tokens in output (e.g. 500)")
+@click.option("--stats", "show_stats", is_flag=True, help="Show retrieval stats (for benchmarking)")
 @click.pass_context
-def query(ctx, project, task, hops, top_k):
+def query(ctx, project, task, hops, top_k, enable, disable, confidence, token_budget, show_stats):
     """Retrieve relevant context for a task description."""
     config = _load_cfg(ctx.obj["config_path"])
     db_path = get_db_path(config, project)
@@ -117,11 +143,21 @@ def query(ctx, project, task, hops, top_k):
     hops = hops or defaults.get("hops", 3)
     top_k = top_k or defaults.get("top_k", 10)
 
+    overrides = _parse_strategy_overrides(enable, disable, confidence, token_budget)
+    strategies = _resolve_strategies(config, overrides)
+
     store = GraphStore(db_path)
-    result = retrieve(store, task, hops=hops, top_k=top_k)
+    result = retrieve_with_stats(store, task, hops=hops, top_k=top_k, strategies=strategies)
     store.close()
 
-    click.echo(result)
+    click.echo(result.markdown)
+
+    if show_stats:
+        click.echo("\n--- Retrieval Stats ---")
+        click.echo(f"Nodes before strategies: {result.nodes_before_strategies}")
+        click.echo(f"Nodes after strategies:  {result.nodes_after_strategies}")
+        click.echo(f"Strategies applied:      {', '.join(result.strategies_applied) or 'none'}")
+        click.echo(f"Estimated tokens:        {result.tokens_estimated}")
 
 
 @cli.command()
@@ -161,9 +197,13 @@ def show(ctx, project):
 @cli.command()
 @click.argument("project")
 @click.option("--output", "-o", default=None, help="Output file path")
+@click.option("--enable", "-e", multiple=True, help="Enable a strategy")
+@click.option("--disable", "-d", multiple=True, help="Disable a strategy")
+@click.option("--confidence", type=float, default=None, help="Min confidence threshold")
+@click.option("--token-budget", type=int, default=None, help="Max tokens in output")
 @click.pass_context
-def export(ctx, project, output):
-    """Export the full graph as markdown."""
+def export(ctx, project, output, enable, disable, confidence, token_budget):
+    """Export the full graph as markdown, with optional strategy filtering."""
     config = _load_cfg(ctx.obj["config_path"])
     db_path = get_db_path(config, project)
 
@@ -179,9 +219,34 @@ def export(ctx, project, output):
         store.close()
         return
 
-    # Assemble markdown from all nodes
-    from .retriever import assemble_markdown
-    markdown = assemble_markdown(all_nodes, f"Full export of {project}")
+    overrides = _parse_strategy_overrides(enable, disable, confidence, token_budget)
+    strategies = _resolve_strategies(config, overrides)
+
+    # Apply post-retrieval strategies to all nodes
+    from .retriever import (
+        apply_recency_decay,
+        apply_token_budget,
+        assemble_markdown,
+        filter_by_confidence,
+        prune_superseded,
+    )
+
+    applied = []
+    if strategies.get("superseded_pruning"):
+        all_nodes = prune_superseded(all_nodes, store)
+        applied.append("superseded_pruning")
+    if strategies.get("confidence_threshold", 0) > 0:
+        all_nodes = filter_by_confidence(all_nodes, strategies["confidence_threshold"])
+        applied.append(f"confidence_threshold({strategies['confidence_threshold']})")
+    if strategies.get("recency_decay"):
+        all_nodes = apply_recency_decay(all_nodes, strategies.get("recency_half_life_days", 30))
+        applied.append("recency_decay")
+        all_nodes.sort(key=lambda n: n.get("_score", n.get("confidence", 0)), reverse=True)
+    if strategies.get("token_budget", 0) > 0:
+        all_nodes = apply_token_budget(all_nodes, strategies["token_budget"])
+        applied.append(f"token_budget({strategies['token_budget']})")
+
+    markdown = assemble_markdown(all_nodes, f"Full export of {project}", applied)
 
     if output:
         out_path = Path(output)

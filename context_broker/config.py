@@ -16,6 +16,14 @@ DEFAULTS = {
         "top_k": 10,
         "format": "markdown",
     },
+    "strategies": {
+        "superseded_pruning": True,
+        "confidence_threshold": 0.0,  # 0.0 = disabled; e.g. 0.6 to filter tentative facts
+        "recency_decay": False,
+        "recency_half_life_days": 30,  # nodes lose half their score after this many days
+        "token_budget": 0,  # 0 = unlimited; e.g. 500 to cap output
+        "relevance_scoring": True,  # rank entry nodes by tag overlap count
+    },
     "projects_dir": "./projects",
 }
 

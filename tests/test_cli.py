@@ -107,6 +107,56 @@ class TestQuery:
         result = r.invoke(cli, ["--config", config, "query", "test-project", "kubernetes"])
         assert "No relevant context" in result.output
 
+    def test_query_with_strategy_flags(self, runner):
+        r, config, tmp_path = runner
+        r.invoke(cli, ["--config", config, "init", "test-project"])
+
+        db_path = tmp_path / "projects" / "test-project" / "context.db"
+        store = GraphStore(db_path)
+        store.add_node({
+            "id": "n_1", "fact": "Uses PostgreSQL", "type": "decision",
+            "confidence": 0.5, "tags": ["database"],
+            "created_at": "2026-03-07T00:00:00Z", "supersedes": [],
+        })
+        store.close()
+
+        # With high confidence threshold, this node should be filtered
+        result = r.invoke(cli, [
+            "--config", config, "query", "test-project", "database",
+            "--confidence", "0.8"
+        ])
+        assert result.exit_code == 0
+        assert "No relevant context" in result.output
+
+    def test_query_with_stats_flag(self, runner):
+        r, config, tmp_path = runner
+        r.invoke(cli, ["--config", config, "init", "test-project"])
+
+        db_path = tmp_path / "projects" / "test-project" / "context.db"
+        store = GraphStore(db_path)
+        store.add_node({
+            "id": "n_1", "fact": "Uses PostgreSQL", "type": "decision",
+            "confidence": 0.9, "tags": ["database"],
+            "created_at": "2026-03-07T00:00:00Z", "supersedes": [],
+        })
+        store.close()
+
+        result = r.invoke(cli, [
+            "--config", config, "query", "test-project", "database", "--stats"
+        ])
+        assert result.exit_code == 0
+        assert "Retrieval Stats" in result.output
+        assert "Nodes before strategies" in result.output
+
+    def test_query_enable_disable_flags(self, runner):
+        r, config, _ = runner
+        r.invoke(cli, ["--config", config, "init", "test-project"])
+        result = r.invoke(cli, [
+            "--config", config, "query", "test-project", "anything",
+            "-e", "superseded_pruning", "-d", "relevance_scoring"
+        ])
+        assert result.exit_code == 0
+
 
 class TestExport:
     def test_export_creates_file(self, runner):
