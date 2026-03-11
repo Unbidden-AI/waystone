@@ -194,12 +194,17 @@ def extract_cmd(ctx, project, transcript_file, verify, timeout, chunk_size):
         node["source_transcript"] = transcript_path.name
         node.setdefault("created_at", datetime.now(timezone.utc).isoformat())
 
+    if not nodes:
+        click.echo("Error: all chunks failed — nothing extracted. Check your timeout and LLM connectivity.", err=True)
+        sys.exit(1)
+
     store = GraphStore(db_path)
     store.merge_extraction(nodes, edges)
     store.close()
 
     # Copy transcript to project's transcripts dir
     dest = get_project_dir(config, project) / "transcripts" / transcript_path.name
+    dest.parent.mkdir(parents=True, exist_ok=True)
     if not dest.exists():
         dest.write_text(transcript_text)
 
@@ -801,6 +806,7 @@ def extract_replay_cmd(ctx, project, transcript_file, turn_size, context_k, cont
             click.echo(f" {len(nodes)} nodes, {len(edges)} edges, {cross_turn} cross-turn [{elapsed:.1f}s]")
 
     dest = get_project_dir(config, project) / "transcripts" / transcript_path.name
+    dest.parent.mkdir(parents=True, exist_ok=True)
     if not dest.exists():
         dest.write_text(transcript_text)
 
