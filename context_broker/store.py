@@ -1,9 +1,12 @@
 """SQLite-backed graph store for context nodes and edges."""
 
 import json
+import logging
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
+
+log = logging.getLogger(__name__)
 
 
 class GraphStore:
@@ -143,6 +146,7 @@ class GraphStore:
         Handles supersedes: when a new node supersedes existing ones,
         those are recorded and the new node is inserted.
         """
+        log.info("Merging %d nodes, %d edges into %s", len(nodes), len(edges), self.db_path.name)
         for node in nodes:
             self.add_node(node)
         for edge in edges:

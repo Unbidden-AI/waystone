@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 import os
 import re
 import uuid
@@ -14,6 +15,8 @@ from .prompts import (
     build_reconcile_prompt,
     build_verification_prompt,
 )
+
+log = logging.getLogger(__name__)
 
 # Pattern for existing node IDs assigned by the store (n_ + 8 hex chars)
 _EXISTING_ID_PATTERN = re.compile(r"^n_[0-9a-f]{8}$")
@@ -118,6 +121,8 @@ async def _call_llm(prompt: str, config: dict) -> str:
     _RETRYABLE = {429, 500, 502, 503, 504}
     _MAX_RETRIES = 4
 
+    log.debug("LLM request: model=%s max_tokens=%s", llm_cfg["model"], request_body["max_tokens"])
+
     async with httpx.AsyncClient(timeout=timeout) as client:
         for attempt in range(_MAX_RETRIES):
             response = await client.post(
@@ -133,12 +138,14 @@ async def _call_llm(prompt: str, config: dict) -> str:
                 retry_after = response.headers.get("Retry-After")
                 if retry_after and retry_after.isdigit():
                     wait = min(int(retry_after), 60)
+                log.warning("LLM returned %s (attempt %d/%d), retrying in %ds", response.status_code, attempt + 1, _MAX_RETRIES, wait)
                 await asyncio.sleep(wait)
         response.raise_for_status()
 
     data = response.json()
     choice = data["choices"][0]
     finish_reason = choice.get("finish_reason")
+    log.debug("LLM response: finish_reason=%s", finish_reason)
     if finish_reason == "length":
         max_tok = llm_cfg.get("max_tokens", 4096)
         raise ValueError(
@@ -160,10 +167,13 @@ async def extract(transcript_text: str, config: dict) -> dict:
     Returns:
         dict with "nodes" (list[dict]) and "edges" (list[dict])
     """
+    log.info("Extracting from %d chars of transcript", len(transcript_text))
     prompt = build_extraction_prompt(transcript_text)
     content = await _call_llm(prompt, config)
     extraction = parse_llm_response(content)
-    return assign_ids(extraction)
+    result = assign_ids(extraction)
+    log.info("Extracted %d nodes, %d edges", len(result["nodes"]), len(result["edges"]))
+    return result
 
 
 async def verify_extraction(transcript_text: str, extracted_nodes: list[dict], config: dict) -> dict:

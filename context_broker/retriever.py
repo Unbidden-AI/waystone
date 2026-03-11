@@ -1,11 +1,14 @@
 """Retrieval engine: tag matching, BFS traversal, strategy pipeline, and context assembly."""
 
+import logging
 import math
 from collections import Counter, defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from .store import GraphStore
+
+log = logging.getLogger(__name__)
 
 # Common words to exclude from keyword extraction
 STOP_WORDS = {
@@ -81,10 +84,13 @@ def retrieve_with_stats(
     strats = {**DEFAULT_STRATEGIES, **(strategies or {})}
 
     keywords = extract_keywords(task_description)
+    log.debug("Retrieval: task=%r keywords=%s hops=%d top_k=%d", task_description[:80], keywords, hops, top_k)
     if not keywords:
+        log.debug("No keywords extracted — returning empty result")
         return RetrievalResult(markdown="No relevant context found.", nodes_before_strategies=0, nodes_after_strategies=0)
 
     entry_nodes = store.get_nodes_by_tags(keywords)
+    log.debug("Tag search: %d entry nodes matched", len(entry_nodes))
     if not entry_nodes:
         return RetrievalResult(markdown="No relevant context found.", nodes_before_strategies=0, nodes_after_strategies=0)
 
@@ -151,6 +157,7 @@ def retrieve_with_stats(
         applied.append(f"token_budget({strats['token_budget']})")
 
     nodes_after = len(collected_nodes)
+    log.debug("Retrieval: %d nodes before strategies, %d after (strategies: %s)", nodes_before, nodes_after, applied)
     markdown = assemble_markdown(collected_nodes, task_description, applied)
     tokens_est = estimate_tokens(markdown)
 
