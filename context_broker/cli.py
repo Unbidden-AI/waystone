@@ -113,7 +113,7 @@ _MAX_FILE_BYTES = 50 * 1024 * 1024  # 50 MB hard limit
 @click.option("--verify", is_flag=True, help="Run a second verification pass to catch missed facts")
 @click.option("--timeout", type=float, default=None, help="LLM timeout in seconds (overrides config)")
 @click.option("--chunk-size", type=int, default=None, metavar="CHARS",
-              help="Auto-split large transcripts into chunks of this many characters")
+              help="Max chars per LLM call (default: 20000 for Gemini; auto-applied when file > 20000 chars)")
 @click.pass_context
 def extract_cmd(ctx, project, transcript_file, verify, timeout, chunk_size):
     """Extract facts from a transcript and merge into the project graph."""
@@ -141,50 +141,68 @@ def extract_cmd(ctx, project, transcript_file, verify, timeout, chunk_size):
 
     transcript_text = transcript_path.read_text()
 
-    # Split into chunks if requested or if transcript is very large and no chunk_size set
-    if chunk_size:
-        chunks = _split_at_paragraphs(transcript_text, chunk_size)
+    # Auto-chunk: use explicit --chunk-size if given, otherwise chunk anything
+    # over 20000 chars at 20000 (safe default for Gemini 2.5 Flash and similar models).
+    _AUTO_CHUNK = 20_000
+    effective_chunk_size = chunk_size or (_AUTO_CHUNK if len(transcript_text) > _AUTO_CHUNK else None)
+    if effective_chunk_size:
+        chunks = _split_at_paragraphs(transcript_text, effective_chunk_size)
     else:
         chunks = [transcript_text]
 
-    click.echo(f"Extracting from {transcript_path.name}..."
-               + (f" ({len(chunks)} chunks)" if len(chunks) > 1 else ""))
+    chunk_info = f" ({len(chunks)} × {effective_chunk_size:,} chars)" if len(chunks) > 1 else ""
+    click.echo(f"Extracting from {transcript_path.name}...{chunk_info}")
 
     all_nodes: list[dict] = []
     all_edges: list[dict] = []
+    failed_chunks = 0
 
     for i, chunk_text in enumerate(chunks, 1):
         prefix = f"  Chunk {i}/{len(chunks)}: " if len(chunks) > 1 else "  "
+        if len(chunks) > 1:
+            click.echo(f"{prefix}sending {len(chunk_text):,} chars...", nl=False)
 
+        t0 = time.monotonic()
         try:
             result = asyncio.run(extract(chunk_text, config))
         except Exception as e:
+            elapsed = time.monotonic() - t0
             msg = str(e) or repr(e)
-            click.echo(f"{prefix}FAILED ({type(e).__name__}): {msg}", err=True)
+            click.echo("")  # newline after the "sending..." prompt
+            click.echo(f"{prefix}FAILED after {elapsed:.0f}s ({type(e).__name__}): {msg}", err=True)
+            failed_chunks += 1
             if len(chunks) == 1:
                 sys.exit(1)
             click.echo(f"{prefix}Skipping chunk and continuing...", err=True)
             continue
 
+        elapsed = time.monotonic() - t0
         nodes = result["nodes"]
         edges = result["edges"]
 
         if verify:
-            click.echo(f"{prefix}{len(nodes)} nodes. Running verification pass...")
+            click.echo(f" {len(nodes)} nodes [{elapsed:.0f}s]. Verifying...")
             try:
                 verify_result = asyncio.run(verify_extraction(chunk_text, nodes, config))
                 extra_nodes = verify_result["nodes"]
                 extra_edges = verify_result["edges"]
-                click.echo(f"{prefix}+{len(extra_nodes)} additional nodes, +{len(extra_edges)} edges")
+                click.echo(f"{prefix}+{len(extra_nodes)} nodes, +{len(extra_edges)} edges")
                 nodes = nodes + extra_nodes
                 edges = edges + extra_edges
             except Exception as e:
                 click.echo(f"{prefix}Verification pass failed (continuing with pass 1): {e}", err=True)
         elif len(chunks) > 1:
-            click.echo(f"{prefix}{len(nodes)} nodes, {len(edges)} edges")
+            click.echo(f" {len(nodes)} nodes, {len(edges)} edges [{elapsed:.0f}s]")
 
         all_nodes.extend(nodes)
         all_edges.extend(edges)
+
+    if failed_chunks and failed_chunks == len(chunks):
+        # All chunks failed — already exited for single-chunk case above
+        click.echo(f"Error: all {len(chunks)} chunks failed — nothing extracted.", err=True)
+        sys.exit(1)
+    if failed_chunks:
+        click.echo(f"Warning: {failed_chunks}/{len(chunks)} chunks failed; continuing with partial extraction.", err=True)
 
     nodes = all_nodes
     edges = all_edges
@@ -193,10 +211,6 @@ def extract_cmd(ctx, project, transcript_file, verify, timeout, chunk_size):
     for node in nodes:
         node["source_transcript"] = transcript_path.name
         node.setdefault("created_at", datetime.now(timezone.utc).isoformat())
-
-    if not nodes:
-        click.echo("Error: all chunks failed — nothing extracted. Check your timeout and LLM connectivity.", err=True)
-        sys.exit(1)
 
     store = GraphStore(db_path)
     store.merge_extraction(nodes, edges)

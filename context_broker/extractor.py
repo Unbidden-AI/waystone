@@ -118,19 +118,29 @@ async def _call_llm(prompt: str, config: dict) -> str:
     if "reasoning_effort" in llm_cfg:
         request_body["reasoning_effort"] = llm_cfg["reasoning_effort"]
 
-    _RETRYABLE = {429, 500, 502, 503, 504}
+    _RETRYABLE_STATUS = {429, 500, 502, 503, 504}
     _MAX_RETRIES = 4
 
     log.debug("LLM request: model=%s max_tokens=%s", llm_cfg["model"], request_body["max_tokens"])
 
+    response = None
     async with httpx.AsyncClient(timeout=timeout) as client:
         for attempt in range(_MAX_RETRIES):
-            response = await client.post(
-                f"{llm_cfg['base_url']}/chat/completions",
-                headers=headers,
-                json=request_body,
-            )
-            if response.status_code not in _RETRYABLE:
+            try:
+                response = await client.post(
+                    f"{llm_cfg['base_url']}/chat/completions",
+                    headers=headers,
+                    json=request_body,
+                )
+            except (httpx.ReadTimeout, httpx.ConnectTimeout) as exc:
+                if attempt < _MAX_RETRIES - 1:
+                    wait = 2 ** attempt  # 1s, 2s, 4s, 8s
+                    log.warning("LLM timeout (attempt %d/%d), retrying in %ds: %s", attempt + 1, _MAX_RETRIES, wait, exc)
+                    await asyncio.sleep(wait)
+                    continue
+                raise
+
+            if response.status_code not in _RETRYABLE_STATUS:
                 break
             if attempt < _MAX_RETRIES - 1:
                 wait = 2 ** attempt  # 1s, 2s, 4s, 8s
