@@ -121,6 +121,27 @@ class GraphStore:
         ).fetchall()
         return [self._row_to_node(r) for r in rows]
 
+    def get_nodes_by_ids(self, node_ids: list[str]) -> list[dict]:
+        """Fetch multiple nodes by ID in a single query."""
+        if not node_ids:
+            return []
+        placeholders = ",".join("?" * len(node_ids))
+        rows = self.conn.execute(
+            f"SELECT * FROM nodes WHERE id IN ({placeholders})", node_ids
+        ).fetchall()
+        return [self._row_to_node(r) for r in rows]
+
+    def get_edges_for_nodes(self, node_ids: list[str]) -> list[dict]:
+        """Fetch all edges where from_id or to_id is in node_ids."""
+        if not node_ids:
+            return []
+        placeholders = ",".join("?" * len(node_ids))
+        rows = self.conn.execute(
+            f"SELECT * FROM edges WHERE from_id IN ({placeholders}) OR to_id IN ({placeholders})",
+            node_ids + node_ids,
+        ).fetchall()
+        return [dict(r) for r in rows]
+
     def get_edges_from(self, node_id: str) -> list[dict]:
         """Get all outgoing edges from a node."""
         rows = self.conn.execute(

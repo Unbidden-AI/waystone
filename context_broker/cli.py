@@ -150,59 +150,79 @@ def extract_cmd(ctx, project, transcript_file, verify, timeout, chunk_size):
     else:
         chunks = [transcript_text]
 
-    chunk_info = f" ({len(chunks)} × {effective_chunk_size:,} chars)" if len(chunks) > 1 else ""
+    n_chunks = len(chunks)
+    chunk_info = f" ({n_chunks} chunks × ≤{effective_chunk_size:,} chars, parallel)" if n_chunks > 1 else ""
     click.echo(f"Extracting from {transcript_path.name}...{chunk_info}")
 
     all_nodes: list[dict] = []
     all_edges: list[dict] = []
     failed_chunks = 0
 
-    for i, chunk_text in enumerate(chunks, 1):
-        prefix = f"  Chunk {i}/{len(chunks)}: " if len(chunks) > 1 else "  "
-        if len(chunks) > 1:
-            click.echo(f"{prefix}sending {len(chunk_text):,} chars...", nl=False)
-
+    if n_chunks == 1:
+        # Single chunk: inline progress
+        click.echo(f"  sending {len(chunks[0]):,} chars...", nl=False)
         t0 = time.monotonic()
         try:
-            result = asyncio.run(extract(chunk_text, config))
+            result = asyncio.run(extract(chunks[0], config))
         except Exception as e:
             elapsed = time.monotonic() - t0
-            msg = str(e) or repr(e)
-            click.echo("")  # newline after the "sending..." prompt
-            click.echo(f"{prefix}FAILED after {elapsed:.0f}s ({type(e).__name__}): {msg}", err=True)
-            failed_chunks += 1
-            if len(chunks) == 1:
-                sys.exit(1)
-            click.echo(f"{prefix}Skipping chunk and continuing...", err=True)
-            continue
-
+            click.echo("")
+            click.echo(f"  FAILED after {elapsed:.0f}s ({type(e).__name__}): {e}", err=True)
+            sys.exit(1)
         elapsed = time.monotonic() - t0
-        nodes = result["nodes"]
-        edges = result["edges"]
-
+        nodes, edges = result["nodes"], result["edges"]
         if verify:
             click.echo(f" {len(nodes)} nodes [{elapsed:.0f}s]. Verifying...")
             try:
-                verify_result = asyncio.run(verify_extraction(chunk_text, nodes, config))
-                extra_nodes = verify_result["nodes"]
-                extra_edges = verify_result["edges"]
-                click.echo(f"{prefix}+{len(extra_nodes)} nodes, +{len(extra_edges)} edges")
-                nodes = nodes + extra_nodes
-                edges = edges + extra_edges
+                vr = asyncio.run(verify_extraction(chunks[0], nodes, config))
+                click.echo(f"  +{len(vr['nodes'])} nodes, +{len(vr['edges'])} edges")
+                nodes = nodes + vr["nodes"]
+                edges = edges + vr["edges"]
             except Exception as e:
-                click.echo(f"{prefix}Verification pass failed (continuing with pass 1): {e}", err=True)
-        elif len(chunks) > 1:
+                click.echo(f"  Verification failed (continuing with pass 1): {e}", err=True)
+        else:
             click.echo(f" {len(nodes)} nodes, {len(edges)} edges [{elapsed:.0f}s]")
-
         all_nodes.extend(nodes)
         all_edges.extend(edges)
+    else:
+        # Multiple chunks: run all in parallel, then report results in order
+        click.echo(f"  Submitting {n_chunks} chunks in parallel...")
 
-    if failed_chunks and failed_chunks == len(chunks):
-        # All chunks failed — already exited for single-chunk case above
-        click.echo(f"Error: all {len(chunks)} chunks failed — nothing extracted.", err=True)
-        sys.exit(1)
-    if failed_chunks:
-        click.echo(f"Warning: {failed_chunks}/{len(chunks)} chunks failed; continuing with partial extraction.", err=True)
+        async def _extract_chunk(chunk_text: str, do_verify: bool) -> tuple[list, list]:
+            result = await extract(chunk_text, config)
+            nodes, edges = result["nodes"], result["edges"]
+            if do_verify:
+                try:
+                    vr = await verify_extraction(chunk_text, nodes, config)
+                    nodes = nodes + vr["nodes"]
+                    edges = edges + vr["edges"]
+                except Exception:
+                    pass  # verification failure is non-fatal
+            return nodes, edges
+
+        t0 = time.monotonic()
+        raw_results = asyncio.run(
+            asyncio.gather(*[_extract_chunk(c, verify) for c in chunks], return_exceptions=True)
+        )
+        elapsed = time.monotonic() - t0
+
+        for i, r in enumerate(raw_results, 1):
+            if isinstance(r, BaseException):
+                click.echo(f"  Chunk {i}/{n_chunks}: FAILED ({type(r).__name__}): {r}", err=True)
+                failed_chunks += 1
+            else:
+                nodes, edges = r
+                click.echo(f"  Chunk {i}/{n_chunks}: {len(nodes)} nodes, {len(edges)} edges")
+                all_nodes.extend(nodes)
+                all_edges.extend(edges)
+
+        click.echo(f"  All {n_chunks} chunks done in {elapsed:.0f}s")
+
+        if failed_chunks == n_chunks:
+            click.echo(f"Error: all {n_chunks} chunks failed — nothing extracted.", err=True)
+            sys.exit(1)
+        if failed_chunks:
+            click.echo(f"Warning: {failed_chunks}/{n_chunks} chunks failed; continuing with partial extraction.", err=True)
 
     nodes = all_nodes
     edges = all_edges

@@ -2,7 +2,7 @@
 
 import logging
 import math
-from collections import Counter, defaultdict, deque
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -273,44 +273,54 @@ def apply_token_budget(nodes: list[dict], budget: int) -> list[dict]:
 def bfs_collect(store: GraphStore, entry_nodes: list[dict], hops: int) -> list[dict]:
     """BFS from entry nodes up to `hops` depth, collecting all reachable nodes.
 
+    Uses batch queries per hop (2 queries per layer instead of 2+N per node),
+    which reduces SQLite round-trips from O(nodes) to O(hops).
+
     Sets `_bfs_depth` on each node (0 = entry node, 1 = one hop away, etc.)
     so callers can use depth as a ranking signal.
     """
-    visited_ids = set()
-    collected = []
-    queue = deque()
+    visited_ids: set[str] = set()
+    collected: list[dict] = []
 
+    # Seed layer 0
+    current_layer_ids: list[str] = []
     for node in entry_nodes:
         if node["id"] not in visited_ids:
             visited_ids.add(node["id"])
             node = {**node, "_bfs_depth": 0}
             collected.append(node)
-            queue.append((node["id"], 0))
+            current_layer_ids.append(node["id"])
 
-    while queue:
-        node_id, depth = queue.popleft()
-        if depth >= hops:
-            continue
+    for depth in range(hops):
+        if not current_layer_ids:
+            break
 
-        for edge in store.get_edges_from(node_id):
-            neighbor_id = edge["to_id"]
-            if neighbor_id not in visited_ids:
-                visited_ids.add(neighbor_id)
-                neighbor = store.get_node(neighbor_id)
-                if neighbor:
-                    neighbor = {**neighbor, "_bfs_depth": depth + 1}
-                    collected.append(neighbor)
-                    queue.append((neighbor_id, depth + 1))
+        # Batch-fetch all edges touching this layer (1 query for the whole layer)
+        all_edges = store.get_edges_for_nodes(current_layer_ids)
 
-        for edge in store.get_edges_to(node_id):
-            neighbor_id = edge["from_id"]
-            if neighbor_id not in visited_ids:
-                visited_ids.add(neighbor_id)
-                neighbor = store.get_node(neighbor_id)
-                if neighbor:
-                    neighbor = {**neighbor, "_bfs_depth": depth + 1}
-                    collected.append(neighbor)
-                    queue.append((neighbor_id, depth + 1))
+        # Collect unvisited neighbor IDs (deduplicated, preserving first-seen order)
+        seen_this_pass: set[str] = set()
+        neighbor_ids: list[str] = []
+        for edge in all_edges:
+            for nid in (edge["to_id"], edge["from_id"]):
+                if nid not in visited_ids and nid not in seen_this_pass:
+                    seen_this_pass.add(nid)
+                    neighbor_ids.append(nid)
+
+        if not neighbor_ids:
+            break
+
+        # Batch-fetch all new neighbors in one query
+        next_layer_ids: list[str] = []
+        for node in store.get_nodes_by_ids(neighbor_ids):
+            nid = node["id"]
+            if nid not in visited_ids:
+                visited_ids.add(nid)
+                node = {**node, "_bfs_depth": depth + 1}
+                collected.append(node)
+                next_layer_ids.append(nid)
+
+        current_layer_ids = next_layer_ids
 
     return collected
 
