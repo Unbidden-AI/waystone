@@ -1,7 +1,7 @@
 """Retrieval engine: tag matching, BFS traversal, strategy pipeline, and context assembly."""
 
 import math
-from collections import deque
+from collections import Counter, defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -92,6 +92,33 @@ def retrieve_with_stats(
     if strats["relevance_scoring"]:
         entry_nodes = score_by_relevance(entry_nodes, keywords)
 
+    # Build a seed set: prioritize nodes with ≥2 keyword-tag matches (high relevance),
+    # then fill remaining slots with other candidates sorted by relevance score.
+    # This avoids the previous failure mode where a strict ≥2 filter excluded the
+    # most directly relevant node (e.g. the JWT decision node scoring only 1) while
+    # still capping total seeds to prevent top_k saturation with off-topic nodes.
+    keyword_set = set(keywords)
+    max_seeds = max(1, top_k // 2)
+
+    high_overlap = [
+        n for n in entry_nodes
+        if _count_keyword_tag_hits(n.get("tags", []), keyword_set) >= 2
+    ]
+    low_overlap_ids = {n["id"] for n in high_overlap}
+    low_overlap = [n for n in entry_nodes if n["id"] not in low_overlap_ids]
+
+    # Source restriction: when ≥3 high-overlap seeds all share the same source_transcript,
+    # restrict low-overlap seeds to that same source. This prevents cross-project BFS flooding
+    # in multi-project stores where generic keywords match nodes from the wrong project.
+    if len(high_overlap) >= 3:
+        src_counts = Counter(n.get("source_transcript", "") for n in high_overlap)
+        dominant_src, dominant_count = src_counts.most_common(1)[0]
+        if dominant_src and dominant_count == len(high_overlap):
+            low_overlap = [n for n in low_overlap if n.get("source_transcript") == dominant_src]
+
+    # High-overlap nodes first (already relevance-sorted), fill remaining with low-overlap
+    entry_nodes = (high_overlap + low_overlap)[:max_seeds]
+
     # BFS from entry nodes
     collected_nodes = bfs_collect(store, entry_nodes, hops)
     nodes_before = len(collected_nodes)
@@ -111,8 +138,12 @@ def retrieve_with_stats(
         collected_nodes = apply_recency_decay(collected_nodes, strats["recency_half_life_days"])
         applied.append(f"recency_decay(half_life={strats['recency_half_life_days']}d)")
 
-    # Sort by confidence (possibly decayed) descending, limit to top_k
-    collected_nodes.sort(key=lambda n: n.get("_score", n.get("confidence", 0)), reverse=True)
+    # Sort by confidence (possibly decayed) descending, then BFS depth ascending
+    # as a tiebreaker so nodes closer to entry points rank higher when scores are equal.
+    collected_nodes.sort(
+        key=lambda n: (n.get("_score", n.get("confidence", 0)), -n.get("_bfs_depth", 0)),
+        reverse=True,
+    )
     collected_nodes = collected_nodes[:top_k]
 
     if strats["token_budget"] > 0:
@@ -136,6 +167,19 @@ def retrieve_with_stats(
 # Strategy implementations
 # ---------------------------------------------------------------------------
 
+def _count_keyword_tag_hits(tags: list[str], keyword_set: set) -> int:
+    """Count distinct keywords that appear as a substring in any tag.
+
+    Mirrors the SQL LIKE %keyword% behavior so multi-word tags like
+    "event format" are counted as a match for keyword "format".
+    """
+    matched = set()
+    for kw in keyword_set:
+        if any(kw in tag.lower() for tag in tags):
+            matched.add(kw)
+    return len(matched)
+
+
 def score_by_relevance(nodes: list[dict], keywords: list[str]) -> list[dict]:
     """Rank nodes by number of matching tags (not just binary match).
 
@@ -144,8 +188,7 @@ def score_by_relevance(nodes: list[dict], keywords: list[str]) -> list[dict]:
     """
     keyword_set = set(keywords)
     for node in nodes:
-        tag_set = set(node.get("tags", []))
-        node["_relevance"] = len(tag_set & keyword_set)
+        node["_relevance"] = _count_keyword_tag_hits(node.get("tags", []), keyword_set)
     nodes.sort(key=lambda n: n["_relevance"], reverse=True)
     return nodes
 
@@ -221,7 +264,11 @@ def apply_token_budget(nodes: list[dict], budget: int) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 def bfs_collect(store: GraphStore, entry_nodes: list[dict], hops: int) -> list[dict]:
-    """BFS from entry nodes up to `hops` depth, collecting all reachable nodes."""
+    """BFS from entry nodes up to `hops` depth, collecting all reachable nodes.
+
+    Sets `_bfs_depth` on each node (0 = entry node, 1 = one hop away, etc.)
+    so callers can use depth as a ranking signal.
+    """
     visited_ids = set()
     collected = []
     queue = deque()
@@ -229,6 +276,7 @@ def bfs_collect(store: GraphStore, entry_nodes: list[dict], hops: int) -> list[d
     for node in entry_nodes:
         if node["id"] not in visited_ids:
             visited_ids.add(node["id"])
+            node = {**node, "_bfs_depth": 0}
             collected.append(node)
             queue.append((node["id"], 0))
 
@@ -243,6 +291,7 @@ def bfs_collect(store: GraphStore, entry_nodes: list[dict], hops: int) -> list[d
                 visited_ids.add(neighbor_id)
                 neighbor = store.get_node(neighbor_id)
                 if neighbor:
+                    neighbor = {**neighbor, "_bfs_depth": depth + 1}
                     collected.append(neighbor)
                     queue.append((neighbor_id, depth + 1))
 
@@ -252,6 +301,7 @@ def bfs_collect(store: GraphStore, entry_nodes: list[dict], hops: int) -> list[d
                 visited_ids.add(neighbor_id)
                 neighbor = store.get_node(neighbor_id)
                 if neighbor:
+                    neighbor = {**neighbor, "_bfs_depth": depth + 1}
                     collected.append(neighbor)
                     queue.append((neighbor_id, depth + 1))
 
@@ -260,7 +310,9 @@ def bfs_collect(store: GraphStore, entry_nodes: list[dict], hops: int) -> list[d
 
 def extract_keywords(text: str) -> list[str]:
     """Extract keywords from text by tokenizing and filtering stop words."""
-    words = text.lower().split()
+    # Normalize hyphens to spaces so "hot-path" → "hot", "path" (matching space-separated tags)
+    text = text.lower().replace("-", " ")
+    words = text.split()
     # Strip punctuation
     words = [w.strip(".,;:!?\"'()[]{}") for w in words]
     return [w for w in words if w and w not in STOP_WORDS and len(w) > 1]
@@ -269,6 +321,57 @@ def extract_keywords(text: str) -> list[str]:
 def estimate_tokens(text: str) -> int:
     """Rough token estimate: ~4 characters per token for English text."""
     return max(1, len(text) // 4)
+
+
+def cluster_by_tags(nodes: list[dict], max_cluster_size: int = 20) -> list[list[dict]]:
+    """Group nodes into clusters where members share at least one tag.
+
+    Uses union-find on tag overlap. Clusters larger than max_cluster_size are
+    split into windows sorted by created_at (oldest first) so the LLM sees
+    temporal progression within each window.
+    """
+    if not nodes:
+        return []
+
+    # Map tag → node IDs
+    tag_to_ids: dict[str, list[str]] = defaultdict(list)
+    for node in nodes:
+        for tag in node.get("tags", []):
+            tag_to_ids[tag.lower()].append(node["id"])
+
+    # Union-find
+    parent = {n["id"]: n["id"] for n in nodes}
+
+    def find(x: str) -> str:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(x: str, y: str) -> None:
+        px, py = find(x), find(y)
+        if px != py:
+            parent[px] = py
+
+    for nids in tag_to_ids.values():
+        for i in range(1, len(nids)):
+            union(nids[0], nids[i])
+
+    # Group by root
+    groups: dict[str, list[dict]] = defaultdict(list)
+    for node in nodes:
+        groups[find(node["id"])].append(node)
+
+    # Sort each group by created_at ascending, then chunk if oversized
+    result = []
+    for group in groups.values():
+        group.sort(key=lambda n: n.get("created_at", ""))
+        for i in range(0, len(group), max_cluster_size):
+            chunk = group[i : i + max_cluster_size]
+            if len(chunk) >= 2:
+                result.append(chunk)
+
+    return result
 
 
 def assemble_markdown(nodes: list[dict], task: str, strategies_applied: list[str] | None = None) -> str:

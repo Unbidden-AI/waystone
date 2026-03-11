@@ -1,0 +1,11 @@
+llm:
+  base_url: "http://localhost:1234/v1"
+  model: "qwen/qwen3.5-35b-a3b"
+  temperature: 0.1
+  max_tokens: 16384
+  timeout: 600
+  enable_thinking: true
+  # Needs generous max_tokens — thinking output consumes tokens before JSON.
+  # In LM Studio, thinking mode is on by default for Qwen3 models.
+  # To force it on: in model settings, add {% set enable_thinking = true %}
+  # to the prompt template.

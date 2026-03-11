@@ -1,6 +1,8 @@
 llm:
-  base_url: "http://localhost:1234/v1"
-  model: "qwen3.5-35b-a3b"
+  base_url: "https://generativelanguage.googleapis.com/v1beta/openai"
+  model: "gemini-2.5-flash"
+  api_key_env: "GEMINI_API_KEY"
+  timeout: 120.0
   temperature: 0.1
   max_tokens: 4096
 

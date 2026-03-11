@@ -10,6 +10,7 @@ DEFAULTS = {
         "model": "qwen3.5-35b-a3b",
         "temperature": 0.1,
         "max_tokens": 4096,
+        "timeout": 30.0,
     },
     "defaults": {
         "hops": 3,
@@ -24,7 +25,15 @@ DEFAULTS = {
         "token_budget": 0,  # 0 = unlimited; e.g. 500 to cap output
         "relevance_scoring": True,  # rank entry nodes by tag overlap count
     },
-    "projects_dir": "./projects",
+    "projects_dir": "~/.context-broker/projects",
+    "incremental": {
+        "context_k": 30,       # max context nodes to include per turn
+        "context_hops": 2,     # BFS hops when gathering context nodes
+        "min_turns": 3,        # min buffered turns before flush is considered
+        "min_words": 200,      # min total words across buffered turns to trigger flush
+        "max_turns": 10,       # flush unconditionally after this many turns
+        "short_turn_words": 20, # turns shorter than this don't count toward min_words
+    },
 }
 
 CONFIG_SEARCH_PATHS = [
@@ -43,18 +52,18 @@ def load_config(path: str | Path | None = None) -> dict:
             return _merge(DEFAULTS, user_cfg)
         raise FileNotFoundError(f"Config file not found: {p}")
 
+    result = dict(DEFAULTS)
     for candidate in CONFIG_SEARCH_PATHS:
         if candidate.exists():
             with open(candidate) as f:
-                user_cfg = yaml.safe_load(f) or {}
-            return _merge(DEFAULTS, user_cfg)
-
-    return dict(DEFAULTS)
+                file_cfg = yaml.safe_load(f) or {}
+            result = _merge(result, file_cfg)
+    return result
 
 
 def get_project_dir(config: dict, project_name: str) -> Path:
     """Resolve the directory for a given project."""
-    return Path(config["projects_dir"]) / project_name
+    return Path(config["projects_dir"]).expanduser() / project_name
 
 
 def get_db_path(config: dict, project_name: str) -> Path:

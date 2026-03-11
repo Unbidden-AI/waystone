@@ -1,0 +1,256 @@
+# Evaluation questions with ground truth for ContextBroker benchmark
+# Each question tests whether the LLM can answer correctly given different context conditions.
+#
+# relevant_node_ids: placeholder IDs matching node tags — used for precision/recall computation.
+# These are matched against retrieved node tags, not literal IDs (since IDs are assigned at runtime).
+# The benchmark runner maps these to extracted node IDs based on fact content similarity.
+
+questions:
+  # ── project_api_design ──────────────────────────────────────────────────────
+
+  - id: q_api_01
+    transcript: project_api_design
+    question: "What authentication method was decided for the API and why?"
+    ground_truth_elements:
+      - "JWT tokens"
+      - "stateless"
+      - "scales horizontally"
+      - "sessions were a problem when adding more instances"
+    relevant_tags: ["jwt", "authentication", "stateless", "sessions"]
+
+  - id: q_api_02
+    transcript: project_api_design
+    question: "What JWT signing algorithm was chosen and what is the key distribution strategy?"
+    ground_truth_elements:
+      - "RS256"
+      - "private key on the auth service"
+      - "public keys distributed to other services"
+      - "asymmetric — secret is never shared"
+    relevant_tags: ["jwt", "rs256", "signing", "authentication"]
+
+  - id: q_api_03
+    transcript: project_api_design
+    question: "What are the access token and refresh token expiry times, and where are tokens stored client-side?"
+    ground_truth_elements:
+      - "15-minute expiry for access tokens"
+      - "7-day refresh tokens"
+      - "HttpOnly cookies"
+      - "SameSite=Strict"
+      - "not localStorage due to XSS risk"
+    relevant_tags: ["token", "expiry", "cookie", "storage", "xss"]
+
+  - id: q_api_04
+    transcript: project_api_design
+    question: "What user roles exist and what changed about the role list during the discussion?"
+    ground_truth_elements:
+      - "admin, member, viewer, guest"
+      - "originally three roles: admin, member, viewer"
+      - "guest role was added for unauthenticated access to public endpoints"
+    relevant_tags: ["role", "admin", "member", "viewer", "guest", "authorization"]
+
+  - id: q_api_05
+    transcript: project_api_design
+    question: "What pagination approach was chosen and what are the page size constraints?"
+    ground_truth_elements:
+      - "cursor-based pagination"
+      - "offset pagination breaks when rows are inserted"
+      - "cursor and limit query params"
+      - "next_cursor in response"
+      - "hard cap at 100 items"
+      - "default is 20"
+    relevant_tags: ["pagination", "cursor", "offset", "limit"]
+
+  - id: q_api_06
+    transcript: project_api_design
+    question: "What error response format was adopted and what fields are required?"
+    ground_truth_elements:
+      - "RFC 7807 Problem Details"
+      - "type, title, status, detail, instance"
+      - "all five fields required"
+    relevant_tags: ["error", "rfc7807", "problem", "response"]
+
+  - id: q_api_07
+    transcript: project_api_design
+    question: "What versioning strategy was chosen for the API and what is the deprecation policy?"
+    ground_truth_elements:
+      - "URL versioning (not header versioning)"
+      - "header versioning made caching impossible"
+      - "v1 and v2 can coexist"
+      - "minimum 12 months deprecation notice"
+      - "Deprecation header on sunset endpoints"
+    relevant_tags: ["versioning", "deprecation", "url", "header", "api"]
+
+  - id: q_api_08
+    transcript: project_api_design
+    question: "What are the rate limiting rules and which layer enforces them?"
+    ground_truth_elements:
+      - "1000 requests per minute per user token"
+      - "100 per minute for unauthenticated requests"
+      - "enforced at the gateway (Kong)"
+      - "X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset headers"
+    relevant_tags: ["rate", "limit", "kong", "gateway", "throttle"]
+
+  # ── project_data_pipeline ───────────────────────────────────────────────────
+
+  - id: q_pipe_01
+    transcript: project_data_pipeline
+    question: "What serialization format was chosen for Kafka events and why?"
+    ground_truth_elements:
+      - "Avro with Confluent Schema Registry"
+      - "moved away from JSON"
+      - "fastavro library (3x faster than official confluent library)"
+      - "schema evolution without breaking changes"
+    relevant_tags: ["avro", "serialization", "kafka", "schema", "json", "fastavro"]
+
+  - id: q_pipe_02
+    transcript: project_data_pipeline
+    question: "What cold storage solution was chosen and why did it change from the original plan?"
+    ground_truth_elements:
+      - "GCS (Google Cloud Storage)"
+      - "originally planned S3"
+      - "ML team infrastructure already on GCP"
+      - "cross-cloud egress costs were too high"
+      - "Parquet format, partitioned by date and event_type"
+    relevant_tags: ["gcs", "s3", "storage", "cold", "parquet", "gcp"]
+
+  - id: q_pipe_03
+    transcript: project_data_pipeline
+    question: "What table format was selected for the data lake and why was it chosen over alternatives?"
+    ground_truth_elements:
+      - "Delta Lake"
+      - "evaluated Apache Iceberg and Hudi"
+      - "ML team already has Spark clusters configured for Delta Lake"
+      - "switching would take 6+ weeks"
+      - "ACID transactions and schema enforcement"
+    relevant_tags: ["delta", "lake", "iceberg", "hudi", "spark", "format"]
+
+  - id: q_pipe_04
+    transcript: project_data_pipeline
+    question: "What are the three hot-path transformations required before events reach downstream topics?"
+    ground_truth_elements:
+      - "PII scrubbing (mask emails and phone numbers)"
+      - "event deduplication (30-second window)"
+      - "schema validation against Avro schemas"
+      - "PII scrubbing happens in the Kafka consumer before any downstream topic"
+    relevant_tags: ["pii", "deduplication", "validation", "transform", "hot", "compliance"]
+
+  - id: q_pipe_05
+    transcript: project_data_pipeline
+    question: "Why was Redis rejected for deduplication state, and where is it used instead?"
+    ground_truth_elements:
+      - "Redis rejected for Flink deduplication state — network overhead added 20ms per event"
+      - "RocksDB used instead for embedded state"
+      - "Redis IS used for the online feature store (different access pattern — point lookups)"
+    relevant_tags: ["redis", "rocksdb", "deduplication", "feature", "state", "latency"]
+
+  - id: q_pipe_06
+    transcript: project_data_pipeline
+    question: "What is the latency SLA for the hot path and what monitoring stack is used?"
+    ground_truth_elements:
+      - "under 500ms for the hot path"
+      - "cold path up to 5 minutes"
+      - "Prometheus + Grafana"
+      - "three golden signals: Kafka consumer lag, Flink checkpoint duration, end-to-end latency"
+      - "PagerDuty alerts for 500ms SLA breach"
+    relevant_tags: ["latency", "sla", "prometheus", "grafana", "monitoring", "pagerduty"]
+
+  - id: q_pipe_07
+    transcript: project_data_pipeline
+    question: "What is the disaster recovery strategy for the pipeline?"
+    ground_truth_elements:
+      - "Kafka replication factor of 3"
+      - "minimum in-sync replicas of 2"
+      - "GCS cross-region replication for cold storage"
+      - "Flink savepoints every 10 minutes"
+    relevant_tags: ["disaster", "recovery", "replication", "savepoint", "backup"]
+
+  # ── project_auth_system ─────────────────────────────────────────────────────
+
+  - id: q_auth_01
+    transcript: project_auth_system
+    question: "Why was Keycloak chosen over Auth0 and Okta?"
+    ground_truth_elements:
+      - "compliance requires data residency in own infrastructure"
+      - "Auth0 and Okta store user data outside company control"
+      - "non-starter for enterprise customers"
+      - "self-hosted Keycloak"
+    relevant_tags: ["keycloak", "auth0", "okta", "compliance", "data", "residency"]
+
+  - id: q_auth_02
+    transcript: project_auth_system
+    question: "What are the token lifetimes and what is special about the refresh token format?"
+    ground_truth_elements:
+      - "access tokens: 15 minutes"
+      - "refresh tokens: 24 hours sliding window"
+      - "maximum 30 days of continuous activity"
+      - "refresh tokens are opaque (not JWT format)"
+      - "opaque tokens can be instantly revoked"
+      - "stored in database"
+    relevant_tags: ["token", "refresh", "expiry", "opaque", "revocation", "lifetime"]
+
+  - id: q_auth_03
+    transcript: project_auth_system
+    question: "What MFA methods are supported and which is explicitly excluded and why?"
+    ground_truth_elements:
+      - "TOTP as primary second factor"
+      - "WebAuthn/FIDO2 as preferred option"
+      - "hardware keys and passkeys supported"
+      - "SMS OTP explicitly NOT supported"
+      - "SIM swapping makes SMS too weak"
+    relevant_tags: ["mfa", "totp", "webauthn", "fido2", "sms", "otp", "passkey"]
+
+  - id: q_auth_04
+    transcript: project_auth_system
+    question: "What access control model was chosen and what changed during the discussion?"
+    ground_truth_elements:
+      - "ABAC (Attribute-Based Access Control) — not just RBAC"
+      - "Open Policy Agent (OPA) as policy engine"
+      - "originally considered simple role-based system"
+      - "enterprise requirements changed it: tenant isolation, resource-level permissions, time-based access windows"
+      - "OPA policies in Git, deployed as sidecar containers"
+    relevant_tags: ["abac", "rbac", "opa", "policy", "access", "control", "enterprise"]
+
+  - id: q_auth_05
+    transcript: project_auth_system
+    question: "What is the account lockout policy for failed login attempts?"
+    ground_truth_elements:
+      - "5 failed attempts: 5-minute lockout"
+      - "10 failed attempts: 1-hour lockout"
+      - "20 failed attempts in 24 hours: account locked"
+      - "requires admin or email verification to unlock"
+      - "IP-level rate limiting also applied"
+    relevant_tags: ["lockout", "failed", "attempts", "brute", "force", "rate"]
+
+  - id: q_auth_06
+    transcript: project_auth_system
+    question: "What is the password policy, and is mandatory password rotation enforced?"
+    ground_truth_elements:
+      - "minimum 12 characters"
+      - "must include uppercase, lowercase, digit, special character"
+      - "checked against HaveIBeenPwned API"
+      - "top 10,000 common passwords blocked"
+      - "no mandatory rotation for regular users"
+      - "rotation enforced only if breach detected via HIBP"
+    relevant_tags: ["password", "policy", "hibp", "rotation", "complexity"]
+
+  - id: q_auth_07
+    transcript: project_auth_system
+    question: "How are service-to-service calls authenticated, and what is the API key storage strategy?"
+    ground_truth_elements:
+      - "service accounts in Keycloak using client credentials flow"
+      - "API keys are not the preferred pattern (too easy to leak)"
+      - "mTLS between internal services where possible"
+      - "external integrations: 32-byte random keys"
+      - "only SHA-256 hash stored"
+      - "prefixed with service identifier (e.g., cb_live_)"
+    relevant_tags: ["service", "account", "mtls", "api", "key", "credentials", "hash"]
+
+  - id: q_auth_08
+    transcript: project_auth_system
+    question: "What is the audit logging strategy and where are logs stored?"
+    ground_truth_elements:
+      - "every auth event logged: login success/failure, MFA events, token operations, permission denied"
+      - "logs are immutable, append-only"
+      - "AWS CloudTrail for audit trail"
+      - "separate read-only account for auditors"
+    relevant_tags: ["audit", "log", "cloudtrail", "immutable", "append"]

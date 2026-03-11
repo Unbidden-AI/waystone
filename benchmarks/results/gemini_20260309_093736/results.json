@@ -1,0 +1,2008 @@
+{
+  "model": "models/gemini-2.5-flash",
+  "config_file": "gemini.yaml",
+  "timestamp": "20260309_093736",
+  "extraction": {
+    "project_api_design": {
+      "status": "ok",
+      "nodes": 58,
+      "edges": 41,
+      "elapsed_s": 53.75
+    },
+    "project_auth_system": {
+      "status": "ok",
+      "nodes": 100,
+      "edges": 73,
+      "elapsed_s": 99.0
+    },
+    "project_data_pipeline": {
+      "status": "ok",
+      "nodes": 86,
+      "edges": 77,
+      "elapsed_s": 85.93
+    }
+  },
+  "query": {
+    "baseline": {
+      "questions": [
+        {
+          "question_id": "q_api_01",
+          "transcript": "project_api_design",
+          "question": "What authentication method was decided for the API and why?",
+          "recall": 0.5,
+          "matched": [
+            "JWT tokens",
+            "stateless"
+          ],
+          "missed": [
+            "scales horizontally",
+            "sessions were a problem when adding more instances"
+          ],
+          "nodes_before_strategies": 35,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 298,
+          "strategies_applied": [],
+          "elapsed_ms": 1.1
+        },
+        {
+          "question_id": "q_api_02",
+          "transcript": "project_api_design",
+          "question": "What JWT signing algorithm was chosen and what is the key distribution strategy?",
+          "recall": 0.75,
+          "matched": [
+            "RS256",
+            "private key on the auth service",
+            "public keys distributed to other services"
+          ],
+          "missed": [
+            "asymmetric \u2014 secret is never shared"
+          ],
+          "nodes_before_strategies": 28,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 299,
+          "strategies_applied": [],
+          "elapsed_ms": 0.9
+        },
+        {
+          "question_id": "q_api_03",
+          "transcript": "project_api_design",
+          "question": "What are the access token and refresh token expiry times, and where are tokens stored client-side?",
+          "recall": 0.8,
+          "matched": [
+            "15-minute expiry for access tokens",
+            "7-day refresh tokens",
+            "HttpOnly cookies",
+            "SameSite=Strict"
+          ],
+          "missed": [
+            "not localStorage due to XSS risk"
+          ],
+          "nodes_before_strategies": 22,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 335,
+          "strategies_applied": [],
+          "elapsed_ms": 0.8
+        },
+        {
+          "question_id": "q_api_04",
+          "transcript": "project_api_design",
+          "question": "What user roles exist and what changed about the role list during the discussion?",
+          "recall": 1.0,
+          "matched": [
+            "admin, member, viewer, guest",
+            "originally three roles: admin, member, viewer",
+            "guest role was added for unauthenticated access to public endpoints"
+          ],
+          "missed": [],
+          "nodes_before_strategies": 10,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 338,
+          "strategies_applied": [],
+          "elapsed_ms": 0.6
+        },
+        {
+          "question_id": "q_api_05",
+          "transcript": "project_api_design",
+          "question": "What pagination approach was chosen and what are the page size constraints?",
+          "recall": 1.0,
+          "matched": [
+            "cursor-based pagination",
+            "offset pagination breaks when rows are inserted",
+            "cursor and limit query params",
+            "next_cursor in response",
+            "hard cap at 100 items",
+            "default is 20"
+          ],
+          "missed": [],
+          "nodes_before_strategies": 6,
+          "nodes_after_strategies": 6,
+          "tokens_estimated": 210,
+          "strategies_applied": [],
+          "elapsed_ms": 0.4
+        },
+        {
+          "question_id": "q_api_06",
+          "transcript": "project_api_design",
+          "question": "What error response format was adopted and what fields are required?",
+          "recall": 1.0,
+          "matched": [
+            "RFC 7807 Problem Details",
+            "type, title, status, detail, instance",
+            "all five fields required"
+          ],
+          "missed": [],
+          "nodes_before_strategies": 14,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 355,
+          "strategies_applied": [],
+          "elapsed_ms": 0.6
+        },
+        {
+          "question_id": "q_api_07",
+          "transcript": "project_api_design",
+          "question": "What versioning strategy was chosen for the API and what is the deprecation policy?",
+          "recall": 1.0,
+          "matched": [
+            "URL versioning (not header versioning)",
+            "header versioning made caching impossible",
+            "v1 and v2 can coexist",
+            "minimum 12 months deprecation notice",
+            "Deprecation header on sunset endpoints"
+          ],
+          "missed": [],
+          "nodes_before_strategies": 9,
+          "nodes_after_strategies": 9,
+          "tokens_estimated": 302,
+          "strategies_applied": [],
+          "elapsed_ms": 0.5
+        },
+        {
+          "question_id": "q_api_08",
+          "transcript": "project_api_design",
+          "question": "What are the rate limiting rules and which layer enforces them?",
+          "recall": 0.0,
+          "matched": [],
+          "missed": [
+            "1000 requests per minute per user token",
+            "100 per minute for unauthenticated requests",
+            "enforced at the gateway (Kong)",
+            "X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset headers"
+          ],
+          "nodes_before_strategies": 0,
+          "nodes_after_strategies": 0,
+          "tokens_estimated": 0,
+          "strategies_applied": [],
+          "elapsed_ms": 0.2
+        },
+        {
+          "question_id": "q_pipe_01",
+          "transcript": "project_data_pipeline",
+          "question": "What serialization format was chosen for Kafka events and why?",
+          "recall": 0.0,
+          "matched": [],
+          "missed": [
+            "Avro with Confluent Schema Registry",
+            "moved away from JSON",
+            "fastavro library (3x faster than official confluent library)",
+            "schema evolution without breaking changes"
+          ],
+          "nodes_before_strategies": 31,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 330,
+          "strategies_applied": [],
+          "elapsed_ms": 0.9
+        },
+        {
+          "question_id": "q_pipe_02",
+          "transcript": "project_data_pipeline",
+          "question": "What cold storage solution was chosen and why did it change from the original plan?",
+          "recall": 0.0,
+          "matched": [],
+          "missed": [
+            "GCS (Google Cloud Storage)",
+            "originally planned S3",
+            "ML team infrastructure already on GCP",
+            "cross-cloud egress costs were too high",
+            "Parquet format, partitioned by date and event_type"
+          ],
+          "nodes_before_strategies": 27,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 306,
+          "strategies_applied": [],
+          "elapsed_ms": 0.9
+        },
+        {
+          "question_id": "q_pipe_03",
+          "transcript": "project_data_pipeline",
+          "question": "What table format was selected for the data lake and why was it chosen over alternatives?",
+          "recall": 0.0,
+          "matched": [],
+          "missed": [
+            "Delta Lake",
+            "evaluated Apache Iceberg and Hudi",
+            "ML team already has Spark clusters configured for Delta Lake",
+            "switching would take 6+ weeks",
+            "ACID transactions and schema enforcement"
+          ],
+          "nodes_before_strategies": 0,
+          "nodes_after_strategies": 0,
+          "tokens_estimated": 0,
+          "strategies_applied": [],
+          "elapsed_ms": 0.3
+        },
+        {
+          "question_id": "q_pipe_04",
+          "transcript": "project_data_pipeline",
+          "question": "What are the three hot-path transformations required before events reach downstream topics?",
+          "recall": 0.0,
+          "matched": [],
+          "missed": [
+            "PII scrubbing (mask emails and phone numbers)",
+            "event deduplication (30-second window)",
+            "schema validation against Avro schemas",
+            "PII scrubbing happens in the Kafka consumer before any downstream topic"
+          ],
+          "nodes_before_strategies": 1,
+          "nodes_after_strategies": 1,
+          "tokens_estimated": 74,
+          "strategies_applied": [],
+          "elapsed_ms": 0.4
+        },
+        {
+          "question_id": "q_pipe_05",
+          "transcript": "project_data_pipeline",
+          "question": "Why was Redis rejected for deduplication state, and where is it used instead?",
+          "recall": 1.0,
+          "matched": [
+            "Redis rejected for Flink deduplication state \u2014 network overhead added 20ms per event",
+            "RocksDB used instead for embedded state",
+            "Redis IS used for the online feature store (different access pattern \u2014 point lookups)"
+          ],
+          "missed": [],
+          "nodes_before_strategies": 33,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 375,
+          "strategies_applied": [],
+          "elapsed_ms": 1.0
+        },
+        {
+          "question_id": "q_pipe_06",
+          "transcript": "project_data_pipeline",
+          "question": "What is the latency SLA for the hot path and what monitoring stack is used?",
+          "recall": 0.8,
+          "matched": [
+            "under 500ms for the hot path",
+            "cold path up to 5 minutes",
+            "Prometheus + Grafana",
+            "three golden signals: Kafka consumer lag, Flink checkpoint duration, end-to-end latency"
+          ],
+          "missed": [
+            "PagerDuty alerts for 500ms SLA breach"
+          ],
+          "nodes_before_strategies": 45,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 356,
+          "strategies_applied": [],
+          "elapsed_ms": 1.2
+        },
+        {
+          "question_id": "q_pipe_07",
+          "transcript": "project_data_pipeline",
+          "question": "What is the disaster recovery strategy for the pipeline?",
+          "recall": 0.0,
+          "matched": [],
+          "missed": [
+            "Kafka replication factor of 3",
+            "minimum in-sync replicas of 2",
+            "GCS cross-region replication for cold storage",
+            "Flink savepoints every 10 minutes"
+          ],
+          "nodes_before_strategies": 19,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 337,
+          "strategies_applied": [],
+          "elapsed_ms": 0.6
+        },
+        {
+          "question_id": "q_auth_01",
+          "transcript": "project_auth_system",
+          "question": "Why was Keycloak chosen over Auth0 and Okta?",
+          "recall": 1.0,
+          "matched": [
+            "compliance requires data residency in own infrastructure",
+            "Auth0 and Okta store user data outside company control",
+            "non-starter for enterprise customers",
+            "self-hosted Keycloak"
+          ],
+          "missed": [],
+          "nodes_before_strategies": 15,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 343,
+          "strategies_applied": [],
+          "elapsed_ms": 0.5
+        },
+        {
+          "question_id": "q_auth_02",
+          "transcript": "project_auth_system",
+          "question": "What are the token lifetimes and what is special about the refresh token format?",
+          "recall": 0.167,
+          "matched": [
+            "refresh tokens are opaque (not JWT format)"
+          ],
+          "missed": [
+            "access tokens: 15 minutes",
+            "refresh tokens: 24 hours sliding window",
+            "maximum 30 days of continuous activity",
+            "opaque tokens can be instantly revoked",
+            "stored in database"
+          ],
+          "nodes_before_strategies": 13,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 320,
+          "strategies_applied": [],
+          "elapsed_ms": 0.5
+        },
+        {
+          "question_id": "q_auth_03",
+          "transcript": "project_auth_system",
+          "question": "What MFA methods are supported and which is explicitly excluded and why?",
+          "recall": 0.6,
+          "matched": [
+            "TOTP as primary second factor",
+            "SMS OTP explicitly NOT supported",
+            "SIM swapping makes SMS too weak"
+          ],
+          "missed": [
+            "WebAuthn/FIDO2 as preferred option",
+            "hardware keys and passkeys supported"
+          ],
+          "nodes_before_strategies": 14,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 337,
+          "strategies_applied": [],
+          "elapsed_ms": 0.5
+        },
+        {
+          "question_id": "q_auth_04",
+          "transcript": "project_auth_system",
+          "question": "What access control model was chosen and what changed during the discussion?",
+          "recall": 0.0,
+          "matched": [],
+          "missed": [
+            "ABAC (Attribute-Based Access Control) \u2014 not just RBAC",
+            "Open Policy Agent (OPA) as policy engine",
+            "originally considered simple role-based system",
+            "enterprise requirements changed it: tenant isolation, resource-level permissions, time-based access windows",
+            "OPA policies in Git, deployed as sidecar containers"
+          ],
+          "nodes_before_strategies": 1,
+          "nodes_after_strategies": 1,
+          "tokens_estimated": 63,
+          "strategies_applied": [],
+          "elapsed_ms": 0.3
+        },
+        {
+          "question_id": "q_auth_05",
+          "transcript": "project_auth_system",
+          "question": "What is the account lockout policy for failed login attempts?",
+          "recall": 0.4,
+          "matched": [
+            "5 failed attempts: 5-minute lockout",
+            "10 failed attempts: 1-hour lockout"
+          ],
+          "missed": [
+            "20 failed attempts in 24 hours: account locked",
+            "requires admin or email verification to unlock",
+            "IP-level rate limiting also applied"
+          ],
+          "nodes_before_strategies": 6,
+          "nodes_after_strategies": 6,
+          "tokens_estimated": 211,
+          "strategies_applied": [],
+          "elapsed_ms": 0.4
+        },
+        {
+          "question_id": "q_auth_06",
+          "transcript": "project_auth_system",
+          "question": "What is the password policy, and is mandatory password rotation enforced?",
+          "recall": 0.0,
+          "matched": [],
+          "missed": [
+            "minimum 12 characters",
+            "must include uppercase, lowercase, digit, special character",
+            "checked against HaveIBeenPwned API",
+            "top 10,000 common passwords blocked",
+            "no mandatory rotation for regular users",
+            "rotation enforced only if breach detected via HIBP"
+          ],
+          "nodes_before_strategies": 3,
+          "nodes_after_strategies": 3,
+          "tokens_estimated": 154,
+          "strategies_applied": [],
+          "elapsed_ms": 0.3
+        },
+        {
+          "question_id": "q_auth_07",
+          "transcript": "project_auth_system",
+          "question": "How are service-to-service calls authenticated, and what is the API key storage strategy?",
+          "recall": 0.333,
+          "matched": [
+            "service accounts in Keycloak using client credentials flow",
+            "only SHA-256 hash stored"
+          ],
+          "missed": [
+            "API keys are not the preferred pattern (too easy to leak)",
+            "mTLS between internal services where possible",
+            "external integrations: 32-byte random keys",
+            "prefixed with service identifier (e.g., cb_live_)"
+          ],
+          "nodes_before_strategies": 40,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 330,
+          "strategies_applied": [],
+          "elapsed_ms": 1.1
+        },
+        {
+          "question_id": "q_auth_08",
+          "transcript": "project_auth_system",
+          "question": "What is the audit logging strategy and where are logs stored?",
+          "recall": 1.0,
+          "matched": [
+            "every auth event logged: login success/failure, MFA events, token operations, permission denied",
+            "logs are immutable, append-only",
+            "AWS CloudTrail for audit trail",
+            "separate read-only account for auditors"
+          ],
+          "missed": [],
+          "nodes_before_strategies": 6,
+          "nodes_after_strategies": 6,
+          "tokens_estimated": 211,
+          "strategies_applied": [],
+          "elapsed_ms": 0.3
+        }
+      ],
+      "summary": {
+        "mean_recall": 0.493,
+        "mean_tokens": 256,
+        "questions_80pct_plus": 9,
+        "questions_50pct_plus": 12,
+        "total_questions": 23
+      }
+    },
+    "default": {
+      "questions": [
+        {
+          "question_id": "q_api_01",
+          "transcript": "project_api_design",
+          "question": "What authentication method was decided for the API and why?",
+          "recall": 0.5,
+          "matched": [
+            "JWT tokens",
+            "stateless"
+          ],
+          "missed": [
+            "scales horizontally",
+            "sessions were a problem when adding more instances"
+          ],
+          "nodes_before_strategies": 35,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 307,
+          "strategies_applied": [
+            "superseded_pruning"
+          ],
+          "elapsed_ms": 1.2
+        },
+        {
+          "question_id": "q_api_02",
+          "transcript": "project_api_design",
+          "question": "What JWT signing algorithm was chosen and what is the key distribution strategy?",
+          "recall": 0.75,
+          "matched": [
+            "RS256",
+            "private key on the auth service",
+            "public keys distributed to other services"
+          ],
+          "missed": [
+            "asymmetric \u2014 secret is never shared"
+          ],
+          "nodes_before_strategies": 28,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 308,
+          "strategies_applied": [
+            "superseded_pruning"
+          ],
+          "elapsed_ms": 1.0
+        },
+        {
+          "question_id": "q_api_03",
+          "transcript": "project_api_design",
+          "question": "What are the access token and refresh token expiry times, and where are tokens stored client-side?",
+          "recall": 0.8,
+          "matched": [
+            "15-minute expiry for access tokens",
+            "7-day refresh tokens",
+            "HttpOnly cookies",
+            "SameSite=Strict"
+          ],
+          "missed": [
+            "not localStorage due to XSS risk"
+          ],
+          "nodes_before_strategies": 22,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 344,
+          "strategies_applied": [
+            "superseded_pruning"
+          ],
+          "elapsed_ms": 0.9
+        },
+        {
+          "question_id": "q_api_04",
+          "transcript": "project_api_design",
+          "question": "What user roles exist and what changed about the role list during the discussion?",
+          "recall": 0.667,
+          "matched": [
+            "admin, member, viewer, guest",
+            "guest role was added for unauthenticated access to public endpoints"
+          ],
+          "missed": [
+            "originally three roles: admin, member, viewer"
+          ],
+          "nodes_before_strategies": 10,
+          "nodes_after_strategies": 9,
+          "tokens_estimated": 315,
+          "strategies_applied": [
+            "superseded_pruning"
+          ],
+          "elapsed_ms": 0.6
+        },
+        {
+          "question_id": "q_api_05",
+          "transcript": "project_api_design",
+          "question": "What pagination approach was chosen and what are the page size constraints?",
+          "recall": 1.0,
+          "matched": [
+            "cursor-based pagination",
+            "offset pagination breaks when rows are inserted",
+            "cursor and limit query params",
+            "next_cursor in response",
+            "hard cap at 100 items",
+            "default is 20"
+          ],
+          "missed": [],
+          "nodes_before_strategies": 6,
+          "nodes_after_strategies": 6,
+          "tokens_estimated": 219,
+          "strategies_applied": [
+            "superseded_pruning"
+          ],
+          "elapsed_ms": 0.4
+        },
+        {
+          "question_id": "q_api_06",
+          "transcript": "project_api_design",
+          "question": "What error response format was adopted and what fields are required?",
+          "recall": 1.0,
+          "matched": [
+            "RFC 7807 Problem Details",
+            "type, title, status, detail, instance",
+            "all five fields required"
+          ],
+          "missed": [],
+          "nodes_before_strategies": 14,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 363,
+          "strategies_applied": [
+            "superseded_pruning"
+          ],
+          "elapsed_ms": 0.6
+        },
+        {
+          "question_id": "q_api_07",
+          "transcript": "project_api_design",
+          "question": "What versioning strategy was chosen for the API and what is the deprecation policy?",
+          "recall": 1.0,
+          "matched": [
+            "URL versioning (not header versioning)",
+            "header versioning made caching impossible",
+            "v1 and v2 can coexist",
+            "minimum 12 months deprecation notice",
+            "Deprecation header on sunset endpoints"
+          ],
+          "missed": [],
+          "nodes_before_strategies": 9,
+          "nodes_after_strategies": 9,
+          "tokens_estimated": 311,
+          "strategies_applied": [
+            "superseded_pruning"
+          ],
+          "elapsed_ms": 0.5
+        },
+        {
+          "question_id": "q_api_08",
+          "transcript": "project_api_design",
+          "question": "What are the rate limiting rules and which layer enforces them?",
+          "recall": 0.0,
+          "matched": [],
+          "missed": [
+            "1000 requests per minute per user token",
+            "100 per minute for unauthenticated requests",
+            "enforced at the gateway (Kong)",
+            "X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset headers"
+          ],
+          "nodes_before_strategies": 0,
+          "nodes_after_strategies": 0,
+          "tokens_estimated": 0,
+          "strategies_applied": [],
+          "elapsed_ms": 0.2
+        },
+        {
+          "question_id": "q_pipe_01",
+          "transcript": "project_data_pipeline",
+          "question": "What serialization format was chosen for Kafka events and why?",
+          "recall": 0.0,
+          "matched": [],
+          "missed": [
+            "Avro with Confluent Schema Registry",
+            "moved away from JSON",
+            "fastavro library (3x faster than official confluent library)",
+            "schema evolution without breaking changes"
+          ],
+          "nodes_before_strategies": 31,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 338,
+          "strategies_applied": [
+            "superseded_pruning"
+          ],
+          "elapsed_ms": 1.0
+        },
+        {
+          "question_id": "q_pipe_02",
+          "transcript": "project_data_pipeline",
+          "question": "What cold storage solution was chosen and why did it change from the original plan?",
+          "recall": 0.0,
+          "matched": [],
+          "missed": [
+            "GCS (Google Cloud Storage)",
+            "originally planned S3",
+            "ML team infrastructure already on GCP",
+            "cross-cloud egress costs were too high",
+            "Parquet format, partitioned by date and event_type"
+          ],
+          "nodes_before_strategies": 27,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 314,
+          "strategies_applied": [
+            "superseded_pruning"
+          ],
+          "elapsed_ms": 1.0
+        },
+        {
+          "question_id": "q_pipe_03",
+          "transcript": "project_data_pipeline",
+          "question": "What table format was selected for the data lake and why was it chosen over alternatives?",
+          "recall": 0.0,
+          "matched": [],
+          "missed": [
+            "Delta Lake",
+            "evaluated Apache Iceberg and Hudi",
+            "ML team already has Spark clusters configured for Delta Lake",
+            "switching would take 6+ weeks",
+            "ACID transactions and schema enforcement"
+          ],
+          "nodes_before_strategies": 0,
+          "nodes_after_strategies": 0,
+          "tokens_estimated": 0,
+          "strategies_applied": [],
+          "elapsed_ms": 0.3
+        },
+        {
+          "question_id": "q_pipe_04",
+          "transcript": "project_data_pipeline",
+          "question": "What are the three hot-path transformations required before events reach downstream topics?",
+          "recall": 0.0,
+          "matched": [],
+          "missed": [
+            "PII scrubbing (mask emails and phone numbers)",
+            "event deduplication (30-second window)",
+            "schema validation against Avro schemas",
+            "PII scrubbing happens in the Kafka consumer before any downstream topic"
+          ],
+          "nodes_before_strategies": 1,
+          "nodes_after_strategies": 1,
+          "tokens_estimated": 82,
+          "strategies_applied": [
+            "superseded_pruning"
+          ],
+          "elapsed_ms": 0.4
+        },
+        {
+          "question_id": "q_pipe_05",
+          "transcript": "project_data_pipeline",
+          "question": "Why was Redis rejected for deduplication state, and where is it used instead?",
+          "recall": 1.0,
+          "matched": [
+            "Redis rejected for Flink deduplication state \u2014 network overhead added 20ms per event",
+            "RocksDB used instead for embedded state",
+            "Redis IS used for the online feature store (different access pattern \u2014 point lookups)"
+          ],
+          "missed": [],
+          "nodes_before_strategies": 33,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 389,
+          "strategies_applied": [
+            "superseded_pruning"
+          ],
+          "elapsed_ms": 1.2
+        },
+        {
+          "question_id": "q_pipe_06",
+          "transcript": "project_data_pipeline",
+          "question": "What is the latency SLA for the hot path and what monitoring stack is used?",
+          "recall": 0.8,
+          "matched": [
+            "under 500ms for the hot path",
+            "cold path up to 5 minutes",
+            "Prometheus + Grafana",
+            "three golden signals: Kafka consumer lag, Flink checkpoint duration, end-to-end latency"
+          ],
+          "missed": [
+            "PagerDuty alerts for 500ms SLA breach"
+          ],
+          "nodes_before_strategies": 45,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 365,
+          "strategies_applied": [
+            "superseded_pruning"
+          ],
+          "elapsed_ms": 1.5
+        },
+        {
+          "question_id": "q_pipe_07",
+          "transcript": "project_data_pipeline",
+          "question": "What is the disaster recovery strategy for the pipeline?",
+          "recall": 0.0,
+          "matched": [],
+          "missed": [
+            "Kafka replication factor of 3",
+            "minimum in-sync replicas of 2",
+            "GCS cross-region replication for cold storage",
+            "Flink savepoints every 10 minutes"
+          ],
+          "nodes_before_strategies": 19,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 346,
+          "strategies_applied": [
+            "superseded_pruning"
+          ],
+          "elapsed_ms": 0.7
+        },
+        {
+          "question_id": "q_auth_01",
+          "transcript": "project_auth_system",
+          "question": "Why was Keycloak chosen over Auth0 and Okta?",
+          "recall": 1.0,
+          "matched": [
+            "compliance requires data residency in own infrastructure",
+            "Auth0 and Okta store user data outside company control",
+            "non-starter for enterprise customers",
+            "self-hosted Keycloak"
+          ],
+          "missed": [],
+          "nodes_before_strategies": 15,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 346,
+          "strategies_applied": [
+            "superseded_pruning"
+          ],
+          "elapsed_ms": 0.6
+        },
+        {
+          "question_id": "q_auth_02",
+          "transcript": "project_auth_system",
+          "question": "What are the token lifetimes and what is special about the refresh token format?",
+          "recall": 0.167,
+          "matched": [
+            "refresh tokens are opaque (not JWT format)"
+          ],
+          "missed": [
+            "access tokens: 15 minutes",
+            "refresh tokens: 24 hours sliding window",
+            "maximum 30 days of continuous activity",
+            "opaque tokens can be instantly revoked",
+            "stored in database"
+          ],
+          "nodes_before_strategies": 13,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 329,
+          "strategies_applied": [
+            "superseded_pruning"
+          ],
+          "elapsed_ms": 0.6
+        },
+        {
+          "question_id": "q_auth_03",
+          "transcript": "project_auth_system",
+          "question": "What MFA methods are supported and which is explicitly excluded and why?",
+          "recall": 0.6,
+          "matched": [
+            "TOTP as primary second factor",
+            "SMS OTP explicitly NOT supported",
+            "SIM swapping makes SMS too weak"
+          ],
+          "missed": [
+            "WebAuthn/FIDO2 as preferred option",
+            "hardware keys and passkeys supported"
+          ],
+          "nodes_before_strategies": 14,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 346,
+          "strategies_applied": [
+            "superseded_pruning"
+          ],
+          "elapsed_ms": 0.6
+        },
+        {
+          "question_id": "q_auth_04",
+          "transcript": "project_auth_system",
+          "question": "What access control model was chosen and what changed during the discussion?",
+          "recall": 0.0,
+          "matched": [],
+          "missed": [
+            "ABAC (Attribute-Based Access Control) \u2014 not just RBAC",
+            "Open Policy Agent (OPA) as policy engine",
+            "originally considered simple role-based system",
+            "enterprise requirements changed it: tenant isolation, resource-level permissions, time-based access windows",
+            "OPA policies in Git, deployed as sidecar containers"
+          ],
+          "nodes_before_strategies": 1,
+          "nodes_after_strategies": 1,
+          "tokens_estimated": 72,
+          "strategies_applied": [
+            "superseded_pruning"
+          ],
+          "elapsed_ms": 0.3
+        },
+        {
+          "question_id": "q_auth_05",
+          "transcript": "project_auth_system",
+          "question": "What is the account lockout policy for failed login attempts?",
+          "recall": 0.4,
+          "matched": [
+            "5 failed attempts: 5-minute lockout",
+            "10 failed attempts: 1-hour lockout"
+          ],
+          "missed": [
+            "20 failed attempts in 24 hours: account locked",
+            "requires admin or email verification to unlock",
+            "IP-level rate limiting also applied"
+          ],
+          "nodes_before_strategies": 6,
+          "nodes_after_strategies": 6,
+          "tokens_estimated": 220,
+          "strategies_applied": [
+            "superseded_pruning"
+          ],
+          "elapsed_ms": 0.4
+        },
+        {
+          "question_id": "q_auth_06",
+          "transcript": "project_auth_system",
+          "question": "What is the password policy, and is mandatory password rotation enforced?",
+          "recall": 0.0,
+          "matched": [],
+          "missed": [
+            "minimum 12 characters",
+            "must include uppercase, lowercase, digit, special character",
+            "checked against HaveIBeenPwned API",
+            "top 10,000 common passwords blocked",
+            "no mandatory rotation for regular users",
+            "rotation enforced only if breach detected via HIBP"
+          ],
+          "nodes_before_strategies": 3,
+          "nodes_after_strategies": 3,
+          "tokens_estimated": 162,
+          "strategies_applied": [
+            "superseded_pruning"
+          ],
+          "elapsed_ms": 0.3
+        },
+        {
+          "question_id": "q_auth_07",
+          "transcript": "project_auth_system",
+          "question": "How are service-to-service calls authenticated, and what is the API key storage strategy?",
+          "recall": 0.333,
+          "matched": [
+            "service accounts in Keycloak using client credentials flow",
+            "only SHA-256 hash stored"
+          ],
+          "missed": [
+            "API keys are not the preferred pattern (too easy to leak)",
+            "mTLS between internal services where possible",
+            "external integrations: 32-byte random keys",
+            "prefixed with service identifier (e.g., cb_live_)"
+          ],
+          "nodes_before_strategies": 40,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 339,
+          "strategies_applied": [
+            "superseded_pruning"
+          ],
+          "elapsed_ms": 1.3
+        },
+        {
+          "question_id": "q_auth_08",
+          "transcript": "project_auth_system",
+          "question": "What is the audit logging strategy and where are logs stored?",
+          "recall": 1.0,
+          "matched": [
+            "every auth event logged: login success/failure, MFA events, token operations, permission denied",
+            "logs are immutable, append-only",
+            "AWS CloudTrail for audit trail",
+            "separate read-only account for auditors"
+          ],
+          "missed": [],
+          "nodes_before_strategies": 6,
+          "nodes_after_strategies": 6,
+          "tokens_estimated": 220,
+          "strategies_applied": [
+            "superseded_pruning"
+          ],
+          "elapsed_ms": 0.4
+        }
+      ],
+      "summary": {
+        "mean_recall": 0.479,
+        "mean_tokens": 262,
+        "questions_80pct_plus": 8,
+        "questions_50pct_plus": 12,
+        "total_questions": 23
+      }
+    },
+    "filtered": {
+      "questions": [
+        {
+          "question_id": "q_api_01",
+          "transcript": "project_api_design",
+          "question": "What authentication method was decided for the API and why?",
+          "recall": 0.5,
+          "matched": [
+            "JWT tokens",
+            "stateless"
+          ],
+          "missed": [
+            "scales horizontally",
+            "sessions were a problem when adding more instances"
+          ],
+          "nodes_before_strategies": 35,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 314,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)"
+          ],
+          "elapsed_ms": 1.1
+        },
+        {
+          "question_id": "q_api_02",
+          "transcript": "project_api_design",
+          "question": "What JWT signing algorithm was chosen and what is the key distribution strategy?",
+          "recall": 0.75,
+          "matched": [
+            "RS256",
+            "private key on the auth service",
+            "public keys distributed to other services"
+          ],
+          "missed": [
+            "asymmetric \u2014 secret is never shared"
+          ],
+          "nodes_before_strategies": 28,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 315,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)"
+          ],
+          "elapsed_ms": 1.0
+        },
+        {
+          "question_id": "q_api_03",
+          "transcript": "project_api_design",
+          "question": "What are the access token and refresh token expiry times, and where are tokens stored client-side?",
+          "recall": 0.8,
+          "matched": [
+            "15-minute expiry for access tokens",
+            "7-day refresh tokens",
+            "HttpOnly cookies",
+            "SameSite=Strict"
+          ],
+          "missed": [
+            "not localStorage due to XSS risk"
+          ],
+          "nodes_before_strategies": 22,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 351,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)"
+          ],
+          "elapsed_ms": 0.9
+        },
+        {
+          "question_id": "q_api_04",
+          "transcript": "project_api_design",
+          "question": "What user roles exist and what changed about the role list during the discussion?",
+          "recall": 0.667,
+          "matched": [
+            "admin, member, viewer, guest",
+            "guest role was added for unauthenticated access to public endpoints"
+          ],
+          "missed": [
+            "originally three roles: admin, member, viewer"
+          ],
+          "nodes_before_strategies": 10,
+          "nodes_after_strategies": 9,
+          "tokens_estimated": 322,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)"
+          ],
+          "elapsed_ms": 0.6
+        },
+        {
+          "question_id": "q_api_05",
+          "transcript": "project_api_design",
+          "question": "What pagination approach was chosen and what are the page size constraints?",
+          "recall": 1.0,
+          "matched": [
+            "cursor-based pagination",
+            "offset pagination breaks when rows are inserted",
+            "cursor and limit query params",
+            "next_cursor in response",
+            "hard cap at 100 items",
+            "default is 20"
+          ],
+          "missed": [],
+          "nodes_before_strategies": 6,
+          "nodes_after_strategies": 6,
+          "tokens_estimated": 226,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)"
+          ],
+          "elapsed_ms": 0.4
+        },
+        {
+          "question_id": "q_api_06",
+          "transcript": "project_api_design",
+          "question": "What error response format was adopted and what fields are required?",
+          "recall": 1.0,
+          "matched": [
+            "RFC 7807 Problem Details",
+            "type, title, status, detail, instance",
+            "all five fields required"
+          ],
+          "missed": [],
+          "nodes_before_strategies": 14,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 370,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)"
+          ],
+          "elapsed_ms": 0.6
+        },
+        {
+          "question_id": "q_api_07",
+          "transcript": "project_api_design",
+          "question": "What versioning strategy was chosen for the API and what is the deprecation policy?",
+          "recall": 1.0,
+          "matched": [
+            "URL versioning (not header versioning)",
+            "header versioning made caching impossible",
+            "v1 and v2 can coexist",
+            "minimum 12 months deprecation notice",
+            "Deprecation header on sunset endpoints"
+          ],
+          "missed": [],
+          "nodes_before_strategies": 9,
+          "nodes_after_strategies": 9,
+          "tokens_estimated": 318,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)"
+          ],
+          "elapsed_ms": 0.5
+        },
+        {
+          "question_id": "q_api_08",
+          "transcript": "project_api_design",
+          "question": "What are the rate limiting rules and which layer enforces them?",
+          "recall": 0.0,
+          "matched": [],
+          "missed": [
+            "1000 requests per minute per user token",
+            "100 per minute for unauthenticated requests",
+            "enforced at the gateway (Kong)",
+            "X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset headers"
+          ],
+          "nodes_before_strategies": 0,
+          "nodes_after_strategies": 0,
+          "tokens_estimated": 0,
+          "strategies_applied": [],
+          "elapsed_ms": 0.2
+        },
+        {
+          "question_id": "q_pipe_01",
+          "transcript": "project_data_pipeline",
+          "question": "What serialization format was chosen for Kafka events and why?",
+          "recall": 0.0,
+          "matched": [],
+          "missed": [
+            "Avro with Confluent Schema Registry",
+            "moved away from JSON",
+            "fastavro library (3x faster than official confluent library)",
+            "schema evolution without breaking changes"
+          ],
+          "nodes_before_strategies": 31,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 345,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)"
+          ],
+          "elapsed_ms": 1.0
+        },
+        {
+          "question_id": "q_pipe_02",
+          "transcript": "project_data_pipeline",
+          "question": "What cold storage solution was chosen and why did it change from the original plan?",
+          "recall": 0.0,
+          "matched": [],
+          "missed": [
+            "GCS (Google Cloud Storage)",
+            "originally planned S3",
+            "ML team infrastructure already on GCP",
+            "cross-cloud egress costs were too high",
+            "Parquet format, partitioned by date and event_type"
+          ],
+          "nodes_before_strategies": 27,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 321,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)"
+          ],
+          "elapsed_ms": 1.0
+        },
+        {
+          "question_id": "q_pipe_03",
+          "transcript": "project_data_pipeline",
+          "question": "What table format was selected for the data lake and why was it chosen over alternatives?",
+          "recall": 0.0,
+          "matched": [],
+          "missed": [
+            "Delta Lake",
+            "evaluated Apache Iceberg and Hudi",
+            "ML team already has Spark clusters configured for Delta Lake",
+            "switching would take 6+ weeks",
+            "ACID transactions and schema enforcement"
+          ],
+          "nodes_before_strategies": 0,
+          "nodes_after_strategies": 0,
+          "tokens_estimated": 0,
+          "strategies_applied": [],
+          "elapsed_ms": 0.3
+        },
+        {
+          "question_id": "q_pipe_04",
+          "transcript": "project_data_pipeline",
+          "question": "What are the three hot-path transformations required before events reach downstream topics?",
+          "recall": 0.0,
+          "matched": [],
+          "missed": [
+            "PII scrubbing (mask emails and phone numbers)",
+            "event deduplication (30-second window)",
+            "schema validation against Avro schemas",
+            "PII scrubbing happens in the Kafka consumer before any downstream topic"
+          ],
+          "nodes_before_strategies": 1,
+          "nodes_after_strategies": 1,
+          "tokens_estimated": 89,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)"
+          ],
+          "elapsed_ms": 0.4
+        },
+        {
+          "question_id": "q_pipe_05",
+          "transcript": "project_data_pipeline",
+          "question": "Why was Redis rejected for deduplication state, and where is it used instead?",
+          "recall": 1.0,
+          "matched": [
+            "Redis rejected for Flink deduplication state \u2014 network overhead added 20ms per event",
+            "RocksDB used instead for embedded state",
+            "Redis IS used for the online feature store (different access pattern \u2014 point lookups)"
+          ],
+          "missed": [],
+          "nodes_before_strategies": 33,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 395,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)"
+          ],
+          "elapsed_ms": 1.2
+        },
+        {
+          "question_id": "q_pipe_06",
+          "transcript": "project_data_pipeline",
+          "question": "What is the latency SLA for the hot path and what monitoring stack is used?",
+          "recall": 0.8,
+          "matched": [
+            "under 500ms for the hot path",
+            "cold path up to 5 minutes",
+            "Prometheus + Grafana",
+            "three golden signals: Kafka consumer lag, Flink checkpoint duration, end-to-end latency"
+          ],
+          "missed": [
+            "PagerDuty alerts for 500ms SLA breach"
+          ],
+          "nodes_before_strategies": 45,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 371,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)"
+          ],
+          "elapsed_ms": 1.6
+        },
+        {
+          "question_id": "q_pipe_07",
+          "transcript": "project_data_pipeline",
+          "question": "What is the disaster recovery strategy for the pipeline?",
+          "recall": 0.0,
+          "matched": [],
+          "missed": [
+            "Kafka replication factor of 3",
+            "minimum in-sync replicas of 2",
+            "GCS cross-region replication for cold storage",
+            "Flink savepoints every 10 minutes"
+          ],
+          "nodes_before_strategies": 19,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 352,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)"
+          ],
+          "elapsed_ms": 0.7
+        },
+        {
+          "question_id": "q_auth_01",
+          "transcript": "project_auth_system",
+          "question": "Why was Keycloak chosen over Auth0 and Okta?",
+          "recall": 1.0,
+          "matched": [
+            "compliance requires data residency in own infrastructure",
+            "Auth0 and Okta store user data outside company control",
+            "non-starter for enterprise customers",
+            "self-hosted Keycloak"
+          ],
+          "missed": [],
+          "nodes_before_strategies": 15,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 352,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)"
+          ],
+          "elapsed_ms": 0.7
+        },
+        {
+          "question_id": "q_auth_02",
+          "transcript": "project_auth_system",
+          "question": "What are the token lifetimes and what is special about the refresh token format?",
+          "recall": 0.167,
+          "matched": [
+            "refresh tokens are opaque (not JWT format)"
+          ],
+          "missed": [
+            "access tokens: 15 minutes",
+            "refresh tokens: 24 hours sliding window",
+            "maximum 30 days of continuous activity",
+            "opaque tokens can be instantly revoked",
+            "stored in database"
+          ],
+          "nodes_before_strategies": 13,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 336,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)"
+          ],
+          "elapsed_ms": 0.6
+        },
+        {
+          "question_id": "q_auth_03",
+          "transcript": "project_auth_system",
+          "question": "What MFA methods are supported and which is explicitly excluded and why?",
+          "recall": 0.6,
+          "matched": [
+            "TOTP as primary second factor",
+            "SMS OTP explicitly NOT supported",
+            "SIM swapping makes SMS too weak"
+          ],
+          "missed": [
+            "WebAuthn/FIDO2 as preferred option",
+            "hardware keys and passkeys supported"
+          ],
+          "nodes_before_strategies": 14,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 353,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)"
+          ],
+          "elapsed_ms": 0.6
+        },
+        {
+          "question_id": "q_auth_04",
+          "transcript": "project_auth_system",
+          "question": "What access control model was chosen and what changed during the discussion?",
+          "recall": 0.0,
+          "matched": [],
+          "missed": [
+            "ABAC (Attribute-Based Access Control) \u2014 not just RBAC",
+            "Open Policy Agent (OPA) as policy engine",
+            "originally considered simple role-based system",
+            "enterprise requirements changed it: tenant isolation, resource-level permissions, time-based access windows",
+            "OPA policies in Git, deployed as sidecar containers"
+          ],
+          "nodes_before_strategies": 1,
+          "nodes_after_strategies": 1,
+          "tokens_estimated": 78,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)"
+          ],
+          "elapsed_ms": 0.3
+        },
+        {
+          "question_id": "q_auth_05",
+          "transcript": "project_auth_system",
+          "question": "What is the account lockout policy for failed login attempts?",
+          "recall": 0.4,
+          "matched": [
+            "5 failed attempts: 5-minute lockout",
+            "10 failed attempts: 1-hour lockout"
+          ],
+          "missed": [
+            "20 failed attempts in 24 hours: account locked",
+            "requires admin or email verification to unlock",
+            "IP-level rate limiting also applied"
+          ],
+          "nodes_before_strategies": 6,
+          "nodes_after_strategies": 6,
+          "tokens_estimated": 227,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)"
+          ],
+          "elapsed_ms": 0.4
+        },
+        {
+          "question_id": "q_auth_06",
+          "transcript": "project_auth_system",
+          "question": "What is the password policy, and is mandatory password rotation enforced?",
+          "recall": 0.0,
+          "matched": [],
+          "missed": [
+            "minimum 12 characters",
+            "must include uppercase, lowercase, digit, special character",
+            "checked against HaveIBeenPwned API",
+            "top 10,000 common passwords blocked",
+            "no mandatory rotation for regular users",
+            "rotation enforced only if breach detected via HIBP"
+          ],
+          "nodes_before_strategies": 3,
+          "nodes_after_strategies": 3,
+          "tokens_estimated": 169,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)"
+          ],
+          "elapsed_ms": 0.3
+        },
+        {
+          "question_id": "q_auth_07",
+          "transcript": "project_auth_system",
+          "question": "How are service-to-service calls authenticated, and what is the API key storage strategy?",
+          "recall": 0.333,
+          "matched": [
+            "service accounts in Keycloak using client credentials flow",
+            "only SHA-256 hash stored"
+          ],
+          "missed": [
+            "API keys are not the preferred pattern (too easy to leak)",
+            "mTLS between internal services where possible",
+            "external integrations: 32-byte random keys",
+            "prefixed with service identifier (e.g., cb_live_)"
+          ],
+          "nodes_before_strategies": 40,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 346,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)"
+          ],
+          "elapsed_ms": 1.4
+        },
+        {
+          "question_id": "q_auth_08",
+          "transcript": "project_auth_system",
+          "question": "What is the audit logging strategy and where are logs stored?",
+          "recall": 1.0,
+          "matched": [
+            "every auth event logged: login success/failure, MFA events, token operations, permission denied",
+            "logs are immutable, append-only",
+            "AWS CloudTrail for audit trail",
+            "separate read-only account for auditors"
+          ],
+          "missed": [],
+          "nodes_before_strategies": 6,
+          "nodes_after_strategies": 6,
+          "tokens_estimated": 227,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)"
+          ],
+          "elapsed_ms": 0.4
+        }
+      ],
+      "summary": {
+        "mean_recall": 0.479,
+        "mean_tokens": 269,
+        "questions_80pct_plus": 8,
+        "questions_50pct_plus": 12,
+        "total_questions": 23
+      }
+    },
+    "tight": {
+      "questions": [
+        {
+          "question_id": "q_api_01",
+          "transcript": "project_api_design",
+          "question": "What authentication method was decided for the API and why?",
+          "recall": 0.5,
+          "matched": [
+            "JWT tokens",
+            "stateless"
+          ],
+          "missed": [
+            "scales horizontally",
+            "sessions were a problem when adding more instances"
+          ],
+          "nodes_before_strategies": 35,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 319,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)",
+            "token_budget(600)"
+          ],
+          "elapsed_ms": 1.1
+        },
+        {
+          "question_id": "q_api_02",
+          "transcript": "project_api_design",
+          "question": "What JWT signing algorithm was chosen and what is the key distribution strategy?",
+          "recall": 0.75,
+          "matched": [
+            "RS256",
+            "private key on the auth service",
+            "public keys distributed to other services"
+          ],
+          "missed": [
+            "asymmetric \u2014 secret is never shared"
+          ],
+          "nodes_before_strategies": 28,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 319,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)",
+            "token_budget(600)"
+          ],
+          "elapsed_ms": 1.0
+        },
+        {
+          "question_id": "q_api_03",
+          "transcript": "project_api_design",
+          "question": "What are the access token and refresh token expiry times, and where are tokens stored client-side?",
+          "recall": 0.8,
+          "matched": [
+            "15-minute expiry for access tokens",
+            "7-day refresh tokens",
+            "HttpOnly cookies",
+            "SameSite=Strict"
+          ],
+          "missed": [
+            "not localStorage due to XSS risk"
+          ],
+          "nodes_before_strategies": 22,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 356,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)",
+            "token_budget(600)"
+          ],
+          "elapsed_ms": 0.9
+        },
+        {
+          "question_id": "q_api_04",
+          "transcript": "project_api_design",
+          "question": "What user roles exist and what changed about the role list during the discussion?",
+          "recall": 0.667,
+          "matched": [
+            "admin, member, viewer, guest",
+            "guest role was added for unauthenticated access to public endpoints"
+          ],
+          "missed": [
+            "originally three roles: admin, member, viewer"
+          ],
+          "nodes_before_strategies": 10,
+          "nodes_after_strategies": 9,
+          "tokens_estimated": 326,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)",
+            "token_budget(600)"
+          ],
+          "elapsed_ms": 0.6
+        },
+        {
+          "question_id": "q_api_05",
+          "transcript": "project_api_design",
+          "question": "What pagination approach was chosen and what are the page size constraints?",
+          "recall": 1.0,
+          "matched": [
+            "cursor-based pagination",
+            "offset pagination breaks when rows are inserted",
+            "cursor and limit query params",
+            "next_cursor in response",
+            "hard cap at 100 items",
+            "default is 20"
+          ],
+          "missed": [],
+          "nodes_before_strategies": 6,
+          "nodes_after_strategies": 6,
+          "tokens_estimated": 231,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)",
+            "token_budget(600)"
+          ],
+          "elapsed_ms": 0.4
+        },
+        {
+          "question_id": "q_api_06",
+          "transcript": "project_api_design",
+          "question": "What error response format was adopted and what fields are required?",
+          "recall": 1.0,
+          "matched": [
+            "RFC 7807 Problem Details",
+            "type, title, status, detail, instance",
+            "all five fields required"
+          ],
+          "missed": [],
+          "nodes_before_strategies": 14,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 375,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)",
+            "token_budget(600)"
+          ],
+          "elapsed_ms": 0.6
+        },
+        {
+          "question_id": "q_api_07",
+          "transcript": "project_api_design",
+          "question": "What versioning strategy was chosen for the API and what is the deprecation policy?",
+          "recall": 1.0,
+          "matched": [
+            "URL versioning (not header versioning)",
+            "header versioning made caching impossible",
+            "v1 and v2 can coexist",
+            "minimum 12 months deprecation notice",
+            "Deprecation header on sunset endpoints"
+          ],
+          "missed": [],
+          "nodes_before_strategies": 9,
+          "nodes_after_strategies": 9,
+          "tokens_estimated": 323,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)",
+            "token_budget(600)"
+          ],
+          "elapsed_ms": 0.5
+        },
+        {
+          "question_id": "q_api_08",
+          "transcript": "project_api_design",
+          "question": "What are the rate limiting rules and which layer enforces them?",
+          "recall": 0.0,
+          "matched": [],
+          "missed": [
+            "1000 requests per minute per user token",
+            "100 per minute for unauthenticated requests",
+            "enforced at the gateway (Kong)",
+            "X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset headers"
+          ],
+          "nodes_before_strategies": 0,
+          "nodes_after_strategies": 0,
+          "tokens_estimated": 0,
+          "strategies_applied": [],
+          "elapsed_ms": 0.2
+        },
+        {
+          "question_id": "q_pipe_01",
+          "transcript": "project_data_pipeline",
+          "question": "What serialization format was chosen for Kafka events and why?",
+          "recall": 0.0,
+          "matched": [],
+          "missed": [
+            "Avro with Confluent Schema Registry",
+            "moved away from JSON",
+            "fastavro library (3x faster than official confluent library)",
+            "schema evolution without breaking changes"
+          ],
+          "nodes_before_strategies": 31,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 350,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)",
+            "token_budget(600)"
+          ],
+          "elapsed_ms": 1.0
+        },
+        {
+          "question_id": "q_pipe_02",
+          "transcript": "project_data_pipeline",
+          "question": "What cold storage solution was chosen and why did it change from the original plan?",
+          "recall": 0.0,
+          "matched": [],
+          "missed": [
+            "GCS (Google Cloud Storage)",
+            "originally planned S3",
+            "ML team infrastructure already on GCP",
+            "cross-cloud egress costs were too high",
+            "Parquet format, partitioned by date and event_type"
+          ],
+          "nodes_before_strategies": 27,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 326,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)",
+            "token_budget(600)"
+          ],
+          "elapsed_ms": 1.0
+        },
+        {
+          "question_id": "q_pipe_03",
+          "transcript": "project_data_pipeline",
+          "question": "What table format was selected for the data lake and why was it chosen over alternatives?",
+          "recall": 0.0,
+          "matched": [],
+          "missed": [
+            "Delta Lake",
+            "evaluated Apache Iceberg and Hudi",
+            "ML team already has Spark clusters configured for Delta Lake",
+            "switching would take 6+ weeks",
+            "ACID transactions and schema enforcement"
+          ],
+          "nodes_before_strategies": 0,
+          "nodes_after_strategies": 0,
+          "tokens_estimated": 0,
+          "strategies_applied": [],
+          "elapsed_ms": 0.3
+        },
+        {
+          "question_id": "q_pipe_04",
+          "transcript": "project_data_pipeline",
+          "question": "What are the three hot-path transformations required before events reach downstream topics?",
+          "recall": 0.0,
+          "matched": [],
+          "missed": [
+            "PII scrubbing (mask emails and phone numbers)",
+            "event deduplication (30-second window)",
+            "schema validation against Avro schemas",
+            "PII scrubbing happens in the Kafka consumer before any downstream topic"
+          ],
+          "nodes_before_strategies": 1,
+          "nodes_after_strategies": 1,
+          "tokens_estimated": 94,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)",
+            "token_budget(600)"
+          ],
+          "elapsed_ms": 0.4
+        },
+        {
+          "question_id": "q_pipe_05",
+          "transcript": "project_data_pipeline",
+          "question": "Why was Redis rejected for deduplication state, and where is it used instead?",
+          "recall": 1.0,
+          "matched": [
+            "Redis rejected for Flink deduplication state \u2014 network overhead added 20ms per event",
+            "RocksDB used instead for embedded state",
+            "Redis IS used for the online feature store (different access pattern \u2014 point lookups)"
+          ],
+          "missed": [],
+          "nodes_before_strategies": 33,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 400,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)",
+            "token_budget(600)"
+          ],
+          "elapsed_ms": 1.2
+        },
+        {
+          "question_id": "q_pipe_06",
+          "transcript": "project_data_pipeline",
+          "question": "What is the latency SLA for the hot path and what monitoring stack is used?",
+          "recall": 0.8,
+          "matched": [
+            "under 500ms for the hot path",
+            "cold path up to 5 minutes",
+            "Prometheus + Grafana",
+            "three golden signals: Kafka consumer lag, Flink checkpoint duration, end-to-end latency"
+          ],
+          "missed": [
+            "PagerDuty alerts for 500ms SLA breach"
+          ],
+          "nodes_before_strategies": 45,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 376,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)",
+            "token_budget(600)"
+          ],
+          "elapsed_ms": 1.5
+        },
+        {
+          "question_id": "q_pipe_07",
+          "transcript": "project_data_pipeline",
+          "question": "What is the disaster recovery strategy for the pipeline?",
+          "recall": 0.0,
+          "matched": [],
+          "missed": [
+            "Kafka replication factor of 3",
+            "minimum in-sync replicas of 2",
+            "GCS cross-region replication for cold storage",
+            "Flink savepoints every 10 minutes"
+          ],
+          "nodes_before_strategies": 19,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 357,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)",
+            "token_budget(600)"
+          ],
+          "elapsed_ms": 0.7
+        },
+        {
+          "question_id": "q_auth_01",
+          "transcript": "project_auth_system",
+          "question": "Why was Keycloak chosen over Auth0 and Okta?",
+          "recall": 1.0,
+          "matched": [
+            "compliance requires data residency in own infrastructure",
+            "Auth0 and Okta store user data outside company control",
+            "non-starter for enterprise customers",
+            "self-hosted Keycloak"
+          ],
+          "missed": [],
+          "nodes_before_strategies": 15,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 357,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)",
+            "token_budget(600)"
+          ],
+          "elapsed_ms": 0.6
+        },
+        {
+          "question_id": "q_auth_02",
+          "transcript": "project_auth_system",
+          "question": "What are the token lifetimes and what is special about the refresh token format?",
+          "recall": 0.167,
+          "matched": [
+            "refresh tokens are opaque (not JWT format)"
+          ],
+          "missed": [
+            "access tokens: 15 minutes",
+            "refresh tokens: 24 hours sliding window",
+            "maximum 30 days of continuous activity",
+            "opaque tokens can be instantly revoked",
+            "stored in database"
+          ],
+          "nodes_before_strategies": 13,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 340,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)",
+            "token_budget(600)"
+          ],
+          "elapsed_ms": 0.6
+        },
+        {
+          "question_id": "q_auth_03",
+          "transcript": "project_auth_system",
+          "question": "What MFA methods are supported and which is explicitly excluded and why?",
+          "recall": 0.6,
+          "matched": [
+            "TOTP as primary second factor",
+            "SMS OTP explicitly NOT supported",
+            "SIM swapping makes SMS too weak"
+          ],
+          "missed": [
+            "WebAuthn/FIDO2 as preferred option",
+            "hardware keys and passkeys supported"
+          ],
+          "nodes_before_strategies": 14,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 357,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)",
+            "token_budget(600)"
+          ],
+          "elapsed_ms": 0.6
+        },
+        {
+          "question_id": "q_auth_04",
+          "transcript": "project_auth_system",
+          "question": "What access control model was chosen and what changed during the discussion?",
+          "recall": 0.0,
+          "matched": [],
+          "missed": [
+            "ABAC (Attribute-Based Access Control) \u2014 not just RBAC",
+            "Open Policy Agent (OPA) as policy engine",
+            "originally considered simple role-based system",
+            "enterprise requirements changed it: tenant isolation, resource-level permissions, time-based access windows",
+            "OPA policies in Git, deployed as sidecar containers"
+          ],
+          "nodes_before_strategies": 1,
+          "nodes_after_strategies": 1,
+          "tokens_estimated": 83,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)",
+            "token_budget(600)"
+          ],
+          "elapsed_ms": 0.3
+        },
+        {
+          "question_id": "q_auth_05",
+          "transcript": "project_auth_system",
+          "question": "What is the account lockout policy for failed login attempts?",
+          "recall": 0.4,
+          "matched": [
+            "5 failed attempts: 5-minute lockout",
+            "10 failed attempts: 1-hour lockout"
+          ],
+          "missed": [
+            "20 failed attempts in 24 hours: account locked",
+            "requires admin or email verification to unlock",
+            "IP-level rate limiting also applied"
+          ],
+          "nodes_before_strategies": 6,
+          "nodes_after_strategies": 6,
+          "tokens_estimated": 231,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)",
+            "token_budget(600)"
+          ],
+          "elapsed_ms": 0.4
+        },
+        {
+          "question_id": "q_auth_06",
+          "transcript": "project_auth_system",
+          "question": "What is the password policy, and is mandatory password rotation enforced?",
+          "recall": 0.0,
+          "matched": [],
+          "missed": [
+            "minimum 12 characters",
+            "must include uppercase, lowercase, digit, special character",
+            "checked against HaveIBeenPwned API",
+            "top 10,000 common passwords blocked",
+            "no mandatory rotation for regular users",
+            "rotation enforced only if breach detected via HIBP"
+          ],
+          "nodes_before_strategies": 3,
+          "nodes_after_strategies": 3,
+          "tokens_estimated": 174,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)",
+            "token_budget(600)"
+          ],
+          "elapsed_ms": 0.3
+        },
+        {
+          "question_id": "q_auth_07",
+          "transcript": "project_auth_system",
+          "question": "How are service-to-service calls authenticated, and what is the API key storage strategy?",
+          "recall": 0.333,
+          "matched": [
+            "service accounts in Keycloak using client credentials flow",
+            "only SHA-256 hash stored"
+          ],
+          "missed": [
+            "API keys are not the preferred pattern (too easy to leak)",
+            "mTLS between internal services where possible",
+            "external integrations: 32-byte random keys",
+            "prefixed with service identifier (e.g., cb_live_)"
+          ],
+          "nodes_before_strategies": 40,
+          "nodes_after_strategies": 10,
+          "tokens_estimated": 350,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)",
+            "token_budget(600)"
+          ],
+          "elapsed_ms": 1.3
+        },
+        {
+          "question_id": "q_auth_08",
+          "transcript": "project_auth_system",
+          "question": "What is the audit logging strategy and where are logs stored?",
+          "recall": 1.0,
+          "matched": [
+            "every auth event logged: login success/failure, MFA events, token operations, permission denied",
+            "logs are immutable, append-only",
+            "AWS CloudTrail for audit trail",
+            "separate read-only account for auditors"
+          ],
+          "missed": [],
+          "nodes_before_strategies": 6,
+          "nodes_after_strategies": 6,
+          "tokens_estimated": 231,
+          "strategies_applied": [
+            "superseded_pruning",
+            "confidence_threshold(0.6)",
+            "token_budget(600)"
+          ],
+          "elapsed_ms": 0.4
+        }
+      ],
+      "summary": {
+        "mean_recall": 0.479,
+        "mean_tokens": 273,
+        "questions_80pct_plus": 8,
+        "questions_50pct_plus": 12,
+        "total_questions": 23
+      }
+    }
+  },
+  "timing": {
+    "extraction_total_s": 238.85,
+    "query_total_s": 0.07,
+    "total_s": 238.91
+  }
+}

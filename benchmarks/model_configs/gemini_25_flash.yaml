@@ -1,0 +1,10 @@
+llm:
+  base_url: "https://generativelanguage.googleapis.com/v1beta/openai"
+  model: "models/gemini-2.5-flash"
+  temperature: 0.1
+  max_tokens: 65536
+  api_key_env: "GEMINI_API_KEY"
+  timeout: 300.0
+
+defaults:
+  top_k: 25

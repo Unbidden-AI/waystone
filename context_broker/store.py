@@ -18,6 +18,9 @@ class GraphStore:
 
     def init_db(self):
         """Create tables if they don't exist."""
+        # WAL mode allows concurrent readers + one writer without blocking
+        self.conn.execute("PRAGMA journal_mode=WAL")
+        self.conn.execute("PRAGMA synchronous=NORMAL")
         self.conn.executescript("""
             CREATE TABLE IF NOT EXISTS nodes (
                 id TEXT PRIMARY KEY,
@@ -93,14 +96,25 @@ class GraphStore:
         return [self._row_to_node(r) for r in rows]
 
     def get_nodes_by_tags(self, tags: list[str]) -> list[dict]:
-        """Find nodes whose tags overlap with the given list."""
+        """Find nodes whose tags overlap with the given list.
+
+        Falls back to fact-text search if tag matching returns no results.
+        """
         if not tags:
             return []
-        # Build OR conditions for LIKE matching on the JSON tags field
         conditions = " OR ".join(["tags LIKE ?" for _ in tags])
-        params = [f'%"{tag}"%' for tag in tags]
+        params = [f'%{tag}%' for tag in tags]
         rows = self.conn.execute(
             f"SELECT * FROM nodes WHERE {conditions}", params
+        ).fetchall()
+        if rows:
+            return [self._row_to_node(r) for r in rows]
+
+        # Fallback: search fact text when no tag matches found
+        fact_conditions = " OR ".join(["fact LIKE ?" for _ in tags])
+        fact_params = [f"%{tag}%" for tag in tags]
+        rows = self.conn.execute(
+            f"SELECT * FROM nodes WHERE {fact_conditions}", fact_params
         ).fetchall()
         return [self._row_to_node(r) for r in rows]
 
@@ -159,6 +173,51 @@ class GraphStore:
             "edge_count": edge_count,
             "type_counts": type_counts,
         }
+
+    def _buf_path(self) -> Path:
+        return self.db_path.parent / "buffer.json"
+
+    def _load_buf_data(self) -> dict:
+        p = self._buf_path()
+        if p.exists():
+            try:
+                return json.loads(p.read_text())
+            except Exception:
+                pass
+        return {}
+
+    def _save_buf_data(self, data: dict) -> None:
+        self._buf_path().write_text(json.dumps(data))
+
+    def load_buffer(self) -> list[str]:
+        """Load persisted turn buffer from disk."""
+        return self._load_buf_data().get("turns", [])
+
+    def save_buffer(self, turns: list[str]) -> None:
+        """Persist turn buffer to disk, preserving other fields."""
+        data = self._load_buf_data()
+        data["turns"] = turns
+        self._save_buf_data(data)
+
+    def clear_buffer(self) -> None:
+        """Clear buffered turns, preserving watermark and other fields."""
+        data = self._load_buf_data()
+        data["turns"] = []
+        self._save_buf_data(data)
+
+    def load_watermark(self, transcript_path: str) -> int:
+        """Return the number of JSONL lines already processed for this transcript."""
+        data = self._load_buf_data()
+        if data.get("transcript_path") != transcript_path:
+            return 0
+        return data.get("transcript_watermark", 0)
+
+    def save_watermark(self, transcript_path: str, line_count: int) -> None:
+        """Persist the JSONL line watermark for this transcript."""
+        data = self._load_buf_data()
+        data["transcript_path"] = transcript_path
+        data["transcript_watermark"] = line_count
+        self._save_buf_data(data)
 
     def close(self):
         """Close the database connection."""

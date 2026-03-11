@@ -1,7 +1,5 @@
 """Tests for the SQLite graph store."""
 
-import tempfile
-from pathlib import Path
 
 import pytest
 
