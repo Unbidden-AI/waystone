@@ -1,0 +1,14 @@
+llm:
+  base_url: "https://api.groq.com/openai/v1"
+  model: "llama-3.3-70b-versatile"
+  temperature: 0.1
+  # Groq enforces an 8192-token output limit on this model regardless of what
+  # you pass. Values above 8192 are silently capped. Dense transcripts may
+  # still hit finish_reason=length — use --chunk-size 12000 to stay safe.
+  max_tokens: 8192
+  api_key_env: "GROQ_API_KEY"
+  # Groq is fast (500-1000 tok/s) so a short timeout is fine.
+  timeout: 60.0
+
+defaults:
+  top_k: 25
