@@ -836,17 +836,47 @@ def extract_replay_cmd(ctx, project, transcript_file, turn_size, context_k, cont
 def last_context_cmd(ctx, raw):
     """Show the context most recently injected by the Claude Code hook.
 
-    The hook writes ~/.context-broker/last_context.md each time it fires.
+    The hook writes last_context.md per project. Auto-detects the current
+    project from a .context-broker marker file.
     Also prints the retrieval metrics from the last hook invocation.
     """
     import json as _json
     import time as _time
 
     state_dir = Path.home() / ".context-broker"
-    context_path = state_dir / "last_context.md"
     state_path = state_dir / "state.json"
 
-    if not context_path.exists():
+    # Detect project from CWD to find per-project last_context.md
+    def _detect_project_from_cwd() -> str | None:
+        cwd_path = Path.cwd().resolve()
+        home = Path.home()
+        for directory in [cwd_path, *cwd_path.parents]:
+            marker = directory / ".context-broker"
+            if marker.exists():
+                try:
+                    name = marker.read_text().strip()
+                    if name:
+                        return name
+                except Exception:
+                    pass
+            if directory == home:
+                break
+        return None
+
+    cfg = _load_cfg(ctx.obj.get("config") if ctx.obj else None)
+    project_name = _detect_project_from_cwd()
+    context_path = None
+    if project_name:
+        candidate = get_db_path(cfg, project_name).parent / "last_context.md"
+        if candidate.exists():
+            context_path = candidate
+    # Fall back to legacy global path
+    if context_path is None:
+        legacy = state_dir / "last_context.md"
+        if legacy.exists():
+            context_path = legacy
+
+    if context_path is None:
         click.echo(
             "No hook context found yet.\n"
             "Install the hook with:  python hooks/install.py\n"

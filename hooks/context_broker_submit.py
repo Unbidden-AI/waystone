@@ -140,7 +140,9 @@ def main():
             "timestamp": time.time(),
         })
 
-        (STATE_DIR / "last_context.md").write_text(retrieval.markdown)
+        project_dir = get_db_path(config, project).parent
+        last_context_path = project_dir / "last_context.md"
+        last_context_path.write_text(retrieval.markdown)
 
         if retrieval.nodes_after_strategies == 0:
             sys.exit(0)
@@ -148,7 +150,7 @@ def main():
         preamble = (
             f"[Context Broker: retrieved {retrieval.nodes_after_strategies} of {total_nodes} "
             f"graph nodes for project '{project}' (~{retrieval.tokens_estimated} tokens). "
-            f"Full context: ~/.context-broker/last_context.md]\n\n"
+            f"Full context: {last_context_path}]\n\n"
         )
         output = {
             "hookSpecificOutput": {

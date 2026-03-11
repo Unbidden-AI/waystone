@@ -40,16 +40,24 @@ def _find_project_marker(start: Path | None = None) -> str | None:
     return None
 
 
-def _resolve_project(project: str | None) -> str:
-    """Return project name, auto-detecting from .context-broker if not given."""
+def _resolve_project(project: str | None, cwd: str | None = None) -> str:
+    """Return project name, auto-detecting from .context-broker if not given.
+
+    cwd should be the caller's working directory (not the MCP server's CWD).
+    When running multiple Claude Code instances, pass cwd= to avoid all
+    instances resolving to the same project via the server's own CWD.
+    """
     if project:
         return project
-    detected = _find_project_marker()
+    start = Path(cwd).resolve() if cwd else None
+    detected = _find_project_marker(start)
     if detected:
         return detected
     raise ValueError(
-        "No project specified and no .context-broker marker found in the current "
-        "directory tree. Pass project= explicitly or run 'ctx hook-init <project>'."
+        "No project specified and no .context-broker marker found. "
+        "Pass project= explicitly, or pass cwd= (your working directory) "
+        "so the server can locate the correct .context-broker marker. "
+        "Run 'ctx hook-init <project>' to create one."
     )
 
 
@@ -65,6 +73,7 @@ def _load_config() -> dict:
 def context_broker_query(
     task: Annotated[str, "Task description or question to retrieve context for"],
     project: Annotated[str | None, "Project name (auto-detected from .context-broker if omitted)"] = None,
+    cwd: Annotated[str | None, "Your working directory (pass this when auto-detecting project, so the server resolves the correct .context-broker marker)"] = None,
     hops: Annotated[int, "Graph traversal depth (default 3)"] = 3,
     top_k: Annotated[int, "Max nodes to return (default 25)"] = 25,
 ) -> str:
@@ -73,7 +82,7 @@ def context_broker_query(
     Returns a markdown block of the most relevant decisions, constraints,
     and implementation details extracted from past conversations.
     """
-    project_name = _resolve_project(project)  # raises ValueError → MCP error response
+    project_name = _resolve_project(project, cwd)  # raises ValueError → MCP error response
 
     config = _load_config()
     db_path = get_db_path(config, project_name)
@@ -107,6 +116,7 @@ def context_broker_query(
 def context_broker_extract(
     text: Annotated[str, "Text to extract facts from (transcript, spec, notes, etc.)"],
     project: Annotated[str | None, "Project name (auto-detected from .context-broker if omitted)"] = None,
+    cwd: Annotated[str | None, "Your working directory (pass this when auto-detecting project)"] = None,
     source_name: Annotated[str, "Label for this text (shown in node source info)"] = "mcp_extract",
     verify: Annotated[bool, "Run a second verification pass to catch missed facts"] = False,
 ) -> str:
@@ -123,7 +133,7 @@ def context_broker_extract(
             "Split the text into smaller pieces and call this tool multiple times."
         )
 
-    project_name = _resolve_project(project)
+    project_name = _resolve_project(project, cwd)
 
     config = _load_config()
     db_path = get_db_path(config, project_name)
@@ -171,12 +181,13 @@ def context_broker_extract(
 @mcp.tool()
 def context_broker_stats(
     project: Annotated[str | None, "Project name (auto-detected if omitted)"] = None,
+    cwd: Annotated[str | None, "Your working directory (pass this when auto-detecting project)"] = None,
 ) -> str:
     """Return node and edge counts for the project knowledge graph.
 
     Use this to check whether a project has been populated before querying.
     """
-    project_name = _resolve_project(project)
+    project_name = _resolve_project(project, cwd)
 
     config = _load_config()
     db_path = get_db_path(config, project_name)
