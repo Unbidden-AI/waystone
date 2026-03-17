@@ -12,6 +12,7 @@ from .config import get_db_path, get_project_dir, load_config
 from .extractor import (
     ExtractionBuffer,
     extract,
+    extract_targeted,
     extract_turn,
     reconcile_group,
     score_extraction_quality,
@@ -111,11 +112,15 @@ _MAX_FILE_BYTES = 50 * 1024 * 1024  # 50 MB hard limit
 @click.argument("project")
 @click.argument("transcript_file", type=click.Path(exists=True))
 @click.option("--verify", is_flag=True, help="Run a second verification pass to catch missed facts")
+@click.option("--lessons", is_flag=True, help="Run a targeted pass hunting for lesson_learned nodes (failed approaches, rejected alternatives)")
+@click.option("--decisions", is_flag=True, help="Run a targeted pass hunting for decision nodes and their rationale")
+@click.option("--questions", is_flag=True, help="Run a targeted pass hunting for open questions and unresolved items")
+@click.option("--constraints", is_flag=True, help="Run a targeted pass hunting for hard constraints and requirements")
 @click.option("--timeout", type=float, default=None, help="LLM timeout in seconds (overrides config)")
 @click.option("--chunk-size", type=int, default=None, metavar="CHARS",
               help="Max chars per LLM call (default: 20000 for Gemini; auto-applied when file > 20000 chars)")
 @click.pass_context
-def extract_cmd(ctx, project, transcript_file, verify, timeout, chunk_size):
+def extract_cmd(ctx, project, transcript_file, verify, lessons, decisions, questions, constraints, timeout, chunk_size):
     """Extract facts from a transcript and merge into the project graph."""
     config = _load_cfg(ctx.obj["config_path"])
 
@@ -158,6 +163,12 @@ def extract_cmd(ctx, project, transcript_file, verify, timeout, chunk_size):
     all_edges: list[dict] = []
     failed_chunks = 0
 
+    _targeted_categories = [
+        c for c, flag in [("lessons", lessons), ("decisions", decisions),
+                          ("questions", questions), ("constraints", constraints)]
+        if flag
+    ]
+
     if n_chunks == 1:
         # Single chunk: inline progress
         click.echo(f"  sending {len(chunks[0]):,} chars...", nl=False)
@@ -182,6 +193,23 @@ def extract_cmd(ctx, project, transcript_file, verify, timeout, chunk_size):
                 click.echo(f"  Verification failed (continuing with pass 1): {e}", err=True)
         else:
             click.echo(f" {len(nodes)} nodes, {len(edges)} edges [{elapsed:.0f}s]")
+        if _targeted_categories:
+            n_passes = len(_targeted_categories)
+            label = " concurrently" if n_passes > 1 else ""
+            click.echo(f"  Running {n_passes} targeted pass(es){label}...")
+            async def _run_targeted_cli(cats, snap_nodes):
+                return await asyncio.gather(
+                    *[extract_targeted(chunks[0], cat, snap_nodes, config) for cat in cats],
+                    return_exceptions=True,
+                )
+            targeted_results = asyncio.run(_run_targeted_cli(_targeted_categories, nodes))
+            for cat, tr in zip(_targeted_categories, targeted_results):
+                if isinstance(tr, Exception):
+                    click.echo(f"  --{cat} pass failed (continuing): {tr}", err=True)
+                else:
+                    click.echo(f"  +{len(tr['nodes'])} nodes, +{len(tr['edges'])} edges (--{cat})")
+                    nodes = nodes + tr["nodes"]
+                    edges = edges + tr["edges"]
         all_nodes.extend(nodes)
         all_edges.extend(edges)
     else:
@@ -198,6 +226,15 @@ def extract_cmd(ctx, project, transcript_file, verify, timeout, chunk_size):
                     edges = edges + vr["edges"]
                 except Exception:
                     pass  # verification failure is non-fatal
+            if _targeted_categories:
+                targeted_results = await asyncio.gather(
+                    *[extract_targeted(chunk_text, cat, nodes, config) for cat in _targeted_categories],
+                    return_exceptions=True,
+                )
+                for tr in targeted_results:
+                    if not isinstance(tr, Exception):
+                        nodes = nodes + tr["nodes"]
+                        edges = edges + tr["edges"]
             return nodes, edges
 
         t0 = time.monotonic()
@@ -1486,3 +1523,14 @@ def resume_cmd():
         click.echo("Extraction resumed.")
     else:
         click.echo("Extraction was not paused.")
+
+
+# ---------------------------------------------------------------------------
+# Orchestrator REPL (imported from orchestrator package)
+# ---------------------------------------------------------------------------
+
+try:
+    from orchestrator.cli import main as _orchestrate_cmd
+    cli.add_command(_orchestrate_cmd, name="orchestrate")
+except ImportError:
+    pass  # orchestrator package not installed — skip gracefully
