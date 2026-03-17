@@ -2,6 +2,18 @@
 
 All notable changes to Context Broker are documented here.
 
+## [Unreleased]
+
+### Added
+- `orchestrator/` package skeleton — model-agnostic conversation manager with proactive compaction
+- `tests/test_orchestrator/` — test directory for orchestrator modules
+- `litellm>=1.40` and `tiktoken>=0.7` dependencies
+- `orchestrator:` configuration section in `config.yaml` with full schema
+- `ORCHESTRATOR_PLAN.md` — architecture and module design for the orchestrator
+- `DEVELOPMENT_PLAN.md` — agent workflow, milestones, and process conventions
+
+---
+
 ## [0.1.0] – 2026-03-10
 
 ### Added

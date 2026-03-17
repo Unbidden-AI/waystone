@@ -20,3 +20,56 @@ strategies:
   relevance_scoring: true        # Rank entry nodes by tag overlap count
 
 projects_dir: "./projects"
+
+orchestrator:
+  llm:
+    model: "anthropic/claude-sonnet-4-6"  # LiteLLM format: provider/model
+    temperature: 0.7
+    max_tokens: 4096
+    log_level: "WARNING"  # suppress LiteLLM verbose output
+
+  context:
+    window_size: 20              # max turns before compaction triggered
+    token_budget: 8000           # max tokens per API call (system + history + context)
+    compaction_batch: 10         # number of oldest messages to compact at once
+    idle_seconds_before_compact: 600
+    extraction_buffer:
+      min_turns: 3
+      min_words: 200
+      max_turns: 10
+      short_turn_words: 20
+    retrieve:
+      hops: 2
+      top_k: 20
+      strategies:
+        superseded_pruning: true
+        confidence_threshold: 0.6
+        recency_decay: false
+        token_budget: 0
+
+  system_prompt:
+    static: |
+      You are a helpful coding assistant. Use the project knowledge below
+      to maintain consistency with prior decisions, constraints, and context.
+    include_edges: true
+    group_by_type: true
+    context_token_limit: 2000    # max tokens for graph context portion of system prompt
+
+  tools:
+    enabled:
+      - bash
+      - read_file
+      - write_file
+      - glob
+      - grep
+    sandbox_root: "."            # restrict file access to this root
+    max_output_chars: 10000      # truncate large tool outputs
+    bash_timeout: 30
+
+  retry:
+    transient_codes: [500, 502, 503, 504]
+    max_retries: 4
+    backoff_seconds: [1, 2, 4, 8]
+    friendly_delay_threshold: 5  # surface "retrying..." message if delay exceeds this
+
+  log_level: "INFO"

@@ -12,6 +12,8 @@ dependencies = [
     "httpx>=0.25",
     "pyyaml>=6.0",
     "mcp>=1.0",
+    "litellm>=1.40",
+    "tiktoken>=0.7",
 ]
 
 [project.optional-dependencies]
@@ -22,7 +24,7 @@ ctx = "context_broker.cli:cli"
 ctx-mcp = "context_broker.mcp_server:run_server"
 
 [tool.setuptools.packages.find]
-include = ["context_broker*"]
+include = ["context_broker*", "orchestrator*"]
 
 [tool.ruff]
 line-length = 120
