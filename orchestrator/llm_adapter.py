@@ -6,7 +6,7 @@ import asyncio
 import json
 import logging
 import os
-from typing import Any
+from typing import Any, AsyncIterator
 
 import litellm
 from litellm.exceptions import (
@@ -199,6 +199,48 @@ def _parse_tool_calls(response_message) -> list[ToolCall] | None:
 
 
 # ---------------------------------------------------------------------------
+# Internal: shared kwargs builder
+# ---------------------------------------------------------------------------
+
+
+def _build_kwargs(
+    messages: list[Message],
+    system: str,
+    cfg: dict,
+    tools: list[str] | None = None,
+) -> dict[str, Any]:
+    """Build the LiteLLM acompletion kwargs dict (without stream flag)."""
+    # Suppress LiteLLM's own verbose output
+    log_level = cfg.get("log_level", "WARNING")
+    litellm.set_verbose = False
+    logging.getLogger("LiteLLM").setLevel(getattr(logging, log_level, logging.WARNING))
+
+    api_key = _resolve_api_key(cfg)
+
+    api_messages: list[dict[str, Any]] = [{"role": "system", "content": system}]
+    api_messages.extend(m.to_api_dict() for m in messages)
+
+    kwargs: dict[str, Any] = {
+        "model": cfg.get("model", "anthropic/claude-sonnet-4-6"),
+        "messages": api_messages,
+        "temperature": cfg.get("temperature", 0.7),
+        "max_tokens": cfg.get("max_tokens", 4096),
+    }
+    if api_key:
+        kwargs["api_key"] = api_key
+    base_url = cfg.get("base_url")
+    if base_url:
+        kwargs["api_base"] = base_url
+
+    tool_schemas = build_tool_schemas(tools) if tools else []
+    if tool_schemas:
+        kwargs["tools"] = tool_schemas
+        kwargs["tool_choice"] = "auto"
+
+    return kwargs
+
+
+# ---------------------------------------------------------------------------
 # Primary entry point
 # ---------------------------------------------------------------------------
 
@@ -233,34 +275,7 @@ async def call_llm(
     backoff_seconds: list[float] = retry_cfg.get("backoff_seconds", [1.0, 2.0, 4.0, 8.0])
     friendly_threshold: float = retry_cfg.get("friendly_delay_threshold", 5.0)
 
-    # Suppress LiteLLM's own verbose output
-    log_level = cfg.get("log_level", "WARNING")
-    litellm.set_verbose = False
-    logging.getLogger("LiteLLM").setLevel(getattr(logging, log_level, logging.WARNING))
-
-    api_key = _resolve_api_key(cfg)
-
-    # Build message dicts
-    api_messages: list[dict[str, Any]] = [{"role": "system", "content": system}]
-    api_messages.extend(m.to_api_dict() for m in messages)
-
-    # Build kwargs
-    kwargs: dict[str, Any] = {
-        "model": cfg.get("model", "anthropic/claude-sonnet-4-6"),
-        "messages": api_messages,
-        "temperature": cfg.get("temperature", 0.7),
-        "max_tokens": cfg.get("max_tokens", 4096),
-    }
-    if api_key:
-        kwargs["api_key"] = api_key
-    base_url = cfg.get("base_url")
-    if base_url:
-        kwargs["api_base"] = base_url
-
-    tool_schemas = build_tool_schemas(tools) if tools else []
-    if tool_schemas:
-        kwargs["tools"] = tool_schemas
-        kwargs["tool_choice"] = "auto"
+    kwargs = _build_kwargs(messages, system, cfg, tools)
 
     last_exc: Exception | None = None
     for attempt in range(max_retries + 1):
@@ -331,3 +346,44 @@ async def call_llm(
         raise RuntimeError("LLM call failed with no recorded exception")
     log.error("LLM call failed after %d attempts: %s", max_retries + 1, type(last_exc).__name__)
     raise last_exc
+
+
+# ---------------------------------------------------------------------------
+# Streaming entry point
+# ---------------------------------------------------------------------------
+
+
+async def stream_llm(
+    messages: list[Message],
+    system: str,
+    cfg: dict,
+) -> AsyncIterator[str]:
+    """Stream the LLM reply as text delta chunks.
+
+    No tool use — intended for the final synthesizing reply after tool rounds
+    are complete, or for pure-chat turns where no tools are configured.
+
+    Yields
+    ------
+    str
+        Each content delta as it arrives from the model.  Yields nothing if
+        the model returns only whitespace or an empty content delta.
+
+    Notes
+    -----
+    Retry is intentionally omitted: resuming a partial stream is unsound,
+    and the caller (``_llm_loop_stream``) falls back gracefully on exception.
+    """
+    kwargs = _build_kwargs(messages, system, cfg)
+    kwargs["stream"] = True
+
+    log.debug("stream_llm: starting stream (%s)", cfg.get("model", "?"))
+    response = await litellm.acompletion(**kwargs)
+
+    async for chunk in response:
+        if not chunk.choices:
+            continue
+        delta = chunk.choices[0].delta
+        content: str | None = getattr(delta, "content", None)
+        if content:
+            yield content

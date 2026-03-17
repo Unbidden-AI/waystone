@@ -33,6 +33,8 @@ def main():
     parser.add_argument("--project", required=True)
     parser.add_argument("--db-path", required=True)
     parser.add_argument("--source", default="live")
+    parser.add_argument("--hints-path", default=None,
+                        help="Path to session_state.md; bullets used to guide verification pass")
     args = parser.parse_args()
 
     text = sys.stdin.read().strip()
@@ -50,7 +52,7 @@ def main():
 
     try:
         from context_broker.config import load_config
-        from context_broker.extractor import extract_turn
+        from context_broker.extractor import extract_turn, verify_extraction
         from context_broker.retriever import bfs_collect, extract_keywords, score_by_relevance
         from context_broker.store import GraphStore
 
@@ -59,6 +61,20 @@ def main():
         inc_cfg = config.get("incremental", {})
         ctx_k = inc_cfg.get("context_k", 30)
         ctx_hops = inc_cfg.get("context_hops", 2)
+
+        # Load Tier 1 candidate sentences from hints file (session_state.md bullets)
+        candidate_sentences: list[str] | None = None
+        if args.hints_path:
+            hints_path = Path(args.hints_path)
+            if hints_path.exists():
+                raw = hints_path.read_text(encoding="utf-8")
+                sentences = [
+                    line.lstrip("- ").strip()
+                    for line in raw.splitlines()
+                    if line.strip().startswith("- ")
+                ]
+                if sentences:
+                    candidate_sentences = sentences
 
         store = GraphStore(db_path)
         keywords = extract_keywords(text)
@@ -79,12 +95,27 @@ def main():
             node.setdefault("source_transcript", args.source)
             node.setdefault("created_at", datetime.now(timezone.utc).isoformat())
 
+        # Tier 1-guided verification pass: run when candidate sentences are available
+        if candidate_sentences:
+            all_nodes_so_far = list(context_nodes) + nodes
+            verify_result = asyncio.run(
+                verify_extraction(text, all_nodes_so_far, config, candidate_sentences)
+            )
+            verify_nodes = verify_result.get("nodes", [])
+            verify_edges = verify_result.get("edges", [])
+            for node in verify_nodes:
+                node.setdefault("source_transcript", args.source)
+                node.setdefault("created_at", datetime.now(timezone.utc).isoformat())
+            nodes = nodes + verify_nodes
+            edges = edges + verify_edges
+
         store = GraphStore(db_path)
         store.merge_extraction(nodes, edges)
         stats = store.get_stats()
         store.close()
 
         elapsed_ms = int((time.time() - _load_state().get("extract_started_at", time.time())) * 1000)
+        completed_at = time.time()
         _merge_state({
             "extracting": False,
             "extract_started_at": None,
@@ -92,6 +123,11 @@ def main():
             "last_extract_ms": elapsed_ms,
             "nodes_total": stats["node_count"],
         })
+        # Write per-project extraction timestamp so the hook can expire session state entries
+        try:
+            (db_path.parent / "last_extract_at").write_text(str(completed_at))
+        except Exception:
+            pass
 
     except Exception as e:
         _merge_state({

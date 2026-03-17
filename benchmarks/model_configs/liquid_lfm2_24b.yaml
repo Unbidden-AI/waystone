@@ -1,9 +1,8 @@
 llm:
   base_url: "http://127.0.0.1:1234/v1"
-  model: "openai/gpt-oss-20b"
+  model: "liquid/lfm2-24b-a2b"
   temperature: 0.1
   max_tokens: 16384
   timeout: 900
   stream: true
   structured_outputs: false
-  # Set reasoning to "low" in LM Studio model settings before running

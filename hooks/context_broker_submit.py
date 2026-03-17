@@ -19,9 +19,11 @@ Install:
 """
 
 import json
+import re
 import subprocess
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -30,6 +32,159 @@ sys.path.insert(0, str(REPO_ROOT))
 
 STATE_DIR = Path.home() / ".context-broker"
 PAUSE_FILE = STATE_DIR / "paused"
+SESSION_STATE_MAX_CHARS = 2400  # ~600 tokens
+SESSION_STATE_TTL_SECONDS = 600  # fallback expiry: 10 minutes
+
+_SESSION_STATE_TS_RE = re.compile(r'^\[[\d:]+\|ts=(\d+)\]')
+
+
+_MEASUREMENT_RE = re.compile(
+    r'\b\d[\d,\.]*\s*(?:ms|s|%|tokens?|nodes?|edges?|KB|MB|GB|[KM])\b'
+)
+_FILE_PATH_RE = re.compile(r'`[^`\s]{3,60}\.[a-zA-Z]{1,6}`')
+_SENTENCE_SPLIT_RE = re.compile(r'(?<=[.!?])\s+(?=[A-Z])')
+
+
+def _split_sentences(text: str) -> list[str]:
+    """Split text into sentences on './?/!' followed by a capital letter."""
+    return [s.strip() for s in _SENTENCE_SPLIT_RE.split(text) if s.strip()]
+
+
+def _is_fragment(s: str) -> bool:
+    """True if the string looks like it starts mid-sentence."""
+    return bool(s) and s[0].islower()
+
+
+def _is_duplicate(candidate: str, seen: list[str], threshold: float = 0.6) -> bool:
+    """True if candidate shares >threshold of its words with any seen string."""
+    cwords = set(candidate.lower().split())
+    if not cwords:
+        return False
+    for s in seen:
+        swords = set(s.lower().split())
+        overlap = len(cwords & swords) / len(cwords)
+        if overlap > threshold:
+            return True
+    return False
+
+
+def _heuristic_extract(text: str) -> str:
+    """Extract key facts heuristically (~5ms, no LLM). Returns bullet list string.
+
+    Extracts sentence-complete units in priority order:
+      1. Sentences containing measurements (numbers + units)
+      2. Markdown headings
+      3. Sentences containing backtick file paths
+      4. First sentence of long (3+) paragraphs
+    Deduplicates by word overlap and enforces a ~400-token output budget.
+    """
+    # Bucket by priority; each entry is (priority, text)
+    candidates: list[tuple[int, str]] = []
+
+    all_sentences = _split_sentences(text)
+
+    # Priority 1: sentences with measurements
+    for sentence in all_sentences:
+        if _MEASUREMENT_RE.search(sentence) and 15 < len(sentence) < 200:
+            if not _is_fragment(sentence):
+                candidates.append((1, sentence))
+
+    # Priority 2: markdown headings (already clean, always kept)
+    for m in re.finditer(r'^#{1,3} .+', text, re.MULTILINE):
+        candidates.append((2, m.group(0).strip()))
+
+    # Priority 3: sentences containing file paths
+    for sentence in all_sentences:
+        if _FILE_PATH_RE.search(sentence) and 10 < len(sentence) < 200:
+            if not _is_fragment(sentence):
+                candidates.append((3, sentence))
+
+    # Priority 4: first sentence of long paragraphs
+    for para in re.split(r'\n{2,}', text):
+        para = para.strip()
+        if not para or para[0] in ('#', '|', '`', '-', '*'):
+            continue
+        sentences = _split_sentences(para)
+        if len(sentences) >= 3 and not _is_fragment(sentences[0]):
+            candidates.append((4, sentences[0]))
+
+    if not candidates:
+        return ""
+
+    # Sort by priority, then select with dedup and token budget
+    candidates.sort(key=lambda x: x[0])
+    selected: list[str] = []
+    total_chars = 0
+    for _, text_item in candidates:
+        if total_chars + len(text_item) > 1600:
+            break
+        if not _is_duplicate(text_item, selected):
+            selected.append(text_item)
+            total_chars += len(text_item)
+
+    return "\n".join(f"- {s}" for s in selected)
+
+
+def _update_session_state(session_state_path: Path, new_extract: str) -> None:
+    """Prepend timestamped heuristic extract to rolling session state file."""
+    existing = session_state_path.read_text(encoding="utf-8") if session_state_path.exists() else ""
+
+    clock = datetime.now().strftime("%H:%M")
+    ts = int(time.time())
+    entry = f"[{clock}|ts={ts}]\n{new_extract}"
+    combined = f"{entry}\n\n{existing}".strip() if existing else entry
+
+    # Trim to max, keeping most recent (top)
+    if len(combined) > SESSION_STATE_MAX_CHARS:
+        trimmed = combined[:SESSION_STATE_MAX_CHARS]
+        last_nl = trimmed.rfind("\n")
+        if last_nl > SESSION_STATE_MAX_CHARS // 2:
+            trimmed = trimmed[:last_nl]
+        combined = trimmed
+
+    session_state_path.write_text(combined, encoding="utf-8")
+
+
+def _read_active_session_state(session_state_path: Path) -> str:
+    """Read session state, filtering out entries already processed by Tier 2 extraction.
+
+    An entry is expired when either:
+    - Its timestamp predates the last successful extraction for this project
+      (i.e. the LLM has already ingested that content into the graph), OR
+    - It is older than SESSION_STATE_TTL_SECONDS (fallback for extraction failures).
+    """
+    if not session_state_path.exists():
+        return ""
+    raw = session_state_path.read_text(encoding="utf-8").strip()
+    if not raw:
+        return ""
+
+    # Load the per-project last-extraction timestamp
+    last_extracted_at = 0.0
+    last_extract_at_path = session_state_path.parent / "last_extract_at"
+    try:
+        if last_extract_at_path.exists():
+            last_extracted_at = float(last_extract_at_path.read_text().strip())
+    except Exception:
+        pass
+
+    cutoff = max(last_extracted_at, time.time() - SESSION_STATE_TTL_SECONDS)
+
+    active_blocks = []
+    for block in re.split(r'\n{2,}', raw):
+        block = block.strip()
+        if not block:
+            continue
+        m = _SESSION_STATE_TS_RE.match(block)
+        if m:
+            if float(m.group(1)) > cutoff:
+                active_blocks.append(block)
+            # else: expired — silently drop
+        else:
+            # Legacy format without timestamp — keep conservatively
+            active_blocks.append(block)
+
+    return "\n\n".join(active_blocks)
 
 
 def main():
@@ -69,7 +224,16 @@ def main():
                 assistant_text, new_watermark = _read_assistant_since(transcript_path, watermark)
                 store.save_watermark(transcript_path, new_watermark)
                 if assistant_text:
-                    _spawn_extraction(assistant_text, project, db_path, source="assistant")
+                    # Tier 1: heuristic extract for immediate session state (no LLM, ~5ms)
+                    heuristic = _heuristic_extract(assistant_text)
+                    session_state_path = db_path.parent / "session_state.md"
+                    if heuristic:
+                        _update_session_state(session_state_path, heuristic)
+                    # Tier 2: spawn background LLM extraction, guided by Tier 1 sentences
+                    _spawn_extraction(
+                        assistant_text, project, db_path, source="assistant",
+                        hints_path=session_state_path if heuristic else None,
+                    )
 
             # --- Buffer user prompt; spawn extraction when threshold met ---
             persisted_turns = store.load_buffer()
@@ -152,10 +316,17 @@ def main():
             f"graph nodes for project '{project}' (~{retrieval.tokens_estimated} tokens). "
             f"Full context: {last_context_path}]\n\n"
         )
+        additional_context = preamble + retrieval.markdown
+
+        session_state_path = db_path.parent / "session_state.md"
+        session_state = _read_active_session_state(session_state_path)
+        if session_state:
+            additional_context += "\n\n## Recent session activity\n" + session_state
+
         output = {
             "hookSpecificOutput": {
                 "hookEventName": "UserPromptSubmit",
-                "additionalContext": preamble + retrieval.markdown,
+                "additionalContext": additional_context,
             }
         }
         print(json.dumps(output))
@@ -165,14 +336,19 @@ def main():
         sys.exit(0)
 
 
-def _spawn_extraction(text: str, project: str, db_path: Path, source: str) -> None:
+def _spawn_extraction(
+    text: str, project: str, db_path: Path, source: str, hints_path: Path | None = None
+) -> None:
     """Fire-and-forget: spawn the extraction worker as a detached subprocess."""
     try:
+        cmd = [sys.executable, str(WORKER),
+               "--project", project,
+               "--db-path", str(db_path),
+               "--source", source]
+        if hints_path is not None and hints_path.exists():
+            cmd += ["--hints-path", str(hints_path)]
         proc = subprocess.Popen(
-            [sys.executable, str(WORKER),
-             "--project", project,
-             "--db-path", str(db_path),
-             "--source", source],
+            cmd,
             stdin=subprocess.PIPE,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,

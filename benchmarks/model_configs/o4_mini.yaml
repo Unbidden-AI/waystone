@@ -1,0 +1,7 @@
+llm:
+  base_url: "https://api.openai.com/v1"
+  model: "o4-mini"
+  # Reasoning models don't support temperature
+  max_tokens: 16384
+  api_key_env: "OPENAI_API_KEY"
+  timeout: 300.0

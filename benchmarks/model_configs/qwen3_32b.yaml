@@ -1,0 +1,11 @@
+llm:
+  base_url: "http://127.0.0.1:1234/v1"
+  model: "qwen/qwen3-32b"
+  temperature: 0.1
+  max_tokens: 16384
+  timeout: 900
+  stream: true
+  enable_thinking: false
+  structured_outputs: false
+  # To reliably disable thinking in LM Studio, open the model settings
+  # and add to the prompt template: {% set enable_thinking = false %}

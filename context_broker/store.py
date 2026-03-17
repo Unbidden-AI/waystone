@@ -1,12 +1,55 @@
 """SQLite-backed graph store for context nodes and edges."""
 
+import hashlib
 import json
 import logging
+import re
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
 log = logging.getLogger(__name__)
+
+
+def _normalize_fact(fact: str) -> str:
+    """Normalize fact text for deduplication hashing.
+
+    Lowercases, strips punctuation, and collapses whitespace so that
+    semantically identical facts with minor formatting differences hash
+    to the same value.
+    """
+    text = fact.lower()
+    text = re.sub(r"[^\w\s]", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def _fact_hash(fact: str) -> str:
+    """Return a 16-char hex SHA-256 of the normalized fact text."""
+    return hashlib.sha256(_normalize_fact(fact).encode()).hexdigest()[:16]
+
+
+def _auto_tag_numerics(fact: str, tags: list[str]) -> list[str]:
+    """Augment tags with digit-containing tokens parsed from fact text.
+
+    Extracts tokens like "15-minute", "1000/min", "rs256", "rfc-7807" that
+    contain at least one digit. These are added to tags if not already present,
+    so numeric-value queries can find the node even when the extractor omitted
+    the specific value from its tag list.
+    """
+    # Match tokens containing at least one digit; include hyphens/slashes for
+    # compound values like "15-minute" or "1000/min"
+    raw = re.findall(r"[\w][\w/\-]*\d[\w/\-]*|(?<!\w)\d[\w/\-]*", fact.lower())
+    existing = {t.lower() for t in tags}
+    extras = [t for t in raw if t not in existing and len(t) >= 1]
+    # Deduplicate while preserving order
+    seen: set[str] = set()
+    result = list(tags)
+    for token in extras:
+        if token not in seen:
+            seen.add(token)
+            result.append(token)
+    return result
 
 
 class GraphStore:
@@ -48,15 +91,60 @@ class GraphStore:
             CREATE INDEX IF NOT EXISTS idx_edges_from ON edges(from_id);
             CREATE INDEX IF NOT EXISTS idx_edges_to ON edges(to_id);
         """)
+        # Migration: add fact_hash column if it doesn't exist yet
+        try:
+            self.conn.execute("ALTER TABLE nodes ADD COLUMN fact_hash TEXT")
+            self.conn.commit()
+            log.info("Migrated nodes table: added fact_hash column")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_nodes_fact_hash ON nodes(fact_hash)"
+        )
+        # Backfill fact_hash for existing rows that have NULL
+        rows = self.conn.execute(
+            "SELECT id, fact FROM nodes WHERE fact_hash IS NULL"
+        ).fetchall()
+        if rows:
+            self.conn.executemany(
+                "UPDATE nodes SET fact_hash = ? WHERE id = ?",
+                [(_fact_hash(r[1]), r[0]) for r in rows],
+            )
+            log.info("Backfilled fact_hash for %d existing nodes", len(rows))
         self.conn.commit()
 
-    def add_node(self, node: dict):
-        """Insert or replace a node."""
+    def add_node(self, node: dict) -> str:
+        """Insert a node, deduplicating by fact text hash.
+
+        If a node with the same normalized fact text already exists, the
+        incoming node is merged into it: tags are unioned and confidence
+        takes the maximum of the two values. Returns the canonical node ID
+        (either the existing one or the newly inserted one).
+        """
+        tags = _auto_tag_numerics(node["fact"], node.get("tags", []))
+        fhash = _fact_hash(node["fact"])
+        existing_row = self.conn.execute(
+            "SELECT id, tags, confidence FROM nodes WHERE fact_hash = ? LIMIT 1",
+            (fhash,),
+        ).fetchone()
+        if existing_row and existing_row[0] != node["id"]:
+            # Merge into existing node: union tags, keep max confidence
+            existing_id = existing_row[0]
+            existing_tags: set = set(json.loads(existing_row[1]))
+            merged_tags = sorted(existing_tags | set(tags))
+            merged_conf = max(existing_row[2], node.get("confidence", 0.5))
+            self.conn.execute(
+                "UPDATE nodes SET tags = ?, confidence = ? WHERE id = ?",
+                (json.dumps(merged_tags), merged_conf, existing_id),
+            )
+            self.conn.commit()
+            log.debug("Dedup: merged node %s into existing %s", node["id"], existing_id)
+            return existing_id
         self.conn.execute(
             """INSERT OR REPLACE INTO nodes
                (id, fact, type, confidence, source_transcript,
-                source_message_index, tags, created_at, supersedes)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                source_message_index, tags, created_at, supersedes, fact_hash)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 node["id"],
                 node["fact"],
@@ -64,12 +152,14 @@ class GraphStore:
                 node.get("confidence", 0.5),
                 node.get("source_transcript"),
                 node.get("source_message_index"),
-                json.dumps(node.get("tags", [])),
+                json.dumps(tags),
                 node.get("created_at", datetime.now(timezone.utc).isoformat()),
                 json.dumps(node.get("supersedes", [])),
+                fhash,
             ),
         )
         self.conn.commit()
+        return node["id"]
 
     def add_edge(self, from_id: str, to_id: str, relation: str):
         """Insert an edge, ignoring duplicates."""
@@ -121,6 +211,17 @@ class GraphStore:
         ).fetchall()
         return [self._row_to_node(r) for r in rows]
 
+    def get_nodes_by_fact_text(self, keywords: list[str]) -> list[dict]:
+        """Find nodes whose fact text contains any of the given keywords."""
+        if not keywords:
+            return []
+        conditions = " OR ".join(["fact LIKE ?" for _ in keywords])
+        params = [f"%{kw}%" for kw in keywords]
+        rows = self.conn.execute(
+            f"SELECT * FROM nodes WHERE {conditions}", params
+        ).fetchall()
+        return [self._row_to_node(r) for r in rows]
+
     def get_nodes_by_ids(self, node_ids: list[str]) -> list[dict]:
         """Fetch multiple nodes by ID in a single query."""
         if not node_ids:
@@ -166,24 +267,79 @@ class GraphStore:
 
         Handles supersedes: when a new node supersedes existing ones,
         those are recorded and the new node is inserted.
+
+        Deduplication: nodes whose normalized fact text matches an existing
+        node are merged into that node (tags unioned, confidence max). The
+        id_map tracks new_id → canonical_id so edges are rewritten to point
+        at canonical nodes.
         """
         log.info("Merging %d nodes, %d edges into %s", len(nodes), len(edges), self.db_path.name)
+        id_map: dict[str, str] = {}
         for node in nodes:
-            self.add_node(node)
+            canonical_id = self.add_node(node)
+            if canonical_id != node["id"]:
+                id_map[node["id"]] = canonical_id
+
+        def _resolve(nid: str) -> str:
+            return id_map.get(nid, nid)
+
         for edge in edges:
-            self.add_edge(edge["from_id"], edge["to_id"], edge["relation"])
+            self.add_edge(_resolve(edge["from_id"]), _resolve(edge["to_id"]), edge["relation"])
             # If it's a supersedes edge, also record in the node's supersedes list
             if edge["relation"] == "supersedes":
-                existing = self.get_node(edge["from_id"])
+                from_id = _resolve(edge["from_id"])
+                to_id = _resolve(edge["to_id"])
+                existing = self.get_node(from_id)
                 if existing:
                     supersedes_list = existing.get("supersedes", [])
-                    if edge["to_id"] not in supersedes_list:
-                        supersedes_list.append(edge["to_id"])
+                    if to_id not in supersedes_list:
+                        supersedes_list.append(to_id)
                         self.conn.execute(
                             "UPDATE nodes SET supersedes = ? WHERE id = ?",
-                            (json.dumps(supersedes_list), edge["from_id"]),
+                            (json.dumps(supersedes_list), from_id),
                         )
                         self.conn.commit()
+
+    def propagate_edge_tags(self):
+        """Bidirectionally propagate tags along non-supersedes edges (1 hop).
+
+        For each edge A → B (excluding 'supersedes'), merges B's tags into A
+        and A's tags into B. This increases BFS seed coverage: a query that
+        matches B's keywords will now also surface A, and vice versa.
+
+        Called once after merge_extraction() to enrich the tag index without
+        any additional LLM calls.
+        """
+        edges = self.conn.execute(
+            "SELECT from_id, to_id FROM edges WHERE relation != 'supersedes'"
+        ).fetchall()
+
+        if not edges:
+            return
+
+        # Collect all node IDs touched by non-supersedes edges
+        node_ids = list({nid for row in edges for nid in (row[0], row[1])})
+        placeholders = ",".join("?" * len(node_ids))
+        rows = self.conn.execute(
+            f"SELECT id, tags FROM nodes WHERE id IN ({placeholders})", node_ids
+        ).fetchall()
+        tags_by_id: dict[str, set] = {row[0]: set(json.loads(row[1])) for row in rows}
+
+        # Merge neighbor tags into each endpoint (1 hop, bidirectional)
+        updated: dict[str, set] = {nid: set(tags) for nid, tags in tags_by_id.items()}
+        for from_id, to_id in ((r[0], r[1]) for r in edges):
+            if from_id in tags_by_id and to_id in tags_by_id:
+                updated[from_id] |= tags_by_id[to_id]
+                updated[to_id] |= tags_by_id[from_id]
+
+        # Write back only nodes whose tag sets actually changed
+        for nid, new_tags in updated.items():
+            if new_tags != tags_by_id.get(nid, set()):
+                self.conn.execute(
+                    "UPDATE nodes SET tags = ? WHERE id = ?",
+                    (json.dumps(sorted(new_tags)), nid),
+                )
+        self.conn.commit()
 
     def get_stats(self) -> dict:
         """Get graph statistics."""
@@ -254,4 +410,6 @@ class GraphStore:
         d = dict(row)
         d["tags"] = json.loads(d["tags"])
         d["supersedes"] = json.loads(d["supersedes"])
+        # fact_hash is an internal implementation detail; strip it from the public dict
+        d.pop("fact_hash", None)
         return d

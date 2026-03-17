@@ -76,6 +76,11 @@ def main():
             latest_link.unlink()
         latest_link.symlink_to(out_path.name)
 
+        # Clear session state — LLM extraction will have processed it by next session
+        session_state_path = get_db_path(config, project).parent / "session_state.md"
+        if session_state_path.exists():
+            session_state_path.unlink()
+
     except Exception:
         pass  # Never block the session
 

@@ -1,0 +1,6 @@
+llm:
+  base_url: "http://127.0.0.1:1234/v1"
+  model: "mistral-small-3.2-24b-instruct-2506-mlx"
+  temperature: 0.1
+  max_tokens: 16384
+  timeout: 600

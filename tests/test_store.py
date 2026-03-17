@@ -81,17 +81,17 @@ class TestEdges:
 
 class TestTagMatching:
     def test_finds_matching_tags(self, store):
-        store.add_node(_make_node(id="n_1", tags=["api", "webhook"]))
-        store.add_node(_make_node(id="n_2", tags=["database", "sql"]))
-        store.add_node(_make_node(id="n_3", tags=["api", "auth"]))
+        store.add_node(_make_node(id="n_1", fact="Fact 1", tags=["api", "webhook"]))
+        store.add_node(_make_node(id="n_2", fact="Fact 2", tags=["database", "sql"]))
+        store.add_node(_make_node(id="n_3", fact="Fact 3", tags=["api", "auth"]))
 
         results = store.get_nodes_by_tags(["api"])
         ids = {n["id"] for n in results}
         assert ids == {"n_1", "n_3"}
 
     def test_multiple_tags_or(self, store):
-        store.add_node(_make_node(id="n_1", tags=["api"]))
-        store.add_node(_make_node(id="n_2", tags=["database"]))
+        store.add_node(_make_node(id="n_1", fact="Fact 1", tags=["api"]))
+        store.add_node(_make_node(id="n_2", fact="Fact 2", tags=["database"]))
         results = store.get_nodes_by_tags(["api", "database"])
         assert len(results) == 2
 
@@ -130,9 +130,9 @@ class TestStats:
         assert stats["type_counts"] == {}
 
     def test_stats_with_data(self, store):
-        store.add_node(_make_node(id="n_1", type="decision"))
-        store.add_node(_make_node(id="n_2", type="decision"))
-        store.add_node(_make_node(id="n_3", type="implementation"))
+        store.add_node(_make_node(id="n_1", fact="Fact 1", type="decision"))
+        store.add_node(_make_node(id="n_2", fact="Fact 2", type="decision"))
+        store.add_node(_make_node(id="n_3", fact="Fact 3", type="implementation"))
         store.add_edge("n_1", "n_2", "relates_to")
 
         stats = store.get_stats()
@@ -143,13 +143,13 @@ class TestStats:
 
 class TestBulkOperations:
     def test_get_all_nodes(self, store):
-        store.add_node(_make_node(id="n_1"))
-        store.add_node(_make_node(id="n_2"))
+        store.add_node(_make_node(id="n_1", fact="Fact 1"))
+        store.add_node(_make_node(id="n_2", fact="Fact 2"))
         assert len(store.get_all_nodes()) == 2
 
     def test_get_recent_nodes(self, store):
-        store.add_node(_make_node(id="n_1", created_at="2026-01-01T00:00:00Z"))
-        store.add_node(_make_node(id="n_2", created_at="2026-03-07T00:00:00Z"))
+        store.add_node(_make_node(id="n_1", fact="Fact 1", created_at="2026-01-01T00:00:00Z"))
+        store.add_node(_make_node(id="n_2", fact="Fact 2", created_at="2026-03-07T00:00:00Z"))
         recent = store.get_recent_nodes(1)
         assert len(recent) == 1
         assert recent[0]["id"] == "n_2"

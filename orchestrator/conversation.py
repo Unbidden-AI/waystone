@@ -8,7 +8,7 @@ from typing import AsyncIterator
 from context_broker.store import GraphStore
 
 from .context_manager import ContextManager
-from .llm_adapter import build_tool_schemas, call_llm
+from .llm_adapter import build_tool_schemas, call_llm, stream_llm
 from .system_prompt_builder import SystemPromptBuilder
 from .tool_executor import execute_tools
 from .types import CompactionResult, Message, ToolCall
@@ -124,22 +124,50 @@ class Conversation:
         return reply
 
     async def chat_stream(self, user_message: str) -> AsyncIterator[str]:
-        """Yield reply tokens incrementally (tool rounds are buffered internally).
+        """Yield reply tokens as they arrive from the model.
 
-        Yields the final reply in chunks split on word boundaries.
-        This is a lightweight streaming shim — true streaming would require
-        LiteLLM streaming support wired through the LLM adapter.
+        Tool rounds (if any) are executed synchronously before streaming
+        begins — only the final synthesizing reply is streamed, giving
+        time-to-first-token on the response the user actually sees.
         """
-        reply = await self.chat(user_message)
-        # Yield in ~80-char chunks to simulate streaming
-        chunk_size = 80
-        for i in range(0, len(reply), chunk_size):
-            yield reply[i : i + chunk_size]
+        # 1. Retrieve graph context
+        context_md = self._context_mgr.retrieve_context(user_message)
+
+        # 2. Build system prompt
+        system = self._prompt_builder.build(
+            context_markdown=context_md,
+            task_description=user_message,
+        )
+
+        # 3. Add user message to history
+        user_msg = Message(role="user", content=user_message)
+        self._context_mgr.add_message(user_msg)
+
+        # 4. Proactive compaction
+        compaction = await self._context_mgr.compact_if_needed()
+        if compaction:
+            log.info(
+                "Compacted: removed=%d freed=%d tokens extracted=%d nodes [%s]",
+                compaction.messages_removed,
+                compaction.tokens_freed,
+                compaction.nodes_extracted,
+                compaction.trigger.value,
+            )
+
+        # 5–6. Stream tool rounds then final reply
+        reply_parts: list[str] = []
+        async for chunk in self._llm_loop_stream(system):
+            reply_parts.append(chunk)
+            yield chunk
+
+        # 7. Append assembled reply to history
+        reply = "".join(reply_parts)
+        self._context_mgr.add_message(Message(role="assistant", content=reply))
+        self._context_mgr.touch()
 
     def reset(self) -> None:
         """Clear history (start a new logical session, keep the graph store)."""
-        self._context_mgr._history.clear()
-        self._context_mgr._total_tokens = 0
+        self._context_mgr.reset()
         log.info("Conversation reset for project %r", self._project_name)
 
     def stats(self) -> dict:
@@ -194,6 +222,58 @@ class Conversation:
             tools=None,  # no tools on final round
         )
         return text or ""
+
+    async def _llm_loop_stream(self, system: str) -> AsyncIterator[str]:
+        """Run tool rounds then stream the final reply.
+
+        If no tools are configured, streams immediately for best TTFT.
+        If tools are configured, tool rounds are executed non-streaming (so
+        that tool-call JSON can be parsed cleanly), then the final
+        synthesizing reply is streamed.  If the LLM returns a text reply
+        on the first round without invoking any tools, that text is yielded
+        directly — no redundant second call.
+        """
+        history = self._context_mgr.get_history()
+        tools = self._enabled_tools if self._enabled_tools else None
+
+        # No tools configured — stream directly for best TTFT
+        if not tools:
+            async for chunk in stream_llm(history, system, self._llm_cfg):
+                yield chunk
+            return
+
+        # Tool rounds: non-streaming so tool-call JSON arrives complete
+        for round_num in range(_MAX_TOOL_ROUNDS):
+            text, tool_calls, finish_reason = await call_llm(
+                messages=history,
+                system=system,
+                cfg=self._llm_cfg,
+                tools=tools,
+            )
+
+            if finish_reason != "tool_calls" or not tool_calls:
+                # LLM returned a text reply without tool calls — yield it
+                # directly; no need for a second streaming call.
+                if text:
+                    yield text
+                return
+
+            log.debug("Stream tool round %d: %d calls", round_num + 1, len(tool_calls))
+            results = await execute_tools(tool_calls, self._tools_cfg)
+
+            tool_summary = _format_tool_summary(tool_calls, results)
+            tool_msgs = [
+                Message(role="assistant", content=tool_summary),
+                *[r.to_message() for r in results],
+            ]
+            for msg in tool_msgs:
+                self._context_mgr.add_message(msg)
+            history = list(history) + tool_msgs
+
+        # All tool rounds exhausted — stream the final synthesizing answer
+        log.warning("Tool loop hit %d rounds; streaming final answer", _MAX_TOOL_ROUNDS)
+        async for chunk in stream_llm(history, system, self._llm_cfg):
+            yield chunk
 
 
 # ---------------------------------------------------------------------------

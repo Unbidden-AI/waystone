@@ -18,6 +18,7 @@ import json
 import shutil
 import sys
 import time
+import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -27,7 +28,8 @@ ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
 from context_broker.config import get_db_path, get_project_dir, load_config
-from context_broker.extractor import ExtractionBuffer, extract, extract_turn, split_transcript_into_turns, verify_extraction
+from context_broker.extractor import ExtractionBuffer, extract, extract_targeted, extract_turn, split_transcript_into_turns, verify_extraction
+from context_broker.cli import _split_at_paragraphs
 from context_broker.retriever import (
     bfs_collect,
     extract_keywords,
@@ -131,8 +133,9 @@ def score_recall(retrieved_markdown: str, ground_truth_elements: list) -> tuple:
 # Extraction phase
 # ---------------------------------------------------------------------------
 
-def run_extraction(config: dict, project_name: str, transcripts: list, verify: bool = False) -> dict:
+def run_extraction(config: dict, project_name: str, transcripts: list, verify: bool = False, targeted: list | None = None) -> dict:
     """Extract all transcripts into the project graph. Returns per-transcript stats."""
+    targeted = targeted or []
     results = {}
     db_path = get_db_path(config, project_name)
 
@@ -149,18 +152,54 @@ def run_extraction(config: dict, project_name: str, transcripts: list, verify: b
         t0 = time.time()
 
         try:
-            extraction = asyncio.run(extract(transcript_text, config))
+            _AUTO_CHUNK = 20_000
+            chunk_size = config.get("llm", {}).get("chunk_size")
+            effective_chunk_size = chunk_size or (_AUTO_CHUNK if len(transcript_text) > _AUTO_CHUNK else None)
+            if effective_chunk_size and len(transcript_text) > effective_chunk_size:
+                chunk_size = effective_chunk_size
+            if chunk_size and len(transcript_text) > chunk_size:
+                chunks = _split_at_paragraphs(transcript_text, chunk_size)
+                print(f" [{len(chunks)} chunks]", end="", flush=True)
+
+                async def extract_all_chunks():
+                    results = await asyncio.gather(*[extract(c, config) for c in chunks])
+                    merged_nodes, merged_edges = [], []
+                    for r in results:
+                        merged_nodes.extend(r["nodes"])
+                        merged_edges.extend(r["edges"])
+                    return {"nodes": merged_nodes, "edges": merged_edges}
+
+                extraction = asyncio.run(extract_all_chunks())
+            else:
+                extraction = asyncio.run(extract(transcript_text, config))
             nodes = extraction["nodes"]
             edges = extraction["edges"]
 
-            if verify:
+            if verify or targeted:
                 print(f" [{len(nodes)} nodes pass1]", end="", flush=True)
+            if verify:
                 verify_result = asyncio.run(verify_extraction(transcript_text, nodes, config))
                 extra_nodes = verify_result["nodes"]
                 extra_edges = verify_result["edges"]
                 print(f" [+{len(extra_nodes)} pass2]", end="", flush=True)
                 nodes = nodes + extra_nodes
                 edges = edges + extra_edges
+            if targeted:
+                async def _run_targeted(cats, snap_nodes, snap_edges):
+                    results = await asyncio.gather(
+                        *[extract_targeted(transcript_text, cat, snap_nodes, config) for cat in cats],
+                        return_exceptions=True,
+                    )
+                    out_nodes, out_edges = list(snap_nodes), list(snap_edges)
+                    for cat, tr in zip(cats, results):
+                        if isinstance(tr, Exception):
+                            print(f" [--{cat} FAILED: {tr}]", end="", flush=True)
+                        else:
+                            print(f" [+{len(tr['nodes'])} {cat}]", end="", flush=True)
+                            out_nodes = out_nodes + tr["nodes"]
+                            out_edges = out_edges + tr["edges"]
+                    return out_nodes, out_edges
+                nodes, edges = asyncio.run(_run_targeted(targeted, nodes, edges))
 
             elapsed = time.time() - t0
 
@@ -183,10 +222,13 @@ def run_extraction(config: dict, project_name: str, transcripts: list, verify: b
         except Exception as e:
             elapsed = time.time() - t0
             msg = str(e) or repr(e)
+            tb = traceback.format_exc()
             print(f" FAILED ({type(e).__name__}): {msg}")
+            print(tb)
             results[name] = {
                 "status": "error",
                 "error": msg,
+                "traceback": tb,
                 "elapsed_s": round(elapsed, 2),
             }
 
@@ -286,10 +328,13 @@ def run_extraction_incremental(config: dict, project_name: str, transcripts: lis
         except Exception as e:
             elapsed = time.time() - t0
             msg = str(e) or repr(e)
+            tb = traceback.format_exc()
             print(f"    FAILED ({type(e).__name__}): {msg}")
+            print(tb)
             results[name] = {
                 "status": "error",
                 "error": msg,
+                "traceback": tb,
                 "elapsed_s": round(elapsed, 2),
             }
 
@@ -398,10 +443,13 @@ def run_extraction_buffered(config: dict, project_name: str, transcripts: list, 
         except Exception as e:
             elapsed = time.time() - t0
             msg = str(e) or repr(e)
+            tb = traceback.format_exc()
             print(f"    FAILED ({type(e).__name__}): {msg}")
+            print(tb)
             results[name] = {
                 "status": "error",
                 "error": msg,
+                "traceback": tb,
                 "elapsed_s": round(elapsed, 2),
             }
 
@@ -513,6 +561,7 @@ def write_report(data: dict, output_dir: Path) -> tuple:
         f"**Model:** `{data['model']}`  ",
         f"**Config:** `{data['config_file']}`  ",
         f"**Mode:** {data.get('mode', 'full')}  ",
+        f"**Stack runs:** {data.get('stack_runs', 1)}  ",
         f"**Run:** {data['timestamp']}  ",
         "",
         "## Extraction",
@@ -632,6 +681,33 @@ def main():
         action="store_true",
         help="Run a second verification pass after extraction to catch missed facts",
     )
+    parser.add_argument(
+        "--lessons",
+        action="store_true",
+        help="Run a targeted pass hunting for lesson_learned nodes (failed approaches, rejected alternatives)",
+    )
+    parser.add_argument(
+        "--decisions",
+        action="store_true",
+        help="Run a targeted pass hunting for decision nodes and their rationale",
+    )
+    parser.add_argument(
+        "--questions",
+        action="store_true",
+        help="Run a targeted pass hunting for open questions and unresolved items",
+    )
+    parser.add_argument(
+        "--constraints",
+        action="store_true",
+        help="Run a targeted pass hunting for hard constraints and requirements",
+    )
+    parser.add_argument(
+        "--stack-runs",
+        type=int,
+        default=1,
+        metavar="N",
+        help="Extract each transcript N times into the same project before evaluating (default: 1)",
+    )
     args = parser.parse_args()
 
     config_path = Path(args.config)
@@ -663,21 +739,33 @@ def main():
     if args.mode in ("incremental", "buffered"):
         print(f"  Turn size:   {args.turn_size}")
     print(f"  Verify pass: {'yes' if args.verify else 'no'}")
+    _targeted_categories = [
+        c for c, flag in [("lessons", args.lessons), ("decisions", args.decisions),
+                          ("questions", args.questions), ("constraints", args.constraints)]
+        if flag
+    ]
+    if _targeted_categories:
+        print(f"  Targeted:    {', '.join(_targeted_categories)}")
+    if args.stack_runs > 1:
+        print(f"  Stack runs:  {args.stack_runs}")
     print(f"{'='*60}\n")
 
     # Phase 1: Extraction (calls LLM)
     print("── Phase 1: Extraction (LLM calls) ──")
     t0 = time.time()
-    if args.mode == "incremental":
-        extraction_results = run_extraction_incremental(
-            config, project_name, transcripts, turn_size=args.turn_size
-        )
-    elif args.mode == "buffered":
-        extraction_results = run_extraction_buffered(
-            config, project_name, transcripts, turn_size=args.turn_size
-        )
-    else:
-        extraction_results = run_extraction(config, project_name, transcripts, verify=args.verify)
+    for run_i in range(args.stack_runs):
+        if args.stack_runs > 1:
+            print(f"\n  [Stack run {run_i + 1}/{args.stack_runs}]")
+        if args.mode == "incremental":
+            extraction_results = run_extraction_incremental(
+                config, project_name, transcripts, turn_size=args.turn_size
+            )
+        elif args.mode == "buffered":
+            extraction_results = run_extraction_buffered(
+                config, project_name, transcripts, turn_size=args.turn_size
+            )
+        else:
+            extraction_results = run_extraction(config, project_name, transcripts, verify=args.verify, targeted=_targeted_categories)
     extraction_time = time.time() - t0
     print(f"\nExtraction done in {extraction_time:.1f}s\n")
 
@@ -698,6 +786,7 @@ def main():
         "timestamp": timestamp,
         "mode": args.mode,
         "verify": args.verify,
+        "stack_runs": args.stack_runs,
         "extraction": extraction_results,
         "query": query_results,
         "timing": {

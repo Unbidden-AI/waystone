@@ -1,0 +1,7 @@
+llm:
+  base_url: "https://api.openai.com/v1"
+  model: "gpt-4o-mini"
+  temperature: 0.1
+  max_tokens: 16384
+  api_key_env: "OPENAI_API_KEY"
+  timeout: 180.0

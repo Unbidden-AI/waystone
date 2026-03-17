@@ -10,9 +10,12 @@ import uuid
 import httpx
 
 from .prompts import (
+    EXTRACTION_JSON_SCHEMA,
+    TARGETED_PASS_PROMPTS,
     build_extraction_prompt,
     build_incremental_prompt,
     build_reconcile_prompt,
+    build_targeted_prompt,
     build_verification_prompt,
 )
 
@@ -118,44 +121,56 @@ async def _call_llm(prompt: str, config: dict) -> str:
     if "reasoning_effort" in llm_cfg:
         request_body["reasoning_effort"] = llm_cfg["reasoning_effort"]
 
+    # Structured outputs: enforce the extraction JSON schema at the API level.
+    # Supported by OpenAI (gpt-4o, gpt-4o-mini) and compatible APIs.
+    # Prevents hallucinated keys, wrong types, and invalid enum values.
+    if llm_cfg.get("structured_outputs"):
+        request_body["response_format"] = {
+            "type": "json_schema",
+            "json_schema": EXTRACTION_JSON_SCHEMA,
+        }
+
     _RETRYABLE_STATUS = {429, 500, 502, 503, 504}
     _MAX_RETRIES = 4
 
-    log.debug("LLM request: model=%s max_tokens=%s", llm_cfg["model"], request_body["max_tokens"])
+    use_streaming = llm_cfg.get("stream", False)
+    if use_streaming:
+        request_body["stream"] = True
 
-    response = None
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        for attempt in range(_MAX_RETRIES):
-            try:
-                response = await client.post(
-                    f"{llm_cfg['base_url']}/chat/completions",
-                    headers=headers,
-                    json=request_body,
-                )
-            except (httpx.ReadTimeout, httpx.ConnectTimeout) as exc:
-                if attempt < _MAX_RETRIES - 1:
-                    wait = 2 ** attempt  # 1s, 2s, 4s, 8s
-                    log.warning("LLM timeout (attempt %d/%d), retrying in %ds: %s", attempt + 1, _MAX_RETRIES, wait, exc)
-                    await asyncio.sleep(wait)
-                    continue
-                raise
+    log.debug("LLM request: model=%s max_tokens=%s stream=%s", llm_cfg["model"], request_body["max_tokens"], use_streaming)
 
-            if response.status_code not in _RETRYABLE_STATUS:
-                break
+    url = f"{llm_cfg['base_url']}/chat/completions"
+
+    for attempt in range(_MAX_RETRIES):
+        try:
+            if use_streaming:
+                content, finish_reason = await _llm_stream(url, headers, request_body, timeout)
+            else:
+                async with httpx.AsyncClient(timeout=timeout) as client:
+                    response = await client.post(url, headers=headers, json=request_body)
+                    if response.status_code in _RETRYABLE_STATUS and attempt < _MAX_RETRIES - 1:
+                        wait = 2 ** attempt
+                        retry_after = response.headers.get("Retry-After")
+                        if retry_after and retry_after.isdigit():
+                            wait = min(int(retry_after), 60)
+                        log.warning("LLM returned %s (attempt %d/%d), retrying in %ds", response.status_code, attempt + 1, _MAX_RETRIES, wait)
+                        await asyncio.sleep(wait)
+                        continue
+                    response.raise_for_status()
+                    data = response.json()
+                    choice = data["choices"][0]
+                    finish_reason = choice.get("finish_reason")
+                    content = choice["message"]["content"]
+        except (httpx.ReadTimeout, httpx.ConnectTimeout) as exc:
             if attempt < _MAX_RETRIES - 1:
                 wait = 2 ** attempt  # 1s, 2s, 4s, 8s
-                # Respect Retry-After header if present
-                retry_after = response.headers.get("Retry-After")
-                if retry_after and retry_after.isdigit():
-                    wait = min(int(retry_after), 60)
-                log.warning("LLM returned %s (attempt %d/%d), retrying in %ds", response.status_code, attempt + 1, _MAX_RETRIES, wait)
+                log.warning("LLM timeout (attempt %d/%d), retrying in %ds: %s", attempt + 1, _MAX_RETRIES, wait, exc)
                 await asyncio.sleep(wait)
-        response.raise_for_status()
+                continue
+            raise
+        break
 
-    data = response.json()
-    choice = data["choices"][0]
-    finish_reason = choice.get("finish_reason")
-    log.debug("LLM response: finish_reason=%s", finish_reason)
+    log.debug("LLM response: finish_reason=%s len=%d", finish_reason, len(content) if content else 0)
     if finish_reason == "length":
         max_tok = llm_cfg.get("max_tokens", 4096)
         raise ValueError(
@@ -165,7 +180,38 @@ async def _call_llm(prompt: str, config: dict) -> str:
             f"(2) use --chunk-size to split the input, or "
             f"(3) use 'ctx extract-replay' for turn-by-turn extraction."
         )
-    return choice["message"]["content"]
+    return content
+
+
+async def _llm_stream(url: str, headers: dict, request_body: dict, timeout: float) -> tuple[str, str | None]:
+    """Stream a chat completion response, returning (content, finish_reason)."""
+    content_parts: list[str] = []
+    finish_reason: str | None = None
+    # Use a long read timeout but short connect timeout for streaming
+    stream_timeout = httpx.Timeout(connect=30.0, read=timeout, write=30.0, pool=30.0)
+    async with httpx.AsyncClient(timeout=stream_timeout) as client:
+        async with client.stream("POST", url, headers=headers, json=request_body) as response:
+            response.raise_for_status()
+            async for line in response.aiter_lines():
+                if not line.startswith("data: "):
+                    continue
+                data = line[6:]
+                if data == "[DONE]":
+                    break
+                try:
+                    chunk = json.loads(data)
+                except json.JSONDecodeError:
+                    continue
+                choices = chunk.get("choices", [])
+                if not choices:
+                    # Some streaming APIs emit chunks without choices (e.g., Nemotron)
+                    continue
+                choice = choices[0]
+                delta = choice.get("delta", {})
+                content_parts.append(delta.get("content") or "")
+                if choice.get("finish_reason"):
+                    finish_reason = choice["finish_reason"]
+    return "".join(content_parts), finish_reason
 
 
 async def extract(transcript_text: str, config: dict) -> dict:
@@ -186,17 +232,56 @@ async def extract(transcript_text: str, config: dict) -> dict:
     return result
 
 
-async def verify_extraction(transcript_text: str, extracted_nodes: list[dict], config: dict) -> dict:
+async def verify_extraction(
+    transcript_text: str,
+    extracted_nodes: list[dict],
+    config: dict,
+    candidate_sentences: list[str] | None = None,
+) -> dict:
     """Run a second verification pass to find facts missed by the first extraction.
 
     Focuses specifically on: secondary/addendum details, buried numeric values,
     transition statements, and rationale with time estimates.
 
+    candidate_sentences: optional list of specific sentences (from Tier 1 heuristic
+    extraction) to check coverage for before the generic hunt categories.
+
     Returns:
         dict with "nodes" (list[dict]) and "edges" (list[dict]) for NEW nodes only.
         Use assign_ids_incremental to resolve IDs before merging.
     """
-    prompt = build_verification_prompt(transcript_text, extracted_nodes)
+    prompt = build_verification_prompt(transcript_text, extracted_nodes, candidate_sentences)
+    content = await _call_llm(prompt, config)
+    extraction = parse_llm_response(content)
+    existing_ids = {n["id"] for n in extracted_nodes}
+    return assign_ids_incremental(extraction, existing_ids)
+
+
+async def extract_targeted(
+    transcript_text: str,
+    category: str,
+    extracted_nodes: list[dict],
+    config: dict,
+) -> dict:
+    """Run a targeted extraction pass focused on a specific category.
+
+    Categories: 'lessons', 'decisions', 'questions', 'constraints'
+
+    Each category uses a focused ~150-token prompt that hunts for one type of
+    information only. This avoids the recall regression caused by adding new
+    categories to the main extraction prompt (where the model wastes attention
+    hunting for content that may not exist in the transcript).
+
+    Returns:
+        dict with "nodes" (list[dict]) and "edges" (list[dict]) for NEW nodes only.
+        Use assign_ids_incremental to resolve IDs before merging.
+    """
+    if category not in TARGETED_PASS_PROMPTS:
+        raise ValueError(
+            f"Unknown targeted pass category '{category}'. "
+            f"Valid: {sorted(TARGETED_PASS_PROMPTS)}"
+        )
+    prompt = build_targeted_prompt(category, transcript_text, extracted_nodes)
     content = await _call_llm(prompt, config)
     extraction = parse_llm_response(content)
     existing_ids = {n["id"] for n in extracted_nodes}
@@ -305,8 +390,26 @@ def _extract_balanced_object(text: str, start: int) -> str | None:
     return None
 
 
-VALID_TYPES = {"decision", "constraint", "implementation", "question", "resolved", "preference"}
+VALID_TYPES = {"decision", "constraint", "implementation", "question", "resolved", "preference", "lesson_learned"}
 VALID_RELATIONS = {"depends_on", "flows_to", "relates_to", "supersedes"}
+
+# Some models return edges with "source"/"target" or "from_id"/"to_id" instead of "from"/"to"
+_EDGE_FROM_KEYS = ("from", "source", "from_id", "from_node")
+_EDGE_TO_KEYS = ("to", "target", "to_id", "to_node")
+
+
+def _edge_from(edge: dict) -> str | None:
+    for k in _EDGE_FROM_KEYS:
+        if k in edge:
+            return edge[k]
+    return None
+
+
+def _edge_to(edge: dict) -> str | None:
+    for k in _EDGE_TO_KEYS:
+        if k in edge:
+            return edge[k]
+    return None
 
 
 def _validate_extraction(result: dict) -> dict:
@@ -380,8 +483,13 @@ def assign_ids(extraction: dict) -> dict:
 
     edges = []
     for edge in extraction.get("edges", []):
-        from_id = id_map.get(edge["from"], edge["from"])
-        to_id = id_map.get(edge["to"], edge["to"])
+        raw_from = _edge_from(edge)
+        raw_to = _edge_to(edge)
+        if raw_from is None or raw_to is None:
+            log.warning("Skipping edge with missing from/to keys: %s", edge)
+            continue
+        from_id = id_map.get(raw_from, raw_from)
+        to_id = id_map.get(raw_to, raw_to)
         edges.append({
             "from_id": from_id,
             "to_id": to_id,
@@ -443,9 +551,14 @@ def assign_ids_incremental(extraction: dict, existing_node_ids: set) -> dict:
 
     edges = []
     for edge in extraction.get("edges", []):
+        raw_from = _edge_from(edge)
+        raw_to = _edge_to(edge)
+        if raw_from is None or raw_to is None:
+            log.warning("Skipping edge with missing from/to keys: %s", edge)
+            continue
         edges.append({
-            "from_id": resolve(edge["from"]),
-            "to_id": resolve(edge["to"]),
+            "from_id": resolve(raw_from),
+            "to_id": resolve(raw_to),
             "relation": edge["relation"],
         })
 

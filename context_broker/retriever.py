@@ -91,6 +91,20 @@ def retrieve_with_stats(
 
     entry_nodes = store.get_nodes_by_tags(keywords)
     log.debug("Tag search: %d entry nodes matched", len(entry_nodes))
+
+    # Augment with fact-text matches — catches nodes with sparse tags where keywords
+    # appear in the fact itself but weren't extracted as tags by the LLM.
+    fact_nodes = store.get_nodes_by_fact_text(keywords)
+    if fact_nodes:
+        existing_ids = {n["id"] for n in entry_nodes}
+        added = 0
+        for node in fact_nodes:
+            if node["id"] not in existing_ids:
+                entry_nodes.append(node)
+                existing_ids.add(node["id"])
+                added += 1
+        log.debug("Fact-text search added %d new entry nodes (total: %d)", added, len(entry_nodes))
+
     if not entry_nodes:
         return RetrievalResult(markdown="No relevant context found.", nodes_before_strategies=0, nodes_after_strategies=0)
 
@@ -326,13 +340,36 @@ def bfs_collect(store: GraphStore, entry_nodes: list[dict], hops: int) -> list[d
 
 
 def extract_keywords(text: str) -> list[str]:
-    """Extract keywords from text by tokenizing and filtering stop words."""
-    # Normalize hyphens to spaces so "hot-path" → "hot", "path" (matching space-separated tags)
-    text = text.lower().replace("-", " ")
-    words = text.split()
-    # Strip punctuation
-    words = [w.strip(".,;:!?\"'()[]{}") for w in words]
-    return [w for w in words if w and w not in STOP_WORDS and len(w) > 1]
+    """Extract keywords from text by tokenizing and filtering stop words.
+
+    Numeric compound tokens like "15-minute" or "1000/min" are preserved as-is
+    in addition to their split parts, so they can match auto-tagged node entries.
+    Non-numeric hyphenated tokens ("hot-path") are still split into parts.
+    """
+    result: list[str] = []
+    seen: set[str] = set()
+
+    def _emit(w: str) -> None:
+        w = w.strip(".,;:!?\"'()[]{}")
+        if w and w not in STOP_WORDS and len(w) > 1 and w not in seen:
+            seen.add(w)
+            result.append(w)
+
+    for raw in text.lower().split():
+        word = raw.strip(".,;:!?\"'()[]{}")
+        if not word:
+            continue
+        if "-" in word and any(c.isdigit() for c in word):
+            # Numeric compound: keep whole token AND each split part
+            _emit(word)
+            for part in word.split("-"):
+                _emit(part)
+        else:
+            # Non-numeric hyphens: split as before ("hot-path" → "hot", "path")
+            for part in word.replace("-", " ").split():
+                _emit(part)
+
+    return result
 
 
 def estimate_tokens(text: str) -> int:
@@ -412,8 +449,8 @@ def assemble_markdown(nodes: list[dict], task: str, strategies_applied: list[str
     for node in nodes:
         by_type.setdefault(node["type"], []).append(node)
 
-    # Order: decisions first, then constraints, implementations, others
-    type_order = ["decision", "constraint", "implementation", "resolved", "preference", "question"]
+    # Order: decisions first, then constraints, implementations, resolved, lessons, preferences, others
+    type_order = ["decision", "constraint", "implementation", "resolved", "lesson_learned", "preference", "question"]
     sorted_types = sorted(by_type.keys(), key=lambda t: type_order.index(t) if t in type_order else 99)
 
     for node_type in sorted_types:

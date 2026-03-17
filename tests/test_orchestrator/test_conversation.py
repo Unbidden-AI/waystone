@@ -201,31 +201,75 @@ async def test_chat_with_no_context(conversation):
 
 @pytest.mark.asyncio
 async def test_chat_stream_yields_chunks(conversation):
-    """Test chat_stream() yields reply in chunks."""
-    with patch("orchestrator.conversation.call_llm") as mock_llm:
-        mock_llm.return_value = ("A" * 200, None, "stop")  # 200 chars
+    """chat_stream() with tools: LLM returns text on round 1, yielded inline as chunks."""
+    # conversation fixture has tools enabled — goes through call_llm first
+    with patch("orchestrator.conversation.call_llm") as mock_llm, \
+         patch("orchestrator.conversation.stream_llm") as mock_stream:
+        mock_llm.return_value = ("Hello world", None, "stop")
 
         chunks = []
         async for chunk in conversation.chat_stream("Test"):
             chunks.append(chunk)
 
-        # 200 chars / 80 char chunks = 3 chunks
-        assert len(chunks) >= 2
-        full_reply = "".join(chunks)
-        assert full_reply == "A" * 200
+        assert "".join(chunks) == "Hello world"
+        mock_stream.assert_not_called()  # no double call when text returned directly
 
 
 @pytest.mark.asyncio
-async def test_chat_stream_calls_chat(conversation):
-    """Test chat_stream() calls chat() internally."""
-    with patch.object(conversation, "chat", new_callable=AsyncMock) as mock_chat:
-        mock_chat.return_value = "Test reply"
+async def test_chat_stream_no_tools_uses_stream_llm():
+    """chat_stream() without tools calls stream_llm directly (not call_llm) for best TTFT."""
+    cfg = {
+        "orchestrator": {
+            "context": {},
+            "system_prompt": {},
+            "llm": {"model": "gpt-4"},
+            "tools": {"enabled": []},  # no tools
+            "retry": {},
+        }
+    }
+    called = []
+
+    async def fake_stream_llm(messages, system, cfg_arg):
+        called.append(True)
+        yield "streamed reply"
+
+    with patch("orchestrator.conversation.ContextManager") as mock_ctx_cls, \
+         patch("orchestrator.conversation.SystemPromptBuilder") as mock_spb_cls, \
+         patch("orchestrator.conversation.stream_llm", new=fake_stream_llm), \
+         patch("orchestrator.conversation.call_llm") as mock_llm:
+
+        mock_ctx = MagicMock()
+        mock_ctx.retrieve_context = MagicMock(return_value="")
+        mock_ctx.add_message = MagicMock()
+        mock_ctx.compact_if_needed = AsyncMock(return_value=None)
+        mock_ctx.get_history = MagicMock(return_value=[])
+        mock_ctx_cls.return_value = mock_ctx
+        mock_spb_cls.return_value.build.return_value = "system"
+
+        conv = Conversation(cfg=cfg, store=MagicMock(), project_name="test")
+        chunks = []
+        async for chunk in conv.chat_stream("User input"):
+            chunks.append(chunk)
+
+        assert called, "stream_llm should have been called"
+        mock_llm.assert_not_called()
+        assert "".join(chunks) == "streamed reply"
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_with_tools_no_tool_calls_yields_inline(conversation):
+    """chat_stream() with tools: if LLM returns text on round 1, yield directly (no double call)."""
+    with patch("orchestrator.conversation.call_llm") as mock_llm, \
+         patch("orchestrator.conversation.stream_llm") as mock_stream:
+        mock_llm.return_value = ("direct reply", None, "stop")
 
         chunks = []
         async for chunk in conversation.chat_stream("User input"):
             chunks.append(chunk)
 
-        mock_chat.assert_called_once_with("User input")
+        mock_llm.assert_called_once()
+        mock_stream.assert_not_called()
+        assert "".join(chunks) == "direct reply"
 
 
 # ===========================================================================
@@ -234,9 +278,8 @@ async def test_chat_stream_calls_chat(conversation):
 
 
 def test_reset_clears_history():
-    """Test reset() clears history and total tokens."""
-    # Create conversation with mocks
-    with patch("orchestrator.conversation.ContextManager"), \
+    """Test reset() delegates to ContextManager.reset()."""
+    with patch("orchestrator.conversation.ContextManager") as mock_ctx_cls, \
          patch("orchestrator.conversation.SystemPromptBuilder"):
         cfg = {
             "orchestrator": {
@@ -247,19 +290,15 @@ def test_reset_clears_history():
                 "retry": {},
             }
         }
+        mock_ctx = MagicMock()
+        mock_ctx_cls.return_value = mock_ctx
+
         store = MagicMock()
         conversation = Conversation(cfg, store, "test")
 
-        # Set up some state
-        conversation._context_mgr._history = [Message(role="user", content="msg1")]
-        conversation._context_mgr._total_tokens = 100
-
-        # Call reset
         conversation.reset()
 
-        # Verify clear was called
-        assert len(conversation._context_mgr._history) == 0
-        assert conversation._context_mgr._total_tokens == 0
+        mock_ctx.reset.assert_called_once()
 
 
 # ===========================================================================

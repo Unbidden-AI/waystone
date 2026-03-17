@@ -272,6 +272,121 @@ For buffered real-time extraction, the cost model is different: small LLM calls 
 
 ---
 
+## Targeted Extraction Passes
+
+### Motivation
+
+Adding new fact categories to the main extraction prompt causes recall regression. When the `lesson_learned` Rule 14 was added to the base EXTRACTION_PROMPT, Gemini 2.5 Flash recall dropped from 92% → 82% (no verify) despite the transcripts containing no failed approaches for the model to find. Root cause: the model wastes attention scanning for content that doesn't exist in the transcript. The verification pass didn't recover this loss.
+
+The solution is **opt-in targeted passes**: small, focused prompts (~150-200 tokens of instructions) that run after the main extraction and hunt for exactly one category of information. They receive the existing nodes as context to avoid re-extraction, and their output is merged via the same `assign_ids_incremental` + dedup pipeline as the verify pass.
+
+### Architecture
+
+A targeted pass is structurally identical to `--verify`:
+1. Build a category-specific prompt with existing nodes + transcript
+2. One LLM call
+3. Parse → `assign_ids_incremental` → `merge_extraction` (with dedup)
+
+Each pass is designed to be independently useful — you can run any subset. Deduplication (Option B) ensures that if a targeted pass re-discovers a fact already in the graph, it merges rather than duplicates.
+
+**Key design choice:** One prompt per category, not one combined "hunt for X, Y, Z" prompt. Combining categories in one pass reintroduces the same problem as adding categories to the main prompt — a single prompt with 5 categories still wastes model attention on any of the 5 that don't apply. Separate passes also allow selective use: `--lessons` for retrospectives, `--questions` for planning reviews, `--constraints` for architecture audits.
+
+### Implemented Passes
+
+| Flag | Category | Hunts For | Best Used When |
+|------|----------|-----------|----------------|
+| `--lessons` | `lesson_learned` | Failed approaches, rejected alternatives, anti-patterns, hard-won insights | Post-mortems, retrospectives, any transcript discussing what didn't work |
+| `--decisions` | `decision` | Explicit choices between alternatives + rationale | Design discussions where the main pass may have labeled decisions as "implementation" |
+| `--questions` | `question` | Open questions, TBDs, deferred decisions, unresolved items | Planning phases, mid-project reviews |
+| `--constraints` | `constraint` | Hard requirements, compliance, SLAs, technical non-negotiables | Architecture reviews, compliance audits |
+
+### Usage
+
+```bash
+# Single targeted pass
+ctx extract myproject transcript.md --lessons
+
+# Multiple targeted passes
+ctx extract myproject transcript.md --verify --lessons --decisions
+
+# Benchmark with targeted pass
+python benchmarks/run_benchmark.py --config benchmarks/model_configs/gemini_25_flash.yaml --verify --lessons
+```
+
+### Expected Impact
+
+**`--lessons` on design transcripts:** Likely low yield (design transcripts explicitly discuss rejected alternatives, but the main extraction prompt's Rule 6 already covers this). Higher yield on post-mortem or incident review transcripts where the pattern is "we tried X and it failed."
+
+**`--decisions` on design transcripts:** Moderate yield. The main prompt extracts decisions, but sometimes labels them as `implementation`. A decisions-focused pass may find additional rationale nodes and re-classify borderline cases.
+
+**`--questions` on planning transcripts:** High yield when transcripts contain "we need to figure out X" statements. The main prompt captures resolved facts better than open questions.
+
+**`--constraints` on architecture transcripts:** Moderate yield. The main prompt covers constraints, but compliance and SLA requirements buried in passing mentions are often under-extracted.
+
+### Benchmark Results (Gemini 2.5 Flash, 2026-03-17)
+
+Targeted passes were benchmarked against `--verify` baseline on all 23 eval questions. Results reflect the current extraction prompt with Rule 13 improvements and the updated `--decisions` prompt (embedded rationale). Earlier intermediate results (pre-Rule-13) showed verify-only at 80%; those results are superseded by the current-state numbers below.
+
+| Config | Baseline recall | Default recall | ≥80% Qs | Nodes | Time |
+|---|---|---|---|---|---|
+| `--verify` only | **94%** | 93% | 20/23 | ~295 | ~396s |
+| `--verify --decisions` (embedded rationale) | **94%** | 88% | 19/23 | ~309 | ~409s |
+| `--verify --lessons` | 88% | 84% | 19/23 | 313 | ~405s |
+| `--verify --decisions --lessons` | 81% | 79% | 14/23 | 300 | ~425s |
+
+**Key observations:**
+
+- **`--verify --decisions` (embedded rationale) maintains 94% baseline recall** while solving previously-impossible questions: `q_auth_04` improved from 0% → 100%, `q_pipe_04` from 25% → 100%. These were persistent failures across all prior configurations. The tradeoff: `q_pipe_06` regressed from ~80% → 60%, netting 19/23 vs 20/23 at ≥80%.
+- **Decision nodes are token-dense** (750 avg tokens vs ~500 for verify-only). This is intentional: each node now embeds the chosen approach, the rejected alternative, and the rationale in a single self-contained fact. The density means top_k=25 retrieves the right facts, but filtering strategies (confidence/recency) aggressively prune them.
+- **Use `baseline` preset with `--decisions`**: Default, filtered, and tight presets drop to 88%/88%/86% respectively. The confidence threshold and recency decay strategies prune the decision nodes (typically lower-confidence than main-pass facts), causing significant regression. Baseline is the correct strategy when `--decisions` is active.
+- **`--lessons` regresses under default preset** (+8pp baseline → +2pp default). Same root cause as `--decisions`: lessons nodes survive baseline retrieval but get pruned under filtering.
+- **Combining decisions + lessons causes regression**: 81% baseline (14/23) is worse than either pass alone and worse than verify-only. Root cause: lesson_learned nodes are tagged with the same keywords as the decisions they describe. BFS retrieves both, and top_k=25 can't distinguish — lesson nodes displace the decision/implementation nodes eval questions actually require. The 696 avg tokens at baseline (vs 577–625 for single passes) confirms more nodes are retrieved but wrong ones.
+
+### Updated `--decisions` Prompt: Embedded Rationale
+
+The original `--decisions` prompt emitted separate rationale nodes (`lesson_learned` type) for rejected alternatives. This was updated (2026-03-17) to embed rejected alternatives directly in the decision fact text: `"Chose Redis over Memcached because it supports clustering; Memcached ruled out due to no replication support"`.
+
+**Effect:** One node instead of two, tags cover both sides of the tradeoff, no competing leaf nodes in retrieval. The per-question improvements (q_auth_04: 0%→100%, q_pipe_04: 25%→100%) confirm that the embedded format is findable via keyword lookup for either the chosen or rejected technology.
+
+**Why the old separate-node approach worked**: The old 89% baseline (vs 80% verify-only in intermediate runs) reflected a weaker baseline, not a stronger decisions pass. In the current-state comparison (94% verify-only baseline), `--decisions` maintains 94% — neither improving nor degrading overall baseline recall, but changing which specific questions are answered.
+
+### Persistent Failing Questions
+
+With `--verify --decisions` at baseline, the chronic zero-recall failures are now resolved:
+- `q_auth_04`: 0% → **100%** (embedded decision rationale captured the auth flow detail)
+- `q_pipe_04`: 25% → **100%** (pipeline threshold captured as decision context)
+
+Remaining misses under baseline:
+- `q_api_01` (75%): API versioning details — still below 80%, vocabulary gap
+- `q_pipe_01` (75%): Data pipeline entry constraints — token budget pressure
+- `q_pipe_06` (60%): **New regression** introduced by `--decisions` pass; was ~80% with verify-only
+- `q_auth_07` (67%): Auth edge case under filtering presets
+
+`q_pipe_01` and `q_api_01` are retrieval failures (tag vocabulary gap, token budget), not extraction failures. `q_pipe_06`'s regression with `--decisions` warrants investigation: the decision nodes added for the pipeline transcript may be tagging the same keywords as q_pipe_06's ground-truth nodes, displacing them.
+
+### Pass Interaction Effects — Don't Stack Indiscriminately
+
+The combined `--decisions --lessons` run reveals a retrieval-pollution pattern. Lesson nodes are tagged with the same keywords as the decisions they warn against. In a graph where both exist, BFS traversal finds both equally, and top_k sorting doesn't prefer one over the other. Adding lessons to a graph that already has strong decision coverage actively displaces useful nodes.
+
+**Practical rule:** Targeted passes are a "pick one" tool, not a stack-everything tool. `--decisions` is the general-purpose recall booster. `--lessons` should only be enabled for transcript types where rejected alternatives are the primary concern (post-mortems, incident reviews) — not design discussions where they pollute the retrieval surface.
+
+Passes that are likely safe to combine (low lexical overlap between categories):
+- `--decisions` + `--numerics` (numbers and decisions don't share tags)
+- `--questions` + `--constraints` (open questions and hard requirements are semantically distinct)
+- `--owners` + any category (ownership nodes have unique vocabulary)
+
+Passes that are likely unsafe to combine:
+- `--decisions` + `--lessons` (lessons are about decisions, share all the same keywords)
+- `--constraints` + `--lessons` (failed constraints and accepted constraints share tag vocabulary)
+
+### Why Not Add These to the Main Prompt
+
+The lesson_learned regression is the empirical proof: adding a rule to the main prompt — even a well-written one — hurts the model's extraction of existing categories on transcripts where the new category doesn't apply. The model has a fixed attention budget. Telling it to look for 15 things simultaneously is worse than telling it to look for 13 things well, then running 2 additional focused passes.
+
+The targeted pass architecture is more expensive (N extra LLM calls) but better for quality. On Gemini 2.5 Flash at ~10s/call, even running all 4 targeted passes adds ~40s to a 130s extraction — a 30% overhead that is worth it for critical transcripts. For casual use, skip the targeted passes.
+
+---
+
 ## Improvement Opportunities
 
 These are known improvement vectors identified during development, not yet implemented.
@@ -291,6 +406,66 @@ A lightweight post-extraction step that checks for common failure patterns (miss
 ### Re-extraction for important transcripts
 
 For transcripts that produced low node counts or failed validation, a re-extraction pass with a higher `max_tokens` budget or a different model could recover missed facts. The graph's `merge_extraction` operation is idempotent for supersedes — re-extracting a transcript that was already partially extracted won't corrupt the graph, though it will add duplicate nodes for facts that were extracted the first time.
+
+### Tag enrichment pass (LLM-based)
+
+After primary extraction (and optional verify), a dedicated LLM call per transcript expands tags on existing nodes — adding synonyms, alternative terminology, numeric values from fact text, and related concepts a developer might query. Unlike the verify pass, this makes no new facts; it only broadens the retrieval surface. Risk-free (tags don't affect graph structure), cheap (one call per transcript), and directly addresses the root cause of persistent low-recall questions like q_pipe_03 (Delta Lake) and q_pipe_07 (Kafka replication) where the vocabulary mismatch between query terms and stored tags is the failure mode.
+
+### Dictionary-based synonym expansion (no LLM)
+
+A hardcoded mapping from common terms to their synonyms, applied as a post-extraction pass or at query time. Examples: "rate limit" → also tag "throttling", "quota", "rps", "rpm"; "deduplication" → also "idempotency", "exactly-once", "replay"; numeric values in fact text → auto-tag them. Instant, zero cost, no dependencies — but limited to domains covered by the dictionary. Best as a complement to the LLM-based tag enrichment pass, not a replacement.
+
+### Two-model pipeline
+
+Use a fast/cheap local model (e.g., Qwen3.5-9B at 72% recall, ~17 min) for the primary extraction pass, then route only the verify pass through a stronger model (e.g., Gemini 2.5 Flash). This separates the bulk extraction work (where 9B is adequate) from the nuanced "what did I miss?" task (where model capability matters most). Expected to be more cost-efficient than running Gemini on full extraction while getting close to Gemini-only verify quality. Not yet benchmarked.
+
+### Deduplication — Option B: Text-hash dedup (implemented)
+
+**Status: implemented in `store.py`**
+
+Re-extracting the same transcript (or running a verify pass) produces duplicate nodes with fresh UUIDs because `merge_extraction` was not dedup-aware. The same fact extracted twice creates two nodes, inflating the graph and polluting BFS traversal with near-identical candidates that dilute the real signal.
+
+**Approach:** Normalize each fact (lowercase, strip punctuation, collapse whitespace), SHA-256 hash the result, store the first 16 hex chars as `fact_hash` on the `nodes` table. On insert, if a node with the same `fact_hash` already exists: merge tags (union), take max confidence, return the canonical node ID. Edges in the same extraction batch are rewritten through an `id_map` so they point at canonical nodes.
+
+**Properties:**
+- Zero LLM cost — pure text normalization + hash compare
+- Deterministic — same fact always maps to same hash
+- Graceful — exact or near-exact duplicate facts are silently merged; genuinely different facts (different wording, different detail) get different hashes and are kept as separate nodes
+- Retroactive — `init_db` backfills `fact_hash` for existing rows on first open
+- Limitation: does not catch paraphrased duplicates (same meaning, different words) — that requires embedding similarity (Option D)
+
+### Deduplication — Option C: LLM reconciliation pass (planned)
+
+**Status: not implemented**
+
+Extend the `ctx reconcile` command (which already detects supersedes relationships) with a dedup phase. The LLM is shown clusters of nodes with similar fact text (pre-filtered by token overlap or BM25 similarity) and asked to identify which are duplicates vs. genuinely distinct facts. For duplicates, it selects the canonical fact and flags the rest for merge or deletion.
+
+**When to use:** Periodic maintenance pass on large graphs that have accumulated duplicates from many extraction runs. More expensive than Option B but handles paraphrased duplicates that hash differently.
+
+**Implementation sketch:**
+1. Cluster nodes by BM25 or TF-IDF similarity (top-N most similar pairs)
+2. Batch clusters into LLM calls: "Are these the same fact? If yes, which wording is canonical?"
+3. For each confirmed duplicate: update edges to point at canonical, delete the duplicate node
+
+**Cost estimate:** ~1 LLM call per 20-30 node pairs; for a 300-node graph, ~10-15 calls.
+
+### Deduplication — Option D: Embedding similarity (planned)
+
+**Status: not implemented**
+
+Compute vector embeddings for each node's fact text (e.g., using `all-MiniLM-L6-v2` via `sentence-transformers`). Nodes with cosine similarity > 0.92 are candidates for deduplication. Merge logic same as Option B (union tags, max confidence, rewrite edges).
+
+**When to use:** When Option B misses paraphrased duplicates and Option C's LLM cost is too high. Requires a local embedding model (~80MB for MiniLM) but no API calls.
+
+**Properties:**
+- Catches semantic duplicates that hash differently (Option B's blind spot)
+- Can be run as a one-time cleanup pass or incrementally on each new extraction
+- Threshold tuning matters: 0.92 is a starting point; too low merges distinct facts, too high misses real duplicates
+- Dependency: `sentence-transformers` (optional install, not in base requirements)
+
+**Implementation sketch:**
+1. On each `merge_extraction`, embed new nodes and query ANN index for neighbors above threshold
+2. Alternatively, offline: embed all nodes, cluster by cosine > 0.92, merge clusters
 
 ---
 
@@ -454,7 +629,7 @@ Currently each project is an isolated SQLite database. Cross-project queries (e.
 **Plan:**
 
 *Tiered extraction quality:*
-- Document model tiers explicitly: Tier 1 (local 7B–14B models, free, ~40% recall), Tier 2 (Gemini Flash / GPT-4o Mini, cheap, ~55% recall), Tier 3 (Gemini Pro / GPT-4o / Claude Sonnet, quality, ~60%+ recall). Let users choose based on their cost tolerance.
+- Document model tiers explicitly: Tier 1 (local 7B–14B models, free, ~40–64% recall), Tier 2 (Gemini 2.5 Flash, cheap, ~92–94% recall), Tier 3 (Claude Sonnet / Gemini Pro, higher cost, untested ceiling). GPT-4o benchmarked at only ~50% — do not place in Tier 3. Let users choose based on their cost tolerance.
 - The extraction prompt already works with any OpenAI-compatible endpoint. Make model selection a one-line config change with clear recall implications documented.
 
 *Managed extraction service (cloud product):*
@@ -664,6 +839,114 @@ Gemini 2.5 Pro underperformed despite being the more capable model. Hypothesis: 
 
 ---
 
+### Multi-Model Benchmark Results (2026-03-13, with Rule 13 + verification pass improvements)
+
+All models run against the same 3 transcripts (~15k chars total, 23 eval questions). Gemini 2.5 Flash is the reference.
+
+| Model | Nodes extracted | Recall (baseline) | ≥80% questions | Extraction time | Notes |
+|-------|----------------|-------------------|----------------|-----------------|-------|
+| Gemini 2.5 Flash | ~297 | **92%** | **19/23** | ~195s | Reference; best overall (2026-03-13) |
+| Gemini 2.5 Flash + verify | ~295 | **94%** | **20/23** | ~396s | Best with verification pass (2026-03-13) |
+| Gemini 2.5 Flash + lesson_learned Rule 14 (no verify) | 276 | 82% | 15/23 | ~273s | Rule 14 in base prompt caused -10% recall, -21 fewer nodes; reverted (2026-03-17) |
+| Gemini 2.5 Flash + lesson_learned Rule 14 + verify | 304 | 80% | 14/23 | ~333s | verify didn't recover the Rule 14 regression; reverted (2026-03-17) |
+| Claude Sonnet 4.5 | — | — | — | — | Not yet benchmarked cleanly |
+| Qwen 3.5 35B | 166 | 64% | 8/23 | 816s | Local; slow but decent |
+| Nemotron 3 Super 120B | 121 | 71% | 12/23 | 355s | NVIDIA NIM; `enable_thinking: false`; see notes |
+| GPT-4o | 81 | 50% | 4/23 | ~97s | See notes below |
+| Mistral Small 3.2 24B | 66 (2/3 transcripts) | 40% | 5/23 | ~797s | Local MLX; 1 transcript fails JSON schema; see notes |
+| Qwen3-32B | 87 (2/3 transcripts) | 35% | 2/23 | ~1594s | Local LM Studio; `structured_outputs: false`; auth_system fails mid-JSON; see notes |
+| GPT OSS 20B (reasoning=low) | 60 | 62% | 7/23 | 108s | Local LM Studio; best setting — fast, clean JSON |
+| GPT OSS 20B (reasoning=medium) | 103 | 63% | 6/23 | 615s | 5.7x slower, +72% nodes, only +1% recall — not worth it |
+| GPT OSS 20B (temp=0.3, low) | 75 | 59% | 7/23 | 118s | Higher temp = more nodes but noisier — recall drops vs temp=0.1 |
+| GPT OSS 20B (temp=0.1, low, 2× stacked) | 154 | 65% | 10/23 | 229s | Best local result; 2× extraction time, +3% recall, +3 questions at ≥80% vs single run |
+| GPT OSS 20B (temp=0.1, low, 3× stacked) | ~218 | 54% | 7/23 | 373s | Worse than 1×! Near-duplicate node proliferation crowds out correct nodes in token budget |
+| Qwen3.5-9B (max_tokens=65536, thinking off, 1×) | 168 | 72% | 11/23 | 1055s | All 3 transcripts complete; fix was output token budget, not model quality |
+| Qwen3.5-9B (max_tokens=65536, thinking off, 2× stacked) | 286 | 60% | 6/23 | 1568s | Worse than 1×! Near-duplicate pollution same as GPT OSS 3× — 1× is optimal |
+| Qwen3.5-9B (max_tokens=65536, thinking off, 1× + verify) | 181 | 68% | 10/23 | 1005s | Worse than 1× without verify (72%)! Verify adds noise for 9B models — not recommended |
+| Qwen3.5-9B (max_tokens=16384, thinking on, 1×) | 93 | 52% | 6/23 | 2127s | 2/3 transcripts succeeded; auth_system truncated — results incomplete |
+| Qwen3.5-9B (max_tokens=16384, thinking on, 2× stacked) | 51 | 29% | 3/23 | 2214s | Only auth_system succeeded; stacking doesn't help truncation failures |
+| Liquid LFM2 24B (2B active) | 47 | 25% | 0/23 | 101s | Local LM Studio; all 3 transcripts extracted but only 47 nodes — severely under-extracts |
+| Gemini 3.1 Flash Lite | ~74 | ~42% | — | — | Not recommended |
+
+#### GPT-4o extraction findings
+
+GPT-4o is a poor extraction model for this task. It extracts only ~81 nodes from transcripts where Gemini 2.5 Flash extracts ~297 — a 3.5× gap. This is not a retrieval problem; it is a fundamental extraction conservatism issue.
+
+Attempts to address it:
+- **Density nudge in prompt (Rule 14, 2026-03-13):** Added bullet-list guidance targeting "8-15 nodes per 1k chars". Recall *dropped* from 50% → 41%. Reverted. Violates the prompt stability rules documented below.
+- **Verification pass (`--verify`, 2026-03-13):** Added 12 nodes, recall moved from 41% → 46%. Marginal improvement.
+- **Structured outputs / `response_format: json_schema` (2026-03-14):** Enforces the extraction schema at the API level. Extracted 99 nodes (vs 81 previously) but recall dropped to 48% and ≥80% questions fell from 4 → 2. More nodes, but not the right ones. Schema enforcement changes output formatting, not what GPT-4o decides to extract. Side effect: 2× faster (47s vs ~97s). Flag kept enabled in `gpt_4o.yaml` for the speed benefit.
+- None of these interventions moved GPT-4o within range of Gemini 2.5 Flash.
+
+**Recommendation:** Do not recommend GPT-4o as an extraction model. If users insist on OpenAI, `gpt-4o-mini` (untested) may be comparable quality at lower cost.
+
+Update the Tier 2 estimate for GPT-4o in the tiered model docs: actual recall is ~50%, not the predicted 60%+.
+
+#### Nemotron 3 Super 120B findings (2026-03-16)
+
+Model: `nvidia/nemotron-3-super-120b-a12b` via NVIDIA NIM API (`integrate.api.nvidia.com`). Config: `max_tokens: 131072`, `enable_thinking: false`, `stream: true`.
+
+**Issues encountered during benchmarking:**
+- Original config used `max_tokens: 32768`. Nemotron's reasoning tokens consumed the entire budget, leaving 0 tokens for JSON content → `finish_reason=length` → `ValueError: LLM response was truncated`. Fix: increased to `max_tokens: 131072` and set `enable_thinking: false`.
+- `enable_thinking: false` injects `/no_think` system suffix + `chat_template_kwargs: {enable_thinking: false}`. This is required — without it, the model spends its entire token budget on chain-of-thought reasoning before producing any output.
+
+**Extraction results:** 121 total nodes (26 api_design, 51 auth_system, 44 data_pipeline). All 3 transcripts extracted successfully. Extraction time: 355s total (~2 min/transcript), faster than expected once thinking was disabled.
+
+**Recall results:** baseline 71% (12/23 ≥80%), default/filtered/tight 70% (11/23 ≥80%). Notably weak on `q_pipe_03` (Delta Lake question: 0%) and `q_api_01` (25%). The low node count (121 vs ~297 for Gemini) is the primary driver of missed recall — Nemotron extracts conservatively.
+
+**Conclusion:** Nemotron 3 Super 120B is a reasonable mid-tier option (between Qwen 3.5 35B and Gemini 2.5 Flash) for users who need a large hosted model outside Google's ecosystem. It does not match Gemini 2.5 Flash quality. Not recommended as a default.
+
+#### Qwen3-32B findings (2026-03-16)
+
+Model: `qwen/qwen3-32b` via LM Studio (`http://127.0.0.1:1234/v1`). Config: `max_tokens: 16384`, `enable_thinking: false`, `structured_outputs: false`, `stream: true`.
+
+**Issues encountered during benchmarking:**
+- LM Studio's "Structured Output" model switch must be **OFF**. When enabled, LM Studio requires a `json_schema` in every request; without one it returns `{"error": "JSON schema is missing in json-mode request"}` immediately (0.2s response time, 0 nodes).
+- Our `structured_outputs: true` config flag does send a schema, but LM Studio's Qwen3 implementation rejected it anyway — root cause unclear (possibly schema format incompatibility). Fix: disable both the LM Studio switch and set `structured_outputs: false` in the config.
+- `auth_system` transcript (the largest) failed after 836s with a JSON parse error — the model likely hit `max_tokens: 16384` mid-output. Increasing this might recover the third transcript, but extraction quality issues suggest diminishing returns.
+
+**Extraction results:** 87 total nodes (40 api_design, 47 data_pipeline). `auth_system` failed. Extraction time: 1594s (~26.6 min) for 2 transcripts.
+
+**Recall results:** baseline 38% (2/23 ≥80%), default/filtered/tight 34-35% (1/23 ≥80%). Consistently 0% on auth_system questions (due to extraction failure). Even on the 2 successful transcripts, extraction quality is poor — the model misses secondary facts and numeric details.
+
+**Conclusion:** Not recommended. Weak extraction quality (35% recall even partially), very slow (~27 min for 2/3 transcripts), and brittle JSON compliance. Qwen 3.5 35B (64% recall) substantially outperforms the same generation's 32B dense model on this task.
+
+#### Qwen3.5-9B findings (2026-03-16)
+
+Model: `qwen/qwen3.5-9b` via LM Studio. Config: `max_tokens: 16384`, `structured_outputs: false`, `stream: true`.
+
+**Core problem: output token truncation.** The 9B model generates verbose JSON — more tokens per fact than larger models — and consistently hits the `max_tokens: 16384` ceiling before completing the output. All three transcripts failed in the first run. In subsequent runs, which transcripts succeed is largely random (the model's verbosity is nondeterministic).
+
+**Stacking experiment (1×, 2× stack runs, 2026-03-16):**
+
+| Stack | Transcripts OK | Nodes | Baseline Recall | ≥80% | Extraction Time |
+|-------|---------------|-------|----------------|------|-----------------|
+| 1× (run 1) | 0/3 | 0 | 0% | 0/23 | 1143s |
+| 1× (run 2) | 2/3 (api+pipe) | 93 | 52% | 6/23 | 2127s |
+| 2× stacked | 1/3 (auth only) | 51 | 29% | 3/23 | 2214s |
+
+**Why stacking doesn't help here:** The truncation failures are non-deterministic. In run 2, `auth_system` truncated but the other two succeeded (93 nodes). In the 2× run, `auth_system` succeeded but the other two truncated (51 nodes). Stacking just re-rolls the random failure dice — it doesn't address the underlying output token budget problem.
+
+**Contrast with GPT OSS 20B stacking:** GPT OSS 20B under-extracts (misses facts, but produces valid JSON). Stacking works there because each run extracts different facts, and they merge additively. Qwen3.5-9B has a different problem: it fails entirely, not partially. No amount of stacking can recover from complete extraction failure.
+
+**Fix confirmed (2026-03-17):** Increasing `max_tokens` to 65536 (with thinking already off) resolved all truncation. All 3 transcripts extracted successfully: 46 nodes (api_design), 71 nodes (auth_system), 51 nodes (data_pipeline) — 168 total. Recall jumped to **72% baseline (11/23 ≥80%)** — above GPT OSS 20B (62%) and Qwen 3.5 35B (64%), despite being a 9B model.
+
+**Verify pass result (2026-03-17):** Adding `--verify` produced **67-68% recall (10/23 ≥80%)** — *worse* than 1× without verify (72%, 11/23). The verify pass added 14 nodes (181 vs 168 total), but introduced net harm. Notable: q_pipe_07 jumped 0% → 100% (verify did find real facts), but q_pipe_01 dropped 75% → 0%. Net effect: -4-5% recall, -1 question. The extra nodes from a 9B model's verification call appear to introduce noise that disrupts BFS traversal rather than improving coverage.
+
+**Conclusion:** Viable with correct configuration (`max_tokens: 65536`, `enable_thinking: false`). The earlier poor results were entirely a configuration problem, not a model quality problem. At 72% recall (1×, no verify), Qwen3.5-9B is the best-performing local model per parameter count tested. Neither stacking (2×) nor the verify pass improve results — 1× is optimal.
+
+#### Mistral Small 3.2 24B findings (2026-03-16)
+
+Model: `mistral-small-3.2-24b-instruct-2506-mlx` via local MLX server.
+
+**Persistent extraction failure:** One transcript (`project_api_design`) consistently fails with `KeyError: 'relation'` — the model emits edges without a `relation` field. This is a JSON schema compliance failure specific to Mistral. The other two transcripts extract successfully (66 total nodes across 2/3 transcripts).
+
+**Recall results:** 40% baseline (5/23 ≥80%) across all strategies — identical performance regardless of strategy preset. The 40% ceiling reflects the incomplete graph (missing the api_design transcript entirely, ~30% of the knowledge base).
+
+**Conclusion:** Not recommended. Schema non-compliance is a reliability concern, and 40% recall with 2/3 transcripts is poor relative to alternatives. The `KeyError: 'relation'` issue could potentially be fixed with a prompt patch, but given the overall quality ceiling, this is not worth pursuing.
+
+---
+
 ### Prompt Improvement Rules (DO NOT VIOLATE)
 
 These rules were derived from painful experience and should be applied to all future prompt work:
@@ -690,7 +973,23 @@ The prompt in `context_broker/prompts.py` is the **full revert** version. This i
 - No numeric tagging examples in either `EXTRACTION_PROMPT` or `INCREMENTAL_EXTRACTION_PROMPT`
 - Do not add examples to Rule 7 without benchmarking on auth_system edges first
 
-If recall needs to improve beyond 66%, the most promising directions (not yet tried) are:
-- Post-processing: parse numeric values out of `fact` text at ingest time, add as tags automatically
-- Query-side: detect numeric tokens in the query and add them to the keyword set before tag matching
-- Hybrid retrieval: fall back to full-text search on `fact` text when tag matching returns nothing
+### Retrieval Improvement Experiment (2026-03-14, Qwen 3.5 35B)
+
+Three retrieval-side improvements were implemented and benchmarked cumulatively against Qwen 3.5 35B (`qwen/qwen3.5-35b-a3b`). Each run re-extracted from scratch; Qwen is nondeterministic so node counts varied, making exact isolation impossible — treat as indicative trends.
+
+| Run | Changes | Nodes | Default Recall | ≥80% |
+|-----|---------|-------|----------------|------|
+| Baseline | none | 166 | 64% | 8/23 |
+| Change 1 | auto-tag numerics at ingest | 176 | 62% | 8/23 |
+| Changes 1+2 | + preserve numeric compound tokens in query keywords | 163 | 56% | 6/23 |
+| Changes 1+2+3 | + FTS fact-text augmentation in BFS seed selection | 174 | 66% | 7/23 |
+
+**What was implemented:**
+
+1. **Auto-tag numerics at ingest** (`store.py` — `_auto_tag_numerics()`): Regex-extracts digit-containing tokens (e.g., `15-minute`, `1000/min`, `rs256`) from each node's `fact` text and merges them into `tags` at write time, without touching the LLM prompt. This ensures numeric values in facts are findable by tag queries even if the extractor didn't emit them as tags.
+
+2. **Preserve numeric compound tokens in query keywords** (`retriever.py` — `extract_keywords()`): Hyphenated tokens containing digits (e.g., `15-minute`) are now kept as whole tokens in addition to their split parts. Non-numeric hyphens (e.g., `hot-path`) are still split as before. No benchmark impact observed because eval questions don't use this form — but logically correct for real-world queries.
+
+3. **FTS fact-text augmentation** (`retriever.py` — `retrieve_with_stats()`, `store.py` — `get_nodes_by_fact_text()`): After tag-based BFS seed selection, run a `fact LIKE '%keyword%'` search and merge new nodes into the seed pool. This catches nodes with sparse tags where the keyword appears in the fact text itself. Showed the clearest positive signal: `q_api_01` improved 25%→75%, `q_pipe_06` improved 60%→100%.
+
+**Overall conclusion**: The three changes together restored recall to 66% baseline (same as the pre-experiment baseline). Net gain is modest vs. extraction variance noise. The FTS augmentation (Change 3) is the most impactful change. The auto-tag numerics (Change 1) may be helping on specific questions but Qwen's extraction nondeterminism obscures the signal.
