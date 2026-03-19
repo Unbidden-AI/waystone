@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import textwrap
+from pathlib import Path
 
 from .llm_adapter import estimate_tokens
 
@@ -34,19 +35,46 @@ class SystemPromptBuilder:
         system_text = builder.build(context_markdown, task_description="…")
     """
 
-    def __init__(self, cfg: dict):
+    def __init__(self, cfg: dict, project_root: Path | None = None):
         """
         Parameters
         ----------
         cfg:
             The ``orchestrator.system_prompt`` section of config.yaml.
             Expected keys:
-                static (str): fixed instructions
+                static (str): fixed instructions appended after any static_files
+                static_files (list[str]): file paths to prepend verbatim (e.g. CLAUDE.md)
                 context_token_limit (int): max tokens for graph context (default 2000)
                 include_context (bool): whether to append graph context (default True)
+        project_root:
+            Base directory for resolving relative paths in static_files.
+            Defaults to the current working directory.
         """
+        root = project_root or Path.cwd()
+
+        parts: list[str] = []
+
+        # Load static_files first (e.g. CLAUDE.md, guardrails.md)
+        for path_str in cfg.get("static_files", []):
+            p = Path(path_str)
+            if not p.is_absolute():
+                p = root / p
+            p = p.expanduser()
+            if p.exists():
+                content = p.read_text(encoding="utf-8").strip()
+                if content:
+                    parts.append(content)
+                log.debug("SystemPromptBuilder: loaded static_file %s (%d chars)", p, len(content))
+            else:
+                log.warning("SystemPromptBuilder: static_files entry not found: %s", p)
+
+        # Append the inline static block from config
         raw_static = cfg.get("static", "")
-        self._static: str = textwrap.dedent(raw_static).strip()
+        inline = textwrap.dedent(raw_static).strip()
+        if inline:
+            parts.append(inline)
+
+        self._static: str = "\n\n---\n\n".join(parts)
         self._context_token_limit: int = int(cfg.get("context_token_limit", 2000))
         self._include_context: bool = bool(cfg.get("include_context", True))
 

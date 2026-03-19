@@ -625,3 +625,68 @@ class TestConfigParsing:
         assert not static.startswith(" ")
         assert not static.startswith("\n")
         assert static == "This is indented.\n\nSo is this."
+
+
+# ==============================================================================
+# static_files loading
+# ==============================================================================
+
+
+class TestStaticFiles:
+    def test_static_file_prepended_to_static(self, tmp_path):
+        """Content from static_files appears before the inline static block."""
+        rules_file = tmp_path / "rules.md"
+        rules_file.write_text("# Rules\nAlways write tests.")
+
+        cfg = {
+            "static_files": [str(rules_file)],
+            "static": "You are a coding assistant.",
+            "context_token_limit": 2000,
+        }
+        builder = SystemPromptBuilder(cfg)
+        assert builder._static.startswith("# Rules")
+        assert "Always write tests." in builder._static
+        assert "You are a coding assistant." in builder._static
+        # separator between file content and inline static
+        assert "---" in builder._static
+
+    def test_multiple_static_files_in_order(self, tmp_path):
+        """Multiple static_files are concatenated in declared order."""
+        f1 = tmp_path / "first.md"
+        f1.write_text("FIRST")
+        f2 = tmp_path / "second.md"
+        f2.write_text("SECOND")
+
+        cfg = {"static_files": [str(f1), str(f2)], "context_token_limit": 2000}
+        builder = SystemPromptBuilder(cfg)
+        assert builder._static.index("FIRST") < builder._static.index("SECOND")
+
+    def test_missing_static_file_skipped_with_warning(self, tmp_path, caplog):
+        """A missing static_files path is skipped (no crash) and logged."""
+        import logging
+
+        cfg = {
+            "static_files": [str(tmp_path / "nonexistent.md")],
+            "static": "Fallback",
+            "context_token_limit": 2000,
+        }
+        with caplog.at_level(logging.WARNING, logger="orchestrator.system_prompt_builder"):
+            builder = SystemPromptBuilder(cfg)
+
+        assert builder._static == "Fallback"
+        assert any("not found" in r.message for r in caplog.records)
+
+    def test_no_static_files_key_works(self):
+        """Omitting static_files entirely is fine — falls back to inline static."""
+        cfg = {"static": "Inline only.", "context_token_limit": 2000}
+        builder = SystemPromptBuilder(cfg)
+        assert builder._static == "Inline only."
+
+    def test_relative_path_resolved_from_project_root(self, tmp_path):
+        """Relative paths in static_files are resolved against project_root."""
+        rules_file = tmp_path / "CLAUDE.md"
+        rules_file.write_text("# CLAUDE rules")
+
+        cfg = {"static_files": ["CLAUDE.md"], "context_token_limit": 2000}
+        builder = SystemPromptBuilder(cfg, project_root=tmp_path)
+        assert "# CLAUDE rules" in builder._static

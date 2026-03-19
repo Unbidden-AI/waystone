@@ -16,6 +16,11 @@ class Message:
     timestamp: float = field(default_factory=time.time)
     token_estimate: int = 0
     tool_call_id: str | None = None  # set on role="tool" result messages
+    # Raw OpenAI-format tool_calls array — preserved on assistant messages that
+    # initiated tool calls so the API history remains well-formed for providers
+    # (e.g. Gemini) that require matching tool_call_ids between assistant and
+    # tool-result messages.
+    raw_tool_calls: list[dict] | None = None
 
     def __post_init__(self) -> None:
         if self.token_estimate == 0:
@@ -26,6 +31,8 @@ class Message:
         d: dict = {"role": self.role, "content": self.content or ""}
         if self.tool_call_id is not None:
             d["tool_call_id"] = self.tool_call_id
+        if self.raw_tool_calls is not None:
+            d["tool_calls"] = self.raw_tool_calls
         return d
 
 

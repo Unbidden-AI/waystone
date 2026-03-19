@@ -37,7 +37,7 @@ EXTRACTION RULES:
    - Rationale node: "Sessions were rejected because they don't scale horizontally across instances"
    - Rationale node: "JWT is stateless, which eliminates server-side session storage"
 
-4. Capture HISTORICAL STATES when something changes. If a decision is revised:
+4. Capture HISTORICAL STATES when something changes. If a decision is REPLACED:
    - Create a node for the ORIGINAL position: "Originally planned to use S3 for cold storage"
    - Create a node for the NEW position: "Cold storage changed to GCS"
    - Set supersedes: ["original_node_id"] on the new node
@@ -83,6 +83,8 @@ EXTRACTION RULES:
     - "resolved": the answer to a previously open question
     - "preference": a stated preference for future work, not yet decided
     - "lesson_learned": a failed approach, rejected alternative, or anti-pattern discovered
+    - "transition": an evolution — captures BOTH the original state AND the new state AND why it changed, in a single self-contained node. Use for additive evolution, partial changes, and any "originally X, later Y" trajectory that isn't a clean replacement. Fact text MUST use "from X to Y" or "originally X, now Y" language. Tags must cover BOTH the old and new terms. Example: "Cold storage switched from S3 to GCS (ML team already on GCP; cross-cloud egress costs too high)" — tags: ["s3", "gcs", "cold storage", "cloud storage", "egress", "gcp"].
+   - IMPORTANT: When a "decision" or "transition" node supersedes a prior approach, its tags MUST include the old term so the decision is retrievable from both the old and new directions. Example: a decision to switch from JSON to Avro must have tags: ["json", "avro", "event format", ...].
 
 12. Edge relations:
     - "depends_on": target is required for source to work
@@ -96,6 +98,13 @@ EXTRACTION RULES:
     into the primary fact node.
     - Don't: one node for "Rate limit: 1000/min. IP-level rate limiting also applied."
     - Do: one node for the 1000/min rate limit, a second node for IP-level rate limiting.
+
+14. Do NOT extract facts that describe the operation of the extraction/retrieval system itself —
+    e.g. "a test query was run", "synthesis was executed", "retrieval returned X nodes", "a query
+    was proposed", or real-time debugging observations about context retrieval behavior. These are
+    transient operational artifacts, not durable project knowledge. Benchmark results,
+    architectural decisions, and analytical findings ARE still valid facts even if they concern
+    this system.
 
 TRANSCRIPT:
 {transcript}"""
@@ -155,11 +164,13 @@ INCREMENTAL EXTRACTION RULES:
    - Capture explicit exclusions and rejected alternatives.
    - Tag nodes richly (6–12 tags): primary term, synonyms, abbreviations, tool names, related concepts.
    - Include both the generic concept AND the specific implementation in tags.
+   - When a node is one of several items explicitly enumerated together (steps, requirements, alternatives), also include tags from the enumeration's label or grouping context (e.g., all three "hot-path transformation" nodes should include "hot-path" and "transformation" tags).
    - Split compound facts into separate nodes when they have different retrieval keywords.
    - source_message: 0-based index of the message within THIS TURN.
    - Confidence: 0.3-0.5 discussed, 0.6-0.8 decided, 0.9-1.0 implemented/verified.
-   - Node types: decision, constraint, implementation, question, resolved, preference, lesson_learned.
+   - Node types: decision, constraint, implementation, question, resolved, preference, lesson_learned, transition.
    - Edge relations: depends_on, flows_to, relates_to, supersedes.
+   - Do NOT extract facts that describe the operation of the extraction/retrieval system itself (e.g. "a test query was run", "retrieval returned X nodes", "synthesis was executed"). Benchmark results and architectural decisions about this system ARE valid.
 
 TURN:
 {turn_text}"""
@@ -265,13 +276,16 @@ CATEGORY 2 — Numeric values and specific thresholds buried in context:
   - replica counts ("minimum in-sync replicas of 2")
   - specific rate limit values per user type
 
-CATEGORY 3 — Transition/migration statements:
-  Any statement describing a change from one approach to another:
+CATEGORY 3 — Transition/migration statements (use type "transition"):
+  Any statement describing a change from one approach to another, OR additive evolution:
   "moved away from X", "switched from X to Y", "replaced X with Y",
-  "originally used X but now Y", "migrated from X to Y".
+  "originally used X but now Y", "migrated from X to Y",
+  "started with X, later added Y", "originally had X roles, Y was added".
+  Capture BOTH the original state AND the new state in a single node.
   Examples:
   - "moved away from JSON to Avro for schema evolution"
   - "originally planned S3, switched to GCS"
+  - "role list started with admin/member/viewer, guest role added later for external collaborators"
 
 CATEGORY 4 — Rationale containing time estimates or cost data:
   Any explanation for a decision that includes a duration, timeline, or cost figure.
@@ -287,7 +301,7 @@ RULES FOR NEW NODES:
 - Tag nodes richly (6-12 tags): primary term, synonyms, abbreviations, tool names, related concepts.
 - source_message: 0-based index of the message in the transcript where the fact appears.
 - Confidence: 0.3-0.5 discussed, 0.6-0.8 decided, 0.9-1.0 implemented/verified.
-- Node types: decision, constraint, implementation, question, resolved, preference, lesson_learned.
+- Node types: decision, constraint, implementation, question, resolved, preference, lesson_learned, transition.
 - Edge relations: depends_on, flows_to, relates_to, supersedes.
 - If nothing is missed, return {"nodes": [], "edges": []}.
 
@@ -358,7 +372,7 @@ EXTRACTION_JSON_SCHEMA = {
                             "type": "string",
                             "enum": [
                                 "decision", "constraint", "implementation",
-                                "question", "resolved", "preference", "lesson_learned",
+                                "question", "resolved", "preference", "lesson_learned", "transition",
                             ],
                         },
                         "confidence": {"type": "number"},
@@ -435,7 +449,7 @@ HUNT ONLY for these patterns — emit a node for EVERY instance found:
 5. REJECTED TOOLS / LIBRARIES / SERVICES: Any named tool, library, or service that was evaluated and rejected, with the reason
 
 RULES:
-- Use type: "lesson_learned" for all nodes from this pass.
+- Use type: "lesson_learned" for all nodes from this pass (or "transition" if the rejection was partial — rejected for one purpose but used for another).
 - Use short IDs like n1, n2, n3. Reference existing nodes with their exact IDs in edges.
 - Each fact must be self-contained — include WHAT was rejected AND WHY in the same fact text.
 - Tag richly (6-12 tags): the rejected thing, the reason, related concepts, synonyms.
@@ -480,13 +494,14 @@ HUNT ONLY for these patterns — emit a node for EVERY instance found:
 3. REJECTED ALTERNATIVES: For any decision, if the transcript mentions what was considered and rejected, embed it directly in the decision fact. Format: "Chose [X] over [Y] because [reason]; [Y] was ruled out because [rejected_reason]". Do NOT create separate nodes for rejected paths.
 4. MISLABELED DECISIONS: Any node already in EXISTING CONTEXT labeled "implementation" that actually describes a non-obvious choice — do NOT re-extract the node, but if new rationale or rejected alternatives are found, emit a new decision node that supersedes it.
 5. IMPLICIT DECISIONS: Approaches described without explicit alternatives mentioned, but where the choice was non-obvious or contested.
+6. EVOLUTION/TRAJECTORY: Things that were ADDED or MODIFIED over time — "started with X roles, later added Y", "originally used X, then added Z on top". Use type "transition" for these, not "decision". Fact must capture BOTH the original state AND the changed/added state AND why it happened.
 
 RULES:
-- Use type: "decision" for all nodes from this pass. Do NOT emit separate rationale nodes.
+- Use type: "decision" for choices between alternatives. Use type: "transition" for additive evolution and trajectories. Do NOT emit separate rationale nodes.
 - Embed the WHY and any rejected alternatives directly in the fact text of the decision node itself.
 - Use short IDs like n1, n2, n3. Reference existing nodes with their exact IDs in edges.
 - Each fact must be self-contained: what was decided + why + what was rejected (if known).
-- Tag richly (6-12 tags): the chosen technology/approach, the rejected alternative(s), the problem domain, synonyms. Include tags for both sides of the tradeoff so the node is retrievable from either direction.
+- Tag richly (6-12 tags): the chosen technology/approach, the rejected alternative(s), the problem domain, synonyms. Include tags for both sides of the tradeoff so the node is retrievable from either direction. For "transition" nodes, include tags for BOTH the old and new state.
 - If nothing new is found, return {"nodes": [], "edges": []}.
 
 TRANSCRIPT:
@@ -603,6 +618,78 @@ def build_targeted_prompt(category: str, transcript_text: str, existing_nodes: l
         .replace("{existing_context}", existing_context)
         .replace("{transcript}", transcript_text)
     )
+
+
+SYNTHESIS_PROMPT = """You are a knowledge synthesis engine. Below is a set of nodes from a project knowledge graph. Your task is to identify CLUSTERS of parallel nodes — groups where each node represents the same metric, attribute, or outcome measured across different subjects (models, services, configurations, systems, etc.) — and create ONE comprehensive summary node per cluster.
+
+Return ONLY a valid JSON object — no markdown fences, no commentary, no preamble. Start your response with { and end with }.
+
+Schema:
+{
+  "nodes": [
+    {
+      "id": "n1",
+      "fact": "Comprehensive summary combining all instances",
+      "type": "implementation",
+      "confidence": 0.95,
+      "source_message": null,
+      "supersedes": [],
+      "tags": ["keyword1", "keyword2"]
+    }
+  ],
+  "edges": [
+    {
+      "from": "n_existingid",
+      "to": "n1",
+      "relation": "relates_to"
+    }
+  ]
+}
+
+EXISTING NODES:
+{existing_nodes}
+
+SYNTHESIS RULES:
+
+1. IDENTIFY CLUSTERS: Find 3 or more nodes that each cover the same attribute/metric for a different subject. Examples of valid clusters:
+   - Five nodes with benchmark recall percentages, one per model → one summary node ranking all models
+   - Four nodes with latency figures for different services → one summary node listing all latencies
+   - Three nodes with node counts per extraction run → one summary node comparing all counts
+
+2. CREATE ONE SUMMARY NODE per cluster:
+   - State ALL values explicitly in the fact text. Format: "[Metric]: [Subject1] = [value1], [Subject2] = [value2], ..."
+   - Rank or order subjects where meaningful (e.g. highest recall first)
+   - Include ALL subjects — never omit one
+   - Tags must include: every subject name, the metric name, "summary", "comparison", "ranking", "overview", plus relevant synonyms
+   - Edges must point FROM each source node TO the summary node (so BFS traversal from any source reaches the summary). Use: "from": "n_existingid", "to": "n1"
+
+3. MINIMUM CLUSTER SIZE: Only synthesize when 3 or more nodes share the same metric. Do not synthesize pairs.
+
+4. DO NOT create summary nodes that merely restate a single existing node. The summary must be genuinely cross-cutting — it must combine information from multiple source nodes into a single retrievable fact.
+
+5. Use short IDs like n1, n2. Reference existing nodes using their exact IDs (e.g. n_a1b2c3d4) in edges.
+
+6. If no valid clusters exist, return {"nodes": [], "edges": []}."""
+
+
+def build_synthesis_prompt(existing_nodes: list[dict]) -> str:
+    """Format the synthesis prompt with all existing graph nodes.
+
+    Serializes nodes compactly (one line each, fact truncated to 120 chars)
+    to keep prompt size manageable for large graphs.
+    """
+    lines = []
+    for node in existing_nodes:
+        fact = node["fact"]
+        if len(fact) > 120:
+            fact = fact[:117] + "..."
+        tags_str = ", ".join(node.get("tags", [])[:6])
+        lines.append(
+            f'[{node["id"]}] ({node["type"]}, conf={node.get("confidence", 0.5):.1f})'
+            f' "{fact}" tags:[{tags_str}]'
+        )
+    nodes_block = "\n".join(lines) if lines else "(none)"
+    return SYNTHESIS_PROMPT.replace("{existing_nodes}", nodes_block)
 
 
 def build_reconcile_prompt(nodes: list[dict]) -> str:

@@ -40,7 +40,7 @@ Context Broker is a DAG-based context intelligence layer for LLM workflows. It e
    - Entry nodes are found via tag matching (`get_nodes_by_tags` uses JSON LIKE queries)
    - BFS traversal up to `hops` depth collects the neighborhood (both outgoing and incoming edges)
    - A strategy pipeline is applied in order: `superseded_pruning` → `confidence_threshold` → `recency_decay` → `top_k` sort → `token_budget`
-   - Results are assembled into grouped markdown by node type (decision > constraint > implementation > resolved > preference > question)
+   - Results are assembled into grouped markdown by node type (decision > transition > constraint > implementation > resolved > preference > question)
 
 **Configuration** (`config.yaml` or `~/.context-broker/config.yaml`):
 - `llm`: OpenAI-compatible endpoint (default: `http://localhost:1234/v1`)
@@ -59,6 +59,6 @@ Config is deep-merged with hardcoded defaults in `config.py`; missing keys fall 
 
 **Benchmarks** (`benchmarks/`): synthetic transcripts for three projects (api_design, auth_system, data_pipeline) with ground-truth eval questions in `eval_questions.yaml` for measuring precision/recall across strategy configurations.
 
-**Node types**: `decision`, `constraint`, `implementation`, `question`, `resolved`, `lesson_learned`, `preference`
+**Node types**: `decision`, `transition`, `constraint`, `implementation`, `question`, `resolved`, `lesson_learned`, `preference`
 
 **Edge relations**: `depends_on`, `flows_to`, `relates_to`, `supersedes`

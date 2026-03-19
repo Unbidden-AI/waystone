@@ -161,6 +161,40 @@ class GraphStore:
         self.conn.commit()
         return node["id"]
 
+    def delete_node(self, node_id: str) -> bool:
+        """Delete a single node and all its edges. Returns True if node existed."""
+        row = self.conn.execute("SELECT id FROM nodes WHERE id = ?", (node_id,)).fetchone()
+        if not row:
+            return False
+        self.conn.execute("DELETE FROM edges WHERE from_id = ? OR to_id = ?", (node_id, node_id))
+        self.conn.execute("DELETE FROM nodes WHERE id = ?", (node_id,))
+        self.conn.commit()
+        return True
+
+    def update_node_fact(self, node_id: str, new_fact: str, new_confidence: float | None = None) -> bool:
+        """Update a node's fact text, recalculating its hash and auto-tags.
+
+        Returns True if the node existed and was updated.
+        """
+        row = self.conn.execute("SELECT tags FROM nodes WHERE id = ?", (node_id,)).fetchone()
+        if not row:
+            return False
+        existing_tags = json.loads(row["tags"])
+        new_tags = _auto_tag_numerics(new_fact, existing_tags)
+        new_hash = _fact_hash(new_fact)
+        if new_confidence is not None:
+            self.conn.execute(
+                "UPDATE nodes SET fact = ?, fact_hash = ?, tags = ?, confidence = ? WHERE id = ?",
+                (new_fact, new_hash, json.dumps(new_tags), new_confidence, node_id),
+            )
+        else:
+            self.conn.execute(
+                "UPDATE nodes SET fact = ?, fact_hash = ?, tags = ? WHERE id = ?",
+                (new_fact, new_hash, json.dumps(new_tags), node_id),
+            )
+        self.conn.commit()
+        return True
+
     def add_edge(self, from_id: str, to_id: str, relation: str):
         """Insert an edge, ignoring duplicates."""
         self.conn.execute(
@@ -340,6 +374,59 @@ class GraphStore:
                     (json.dumps(sorted(new_tags)), nid),
                 )
         self.conn.commit()
+
+    def delete_nodes_by_source(self, source_transcript: str) -> int:
+        """Delete all nodes (and their edges) with the given source_transcript value.
+
+        Returns the number of nodes deleted.
+        """
+        rows = self.conn.execute(
+            "SELECT id FROM nodes WHERE source_transcript = ?", (source_transcript,)
+        ).fetchall()
+        ids = [r["id"] for r in rows]
+        if not ids:
+            return 0
+        placeholders = ",".join("?" * len(ids))
+        self.conn.execute(f"DELETE FROM edges WHERE from_id IN ({placeholders})", ids)
+        self.conn.execute(f"DELETE FROM edges WHERE to_id IN ({placeholders})", ids)
+        self.conn.execute(f"DELETE FROM nodes WHERE id IN ({placeholders})", ids)
+        self.conn.commit()
+        return len(ids)
+
+    def prune_nodes(
+        self,
+        older_than_days: int | None = None,
+        confidence_below: float | None = None,
+        source_pattern: str | None = None,
+        dry_run: bool = True,
+    ) -> list[str]:
+        """Return (and optionally delete) nodes matching all supplied criteria.
+
+        All criteria are ANDed. Runs in preview mode unless dry_run=False.
+        Returns the list of node IDs that match (or were deleted).
+        """
+        query = "SELECT id FROM nodes WHERE 1=1"
+        params: list = []
+        if older_than_days is not None:
+            from datetime import datetime, timedelta, timezone
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=older_than_days)).isoformat()
+            query += " AND created_at < ?"
+            params.append(cutoff)
+        if confidence_below is not None:
+            query += " AND confidence < ?"
+            params.append(confidence_below)
+        if source_pattern is not None:
+            query += " AND source_transcript LIKE ?"
+            params.append(f"%{source_pattern}%")
+        rows = self.conn.execute(query, params).fetchall()
+        ids = [r["id"] for r in rows]
+        if not dry_run and ids:
+            placeholders = ",".join("?" * len(ids))
+            self.conn.execute(f"DELETE FROM edges WHERE from_id IN ({placeholders})", ids)
+            self.conn.execute(f"DELETE FROM edges WHERE to_id IN ({placeholders})", ids)
+            self.conn.execute(f"DELETE FROM nodes WHERE id IN ({placeholders})", ids)
+            self.conn.commit()
+        return ids
 
     def get_stats(self) -> dict:
         """Get graph statistics."""

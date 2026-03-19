@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import AsyncIterator
 
@@ -16,7 +17,7 @@ from .types import CompactionResult, Message, ToolCall
 log = logging.getLogger(__name__)
 
 # Maximum tool-call rounds per user turn before we break the loop
-_MAX_TOOL_ROUNDS = 10
+_MAX_TOOL_ROUNDS = 4
 
 
 class Conversation:
@@ -39,6 +40,7 @@ class Conversation:
         cfg: dict,
         store: GraphStore,
         project_name: str,
+        project_root=None,
     ):
         """
         Parameters
@@ -49,7 +51,12 @@ class Conversation:
             Open GraphStore for the project.
         project_name:
             Used for logging.
+        project_root:
+            Base directory for resolving relative ``static_files`` paths.
+            Defaults to the current working directory.
         """
+        from pathlib import Path
+
         orch_cfg = cfg.get("orchestrator", {})
         ctx_cfg = orch_cfg.get("context", {})
         sp_cfg = orch_cfg.get("system_prompt", {})
@@ -65,13 +72,14 @@ class Conversation:
         self._project_name = project_name
 
         # Sub-components
+        self._store = store
         self._context_mgr = ContextManager(
             cfg=ctx_cfg,
             store=store,
             project_name=project_name,
             extractor_config=cfg,
         )
-        self._prompt_builder = SystemPromptBuilder(sp_cfg)
+        self._prompt_builder = SystemPromptBuilder(sp_cfg, project_root=Path(project_root) if project_root else None)
 
     # ------------------------------------------------------------------
     # Public API
@@ -200,13 +208,16 @@ class Conversation:
 
             # Execute tools and append results to local history for next round
             log.debug("Tool round %d: %d calls", round_num + 1, len(tool_calls))
-            results = await execute_tools(tool_calls, self._tools_cfg)
+            results = await execute_tools(tool_calls, self._tools_cfg, self._store)
 
             # Record the tool-call turn in both the working history (for the next
             # LLM round) and the context manager (so future turns see the tool trail).
+            # raw_tool_calls preserves the proper OpenAI-format array so providers
+            # like Gemini can match tool_call_ids in subsequent messages.
             tool_summary = _format_tool_summary(tool_calls, results)
+            raw_tc = _to_raw_tool_calls(tool_calls)
             tool_msgs = [
-                Message(role="assistant", content=tool_summary),
+                Message(role="assistant", content=tool_summary, raw_tool_calls=raw_tc),
                 *[r.to_message() for r in results],
             ]
             for msg in tool_msgs:
@@ -259,21 +270,30 @@ class Conversation:
                 return
 
             log.debug("Stream tool round %d: %d calls", round_num + 1, len(tool_calls))
-            results = await execute_tools(tool_calls, self._tools_cfg)
+            results = await execute_tools(tool_calls, self._tools_cfg, self._store)
 
             tool_summary = _format_tool_summary(tool_calls, results)
+            raw_tc = _to_raw_tool_calls(tool_calls)
             tool_msgs = [
-                Message(role="assistant", content=tool_summary),
+                Message(role="assistant", content=tool_summary, raw_tool_calls=raw_tc),
                 *[r.to_message() for r in results],
             ]
             for msg in tool_msgs:
                 self._context_mgr.add_message(msg)
             history = list(history) + tool_msgs
 
-        # All tool rounds exhausted — stream the final synthesizing answer
-        log.warning("Tool loop hit %d rounds; streaming final answer", _MAX_TOOL_ROUNDS)
-        async for chunk in stream_llm(history, system, self._llm_cfg):
-            yield chunk
+        # All tool rounds exhausted — use call_llm (non-streaming) for the final answer.
+        # stream_llm is unreliable here: Gemini returns UNEXPECTED_TOOL_CALL even with
+        # tools=None after a long tool loop, yielding an empty stream.
+        log.warning("Tool loop hit %d rounds; requesting final answer", _MAX_TOOL_ROUNDS)
+        text, _, _ = await call_llm(
+            messages=history + [Message(role="user", content="Please summarize your findings.")],
+            system=system,
+            cfg=self._llm_cfg,
+            tools=None,
+        )
+        if text:
+            yield text
 
 
 # ---------------------------------------------------------------------------
@@ -299,3 +319,22 @@ def _truncate_args(args: dict, max_len: int = 60) -> str:
             sv = sv[:max_len] + "…"
         parts.append(f"{k}={sv!r}")
     return ", ".join(parts)
+
+
+def _to_raw_tool_calls(tool_calls: list[ToolCall]) -> list[dict]:
+    """Convert ToolCall objects to the OpenAI-format tool_calls array.
+
+    This is stored on assistant messages so that providers like Gemini can
+    match tool_call_ids when the conversation history is replayed.
+    """
+    return [
+        {
+            "id": tc.id,
+            "type": "function",
+            "function": {
+                "name": tc.name,
+                "arguments": json.dumps(tc.args),
+            },
+        }
+        for tc in tool_calls
+    ]

@@ -365,7 +365,10 @@ def extract_keywords(text: str) -> list[str]:
             for part in word.split("-"):
                 _emit(part)
         else:
-            # Non-numeric hyphens: split as before ("hot-path" → "hot", "path")
+            if "-" in word:
+                # Non-numeric hyphenated: emit whole compound AND each part
+                # so "hot-path" matches nodes tagged "hot-path" as well as "hot"/"path"
+                _emit(word)
             for part in word.replace("-", " ").split():
                 _emit(part)
 
@@ -450,7 +453,7 @@ def assemble_markdown(nodes: list[dict], task: str, strategies_applied: list[str
         by_type.setdefault(node["type"], []).append(node)
 
     # Order: decisions first, then constraints, implementations, resolved, lessons, preferences, others
-    type_order = ["decision", "constraint", "implementation", "resolved", "lesson_learned", "preference", "question"]
+    type_order = ["decision", "transition", "constraint", "implementation", "resolved", "lesson_learned", "preference", "question"]
     sorted_types = sorted(by_type.keys(), key=lambda t: type_order.index(t) if t in type_order else 99)
 
     for node_type in sorted_types:

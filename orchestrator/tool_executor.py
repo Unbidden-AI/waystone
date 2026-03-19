@@ -7,10 +7,15 @@ import glob as _glob
 import logging
 import re
 import subprocess
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .types import ToolCall, ToolResult
+
+if TYPE_CHECKING:
+    from context_broker.store import GraphStore
 
 log = logging.getLogger(__name__)
 
@@ -234,6 +239,82 @@ async def _run_grep(args: dict[str, Any], cfg: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Graph-store write tools (require a live GraphStore reference)
+# ---------------------------------------------------------------------------
+
+
+async def _run_ctx_delete_node(args: dict[str, Any], cfg: dict, store: "GraphStore") -> str:
+    """Delete a node and all its edges from the project knowledge graph."""
+    node_id = args.get("node_id")
+    if not node_id or not isinstance(node_id, str):
+        raise ValueError("ctx_delete_node requires a 'node_id' string argument")
+
+    node = store.get_node(node_id)
+    if node is None:
+        return f"[ctx_delete_node: node {node_id!r} not found]"
+
+    fact_preview = node["fact"][:80] + ("…" if len(node["fact"]) > 80 else "")
+    deleted = store.delete_node(node_id)
+    if deleted:
+        log.info("ctx_delete_node: deleted %s — %s", node_id, fact_preview)
+        return f"Deleted node {node_id}: {fact_preview!r}"
+    return f"[ctx_delete_node: failed to delete {node_id!r}]"
+
+
+async def _run_ctx_update_node(args: dict[str, Any], cfg: dict, store: "GraphStore") -> str:
+    """Update a node's fact text in the knowledge graph."""
+    node_id = args.get("node_id")
+    new_fact = args.get("new_fact")
+    if not node_id or not isinstance(node_id, str):
+        raise ValueError("ctx_update_node requires a 'node_id' string argument")
+    if not new_fact or not isinstance(new_fact, str):
+        raise ValueError("ctx_update_node requires a 'new_fact' string argument")
+
+    new_confidence = args.get("new_confidence")
+    if new_confidence is not None:
+        new_confidence = float(new_confidence)
+
+    updated = store.update_node_fact(node_id, new_fact, new_confidence)
+    if updated:
+        log.info("ctx_update_node: updated %s", node_id)
+        return f"Updated node {node_id}: {new_fact[:80]!r}"
+    return f"[ctx_update_node: node {node_id!r} not found]"
+
+
+async def _run_ctx_synthesize(args: dict[str, Any], cfg: dict, store: "GraphStore") -> str:
+    """Create a synthesis node summarizing multiple existing nodes."""
+    summary_fact = args.get("summary_fact")
+    node_ids = args.get("node_ids")
+    if not summary_fact or not isinstance(summary_fact, str):
+        raise ValueError("ctx_synthesize requires a 'summary_fact' string argument")
+    if not node_ids or not isinstance(node_ids, list):
+        raise ValueError("ctx_synthesize requires a 'node_ids' list argument")
+
+    node_type = args.get("node_type", "decision")
+    tags = args.get("tags", [])
+    confidence = float(args.get("confidence", 0.9))
+
+    new_id = f"n_{uuid.uuid4().hex[:8]}"
+    node = {
+        "id": new_id,
+        "fact": summary_fact,
+        "type": node_type,
+        "confidence": confidence,
+        "tags": tags,
+        "source_transcript": "__synthesis__",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "supersedes": [],
+    }
+    canonical_id = store.add_node(node)
+    for src_id in node_ids:
+        if store.get_node(src_id) is not None:
+            store.add_edge(canonical_id, src_id, "relates_to")
+
+    log.info("ctx_synthesize: created %s from %d source nodes", canonical_id, len(node_ids))
+    return f"Created synthesis node {canonical_id} (relates_to {len(node_ids)} nodes): {summary_fact[:80]!r}"
+
+
+# ---------------------------------------------------------------------------
 # Dispatcher
 # ---------------------------------------------------------------------------
 
@@ -245,8 +326,14 @@ _HANDLERS = {
     "grep": _run_grep,
 }
 
+_STORE_HANDLERS = {
+    "ctx_delete_node": _run_ctx_delete_node,
+    "ctx_update_node": _run_ctx_update_node,
+    "ctx_synthesize": _run_ctx_synthesize,
+}
 
-async def execute_tool(tool_call: ToolCall, cfg: dict) -> ToolResult:
+
+async def execute_tool(tool_call: ToolCall, cfg: dict, store: "GraphStore | None" = None) -> ToolResult:
     """Execute a single ToolCall and return a ToolResult.
 
     Parameters
@@ -261,6 +348,35 @@ async def execute_tool(tool_call: ToolCall, cfg: dict) -> ToolResult:
     ToolResult
         Always returns a result; errors are captured in ``result.error``.
     """
+    # Check store-aware handlers first
+    if tool_call.name in _STORE_HANDLERS:
+        enabled: list[str] = cfg.get("enabled", [])
+        if tool_call.name not in enabled:
+            return ToolResult(
+                tool_call_id=tool_call.id,
+                name=tool_call.name,
+                output="",
+                error=f"Tool {tool_call.name!r} is not enabled in this session",
+            )
+        if store is None:
+            return ToolResult(
+                tool_call_id=tool_call.id,
+                name=tool_call.name,
+                output="",
+                error=f"Tool {tool_call.name!r} requires a graph store but none was provided",
+            )
+        try:
+            output = await _STORE_HANDLERS[tool_call.name](tool_call.args, cfg, store)
+            return ToolResult(tool_call_id=tool_call.id, name=tool_call.name, output=output)
+        except ValueError as e:
+            return ToolResult(tool_call_id=tool_call.id, name=tool_call.name, output="", error=str(e))
+        except Exception as e:
+            log.error("Unexpected error in store tool %s: %s", tool_call.name, e)
+            return ToolResult(
+                tool_call_id=tool_call.id, name=tool_call.name, output="",
+                error=f"Internal error: {type(e).__name__}: {e}",
+            )
+
     handler = _HANDLERS.get(tool_call.name)
     if handler is None:
         return ToolResult(
@@ -270,7 +386,7 @@ async def execute_tool(tool_call: ToolCall, cfg: dict) -> ToolResult:
             error=f"Unknown tool: {tool_call.name!r}",
         )
 
-    enabled: list[str] = cfg.get("enabled", list(_HANDLERS.keys()))
+    enabled = cfg.get("enabled", list(_HANDLERS.keys()))
     if tool_call.name not in enabled:
         return ToolResult(
             tool_call_id=tool_call.id,
@@ -307,6 +423,8 @@ async def execute_tool(tool_call: ToolCall, cfg: dict) -> ToolResult:
         )
 
 
-async def execute_tools(tool_calls: list[ToolCall], cfg: dict) -> list[ToolResult]:
+async def execute_tools(
+    tool_calls: list[ToolCall], cfg: dict, store: "GraphStore | None" = None
+) -> list[ToolResult]:
     """Execute multiple ToolCalls concurrently and return results in order."""
-    return list(await asyncio.gather(*[execute_tool(tc, cfg) for tc in tool_calls]))
+    return list(await asyncio.gather(*[execute_tool(tc, cfg, store) for tc in tool_calls]))

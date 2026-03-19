@@ -73,7 +73,7 @@ STRATEGY_PRESETS = {
         "superseded_pruning": True,
         "confidence_threshold": 0.6,
         "recency_decay": False,
-        "token_budget": 600,
+        "token_budget": 750,
         "relevance_scoring": True,
     },
 }

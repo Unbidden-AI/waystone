@@ -150,6 +150,75 @@ Replace `myproject` with any short name (e.g. `ContextBroker`, `MyApp`). This na
 
 ---
 
+## Step 4B: Seed the graph before your first session (new projects)
+
+If the project has no prior sessions to import, the graph starts empty and the first few turns get no context injection. You can fix this in a few minutes.
+
+**Write a short project brief.** Create a file — `project_brief.md` is a good name — with 1–3 paragraphs covering:
+
+- What the project does (one sentence is enough)
+- The core tech stack and key architectural choices
+- Any hard constraints the model should always respect (e.g. "no vendor lock-in", "must run offline", "Python 3.11+")
+
+```markdown
+# MyApp
+
+MyApp is a mobile-first expense tracker that syncs across devices via a self-hosted
+PostgreSQL backend and a React Native frontend. All amounts are stored in cents to
+avoid floating-point rounding.
+
+Key constraints: offline-first (all local writes must succeed before sync),
+no third-party auth providers (we roll our own JWT), iOS 16+ minimum.
+
+Tech stack: React Native 0.73, Expo, PostgreSQL 15, FastAPI, SQLAlchemy 2.0.
+```
+
+**Extract it:**
+
+```bash
+ctx extract myproject project_brief.md
+```
+
+You'll get 20–50 nodes covering the decisions and constraints you wrote down. Every session from that point forward will have those facts available.
+
+> **Tip:** Design documents, ADRs, a README, or existing specifications work just as well — `ctx extract` handles any markdown file, not just conversation transcripts.
+
+---
+
+## Step 4C: Set a project brief in the orchestrator static prompt (orchestrator mode only)
+
+If you're using `ctx orchestrate` instead of the hooks/MCP path, add a 1–2 sentence project brief to the `static` field in your config. This gives the model orientation before it sees any retrieved graph context — particularly important on the first turn of a session when the graph may return nothing relevant.
+
+Open `~/.context-broker/config.yaml` and find the `orchestrator.system_prompt` section:
+
+```yaml
+orchestrator:
+  system_prompt:
+    static_files:
+      - CLAUDE.md        # optional: carry project instructions into every session
+    static: |
+      You are a senior engineer on MyApp — a mobile-first expense tracker with an
+      offline-first architecture, self-hosted PostgreSQL backend, and React Native
+      frontend. All monetary values are stored in cents.
+
+      ## Non-negotiables
+      - Run tests before declaring anything done
+      - Read files before modifying them
+      - Store amounts as integers (cents), never floats
+```
+
+**What belongs here vs. the graph:**
+
+| Belongs in `static` | Belongs in the graph |
+|---------------------|---------------------|
+| Project name + 1-sentence description | Architecture details, data flow |
+| Universal behavioral rules ("always run tests") | Specific decisions made in past sessions |
+| Hard constraints that apply to every turn | Tech choices explained in context |
+
+The graph fills in the rich knowledge; `static` just gives the model a hook to hang that knowledge on.
+
+---
+
 ## Step 5: Have a Claude Code session
 
 Just work normally in your project. The `Stop` hook automatically saves each session as a markdown transcript to:

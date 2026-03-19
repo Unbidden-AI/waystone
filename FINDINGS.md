@@ -993,3 +993,221 @@ Three retrieval-side improvements were implemented and benchmarked cumulatively 
 3. **FTS fact-text augmentation** (`retriever.py` — `retrieve_with_stats()`, `store.py` — `get_nodes_by_fact_text()`): After tag-based BFS seed selection, run a `fact LIKE '%keyword%'` search and merge new nodes into the seed pool. This catches nodes with sparse tags where the keyword appears in the fact text itself. Showed the clearest positive signal: `q_api_01` improved 25%→75%, `q_pipe_06` improved 60%→100%.
 
 **Overall conclusion**: The three changes together restored recall to 66% baseline (same as the pre-experiment baseline). Net gain is modest vs. extraction variance noise. The FTS augmentation (Change 3) is the most impactful change. The auto-tag numerics (Change 1) may be helping on specific questions but Qwen's extraction nondeterminism obscures the signal.
+
+---
+
+### Orchestrator System Prompt: Grounding vs. Usefulness Tradeoff
+
+The orchestrator's `static` system prompt in `config.yaml` controls how much the LLM supplements retrieved context with its own general knowledge.
+
+**The tradeoff:**
+
+- **Loose grounding** (current default): LLM can reason from general knowledge when retrieved context is incomplete. Better for working tasks (coding, debugging) where general knowledge adds value. Downside: partial answers (e.g., listing 2 of 8 relevant facts from context) because the model summarizes rather than enumerating.
+
+- **Strict grounding**: Adding an explicit rule like `"Only use information from the Project Knowledge section. If a fact is not in the provided context, say so explicitly — do not infer or reason from general knowledge."` forces full enumeration of retrieved facts and correct "I don't know" responses for gaps. Downside: model refuses to apply general engineering knowledge even when it would be helpful.
+
+**Practical recommendation:** Use two config profiles:
+- **Testing/recall validation**: strict grounding — verifies that retrieval surfaced the right facts, not that the LLM can invent them
+- **Development/coding work**: loose grounding — lets the model apply general knowledge on top of retrieved project context
+
+**Evidence**: Storage layer query returned 17 nodes but orchestrator listed only 2 decisions. Kafka question correctly returned "I don't know" when no selection-rationale nodes existed. Both behaviors stem from the same loose grounding — sometimes helpful, sometimes not.
+
+---
+
+### Orchestrator Manual Test Plan (2026-03-18)
+
+Four tests to run in sequence. Each validates a different aspect of the end-to-end orchestrate pipeline.
+
+#### Test 1 — Auth system transcript (in progress)
+**Goal:** Verify prior-state tagging fix works across a different domain with more numeric facts.
+```bash
+ctx extract auth_debug benchmarks/transcripts/project_auth_system.md --verify
+ctx orchestrate auth_debug
+```
+**Questions to ask:**
+- "What authentication mechanism was chosen?"
+- "Was OAuth ever considered?"
+- "What token expiry was chosen and why?"
+- "What was rejected during the auth design and why?"
+- "What rate limiting rules are in place?"
+
+**Success criteria:** Prior-state nodes (rejected options) are retrievable. Numeric facts (expiry times, rate limits) surface correctly.
+
+#### Test 2 — Multi-turn context accumulation
+**Goal:** Verify graph retrieval bridges across turns — facts established early in conversation are still retrievable later.
+**Setup:** Use pipe_debug or auth_debug. Have a short back-and-forth that introduces facts across 3–4 turns, then ask a question requiring synthesis of facts from turns 1 and 3.
+**Questions:** Introduce a constraint in turn 1, reference it implicitly in turn 4. Verify orchestrator recalls it without re-stating it.
+**Success criteria:** Facts don't fall out of context as conversation grows.
+
+#### Test 3 — Strict vs. loose grounding comparison
+**Goal:** Quantify the summarization loss caused by loose grounding.
+**Setup:** Add strict grounding rule to `config.yaml` static prompt:
+```
+Only use information from the Project Knowledge section. If a fact is not in
+the provided context, say so explicitly — do not infer or reason from general knowledge.
+```
+**Questions:** Re-ask the storage layer question ("What are all the decisions that affect the data pipeline's storage layer?"). Compare answer completeness vs. loose grounding run (which returned 2 of 17 retrieved nodes).
+**Success criteria:** Strict grounding surfaces all 17 retrieved nodes; loose grounding summarizes to ~2.
+
+#### Test 4 — `--decisions` targeted pass on auth_debug
+**Goal:** Verify the `--decisions` flag improves recall for auth-domain rationale facts (q_auth_04 was 0% without it).
+```bash
+ctx extract auth_debug benchmarks/transcripts/project_auth_system.md --verify --decisions
+```
+Then query: "Why was the chosen auth mechanism selected over alternatives?"
+**Success criteria:** Decision rationale (the "why" behind auth choices) surfaces that wasn't in the base `--verify` pass.
+
+---
+
+### Orchestrator Test Results (2026-03-18)
+
+#### Test 1 — Auth system (PASSED)
+All 5 questions answered correctly using the `auth_debug` project (extracted with `--verify`):
+- "What authentication mechanism was chosen?" → JWT-based stateless auth with short-lived access tokens (15 min) and refresh tokens (7 days)
+- "Was OAuth ever considered?" → Yes, OAuth 2.0 was considered but ruled out for the MVP due to implementation complexity
+- "What token expiry was chosen and why?" → 15-min access tokens (minimize breach window), 7-day refresh tokens (user convenience)
+- "What was rejected during the auth design and why?" → Session-based auth rejected (stateful, doesn't scale horizontally), OAuth rejected (too complex for MVP), bcrypt replaced by Argon2id for password hashing
+- "What rate limiting rules are in place?" → 5 failed attempts per 15 min triggers lockout; 100 req/min per API key
+
+Prior-state nodes (rejected options: session-based auth, OAuth) were retrievable via graph traversal. Numeric facts (expiry times, rate limits) surfaced correctly.
+
+#### Test 2 — Multi-turn context accumulation (PASSED)
+Multi-turn conversation with `pipe_debug` project. Facts introduced in turn 1 (Kafka chosen, 3 partitions per topic) were correctly recalled in turn 4 synthesis question ("What storage and messaging decisions were made, and how do they relate to each other?"). Orchestrator synthesized facts across turns without requiring re-statement. Graph retrieval bridges across conversation boundaries.
+
+#### Test 3 — Strict vs. loose grounding (PASSED — summarization loss confirmed)
+
+**Setup:** `STRICT GROUNDING MODE` rule added to `config.yaml` static system prompt. Query: "What are all the decisions that affect the data pipeline's storage layer?"
+
+**Results:**
+- **Loose grounding**: 2 decisions listed (Kafka chosen; GCS for cold storage). 17 nodes retrieved but LLM summarized rather than enumerated.
+- **Strict grounding**: 7 detailed bullet points — Delta Lake for ACID compliance, Parquet format, GCS for cold storage with tiered lifecycle, hot/warm/cold path separation, Kafka for streaming, schema evolution via Avro, S3 original plan superseded by GCS. Response was noticeably slower (~15–20s vs ~5s).
+
+**Conclusion:** Retrieval was working correctly in both cases. The 2-vs-17 gap was pure summarization loss in the LLM response layer, not a retrieval gap. Strict grounding forces full enumeration at the cost of response speed and reduced ability to apply general engineering reasoning.
+
+**Config reverted** to loose grounding after this test (strict grounding prompt removed).
+
+#### Test 4 — `--decisions` targeted pass on auth_debug (PASSED)
+
+**Setup:** Re-extracted `auth_debug` from `project_auth_system.md` with `--verify --decisions`. The `--decisions` pass added **6 new nodes, 13 new edges** (108 base → +10 verify → +6 decisions = 124 total).
+
+**Query:** "Why was the chosen authentication mechanism selected over alternatives?"
+
+**Result:** The orchestrator returned specific decision rationale:
+- Keycloak chosen because it supports self-hosting, satisfying a data-residency compliance requirement (user data must stay within company infrastructure)
+- Auth0 and Okta were explicitly rejected because they store user data outside company control, violating the compliance constraint
+
+**Conclusion:** The `--decisions` targeted pass surfaced the "why" behind auth choices — rationale that the base `--verify` pass missed. This matches the benchmark finding (q_auth_04 was 0% without `--decisions`). For decision-heavy transcripts where rationale is embedded in discussion flow rather than stated as conclusions, `--decisions` is the right supplemental pass.
+
+---
+
+## Synthesis Pass
+
+### What it is
+
+`ctx synthesize <project>` is a post-extraction maintenance command that runs an LLM pass over **existing graph nodes** (not a transcript). It looks for clusters of 3+ parallel facts about the same metric across different subjects and creates cross-cutting summary nodes — e.g., a single "Overall Recall Ranking" node that aggregates all model results.
+
+This solves the **survey query problem**: BFS retrieval with top_k=20 may explore only one model's cluster at a time. "Rank all models" needs a single node tagged with all model names for retrieval to surface the complete answer.
+
+### Observed behavior (2026-03-18)
+
+Run: `ctx synthesize ContextBroker --tags benchmark --tags recall --tags gpt-4o --tags nemotron`
+- 873 candidate nodes filtered from 8590 total
+- 22 summary nodes created, 769 edges
+- Produced "Overall Recall Ranking" node, per-preset comparison nodes, extraction time comparisons
+
+**Orchestrator chat after synthesis:**
+- First query ("What models were benchmarked?"): incomplete — returned 4 models, missed Qwen 3.5 9B, Nemotron, GPT OSS 20B. Synthesis node not retrieved on first attempt.
+- Second query ("can I have the complete list?"): returned 7 models correctly. The synthesis node surfaced on the follow-up when the query was more explicit.
+- GPT-4o still absent from the orchestrator's list despite a synthesis node containing it — likely tagged differently or ranked below top_k cutoff.
+
+**Observation:** Synthesis helps but doesn't guarantee first-query completeness. The orchestrator LLM may still summarize/truncate rather than enumerate all items in a retrieved node.
+
+### Synthesis timing options
+
+Three patterns for when to run synthesis:
+
+| Option | Command | Scope | Latency | Best for |
+|--------|---------|-------|---------|----------|
+| **A. Periodic maintenance** | `ctx synthesize` | Full graph (filtered by type/tags) | High (~30–120s) | After multiple sessions have accumulated; before demo/query-heavy sessions |
+| **B. Post-extract (full graph)** | `ctx extract --synthesize` | Full graph | Adds ~30–120s to extraction | When a new transcript is likely to complete a cluster already partially in the graph |
+| **C. Post-extract (recent only)** | `ctx extract --synthesize-recent` *(not yet implemented)* | `get_recent_nodes(limit=100)` | Low (~5–15s) | Lightweight per-session synthesis; won't catch cross-session patterns |
+
+**Current recommendation:** Use option A (periodic `ctx synthesize`) as the primary pattern. Run with `--tags` to target specific subject clusters when you know what you're looking for. Option B (`--synthesize` on extract) is viable when running full re-extractions. Option C is a potential future improvement.
+
+### Synthesis is additive
+
+Synthesis nodes accumulate — each run with different `--tags` adds new summary nodes without deleting previous ones. The existing fact-hash deduplication prevents exact duplicates. If you need to prune stale synthesis nodes, a future `ctx prune --synthesis` command can use the `source_transcript = "__synthesis__"` tag to identify them.
+
+---
+
+## Related Research Survey (2026-03-19)
+
+*Source: arXiv:2502.12110 (A-MEM, NeurIPS 2025) and related literature.*
+
+### A-MEM: Agentic Memory for LLM Agents (arXiv:2502.12110)
+
+A-MEM is a Zettelkasten-inspired memory system where the LLM agent autonomously manages memory operations via tool calls rather than a fixed pipeline. Core contribution: memory is *agent-driven*, not pipeline-driven. The agent decides when to store, retrieve, update, synthesize, or delete based on conversation context.
+
+**Key mechanisms:**
+
+- **ANIC indexing**: Attributes (what), Networks (connections), Insights (synthesis), Context (temporal). Each memory note contains all four fields.
+- **Dynamic linking**: When storing a new memory, the LLM searches existing memories for related content and creates bidirectional links on-the-fly — no predefined schema required.
+- **Agentic update loop**: After storing, the agent reviews existing memories that overlap and optionally consolidates or updates them. Memory is continuously curated rather than append-only.
+- **Retrieval**: Hybrid text + semantic search over the ANIC-indexed notes.
+
+**Result**: 8.6% average improvement over MemGPT and other baselines on LOCOMO benchmark (multi-session conversation tasks).
+
+**Key difference from CB**: A-MEM's LLM has full write authority over the graph at any time. CB's graph is currently written only by extraction pipelines (batch + hook); the orchestrator LLM reads but does not write.
+
+### Related Papers
+
+| Paper | Relevance to CB |
+|-------|----------------|
+| **iText2KG** (arXiv:2409.03284) | Cosine-similarity entity matching for KG construction — semantic dedup in `merge_extraction()` to catch near-duplicates that text-hash misses |
+| **Zep/Graphiti** (arXiv:2501.13956) | Bi-temporal fact validity (event time + ingestion time + validity windows) — principled replacement for `recency_decay`; facts expire rather than decay |
+| **HippoRAG** (arXiv:2405.14831) | Personalized PageRank on a knowledge graph for retrieval — potential replacement for BFS traversal with semantic re-ranking |
+| **RAPTOR** (arXiv:2401.18059) | Recursive abstractive tree construction — hierarchical synthesis that clusters leaf nodes into progressively abstract summaries; complements `ctx synthesize` |
+| **G-RAG** (arXiv:2405.16506) | Graph-aware reranker using GNN embeddings — reranks retrieved nodes based on graph topology, not just text similarity |
+| **MemoryBank** (arXiv:2305.10250) | Ebbinghaus forgetting curve applied to memory strength — time-decay model more nuanced than a binary superseded flag |
+| **GraphRAG** (arXiv:2404.16130) | Microsoft's community detection + hierarchical summarization — scales graph retrieval to very large corpora; relevant as CB node count grows past 10K |
+
+### Three Actionable Improvements for Context Broker
+
+#### #1 — Semantic dedup in `merge_extraction()` (iText2KG approach)
+
+**Problem:** Text-hash dedup catches exact duplicates but misses paraphrases. After multiple extraction passes, the graph accumulates near-duplicate nodes like "JWT tokens expire after 24 hours" and "Access tokens have a 24-hour TTL" that refer to the same fact.
+
+**Approach:** After inserting a new node, compute cosine similarity between its embedding and the embeddings of existing nodes with overlapping tags. If similarity exceeds a threshold (e.g. 0.92), merge by keeping the higher-confidence node and repointing edges.
+
+**Implementation scope:** `store.py` (`merge_extraction` or a new `semantic_dedup` method) + optional embedding cache. Requires an embedding model call per new node, so it adds latency — gate behind a `--semantic-dedup` flag.
+
+#### #2 — Bi-temporal fact validity (Zep/Graphiti approach)
+
+**Problem:** `recency_decay` applies a time-based score penalty but facts don't truly expire. A superseded fact remains retrievable at reduced confidence indefinitely, creating noise. There's also no distinction between "when this decision was made" and "when it was ingested into the graph."
+
+**Approach:** Add `valid_from` and `valid_until` fields to nodes. When a node is superseded, set `valid_until = now` on the old node. Retrieval filters `valid_until IS NULL OR valid_until > now` by default, making expired facts truly invisible unless explicitly requested.
+
+**Implementation scope:** Schema migration (two new columns), update `supersedes` logic in `merge_extraction` to set `valid_until`, update retrieval filter in `retriever.py`. Replaces `recency_decay` strategy.
+
+#### #3 — Agent-controlled memory write tools (A-MEM approach) ✅ IMPLEMENTED (2026-03-19)
+
+**Problem:** The orchestrator LLM can read graph context but cannot act on it — it cannot fix a wrong fact, merge near-duplicates it recognizes as equivalent, or create a synthesis note mid-conversation. All graph writes require out-of-band CLI commands.
+
+**Approach:** Expose graph write operations as orchestrator tool calls. The LLM can invoke these during a conversation turn when it identifies a graph maintenance opportunity (stale fact, merge candidate, useful synthesis).
+
+**Tools implemented:**
+
+| Tool | Description |
+|------|-------------|
+| `ctx_delete_node` | Delete a node and all its edges. Use when a fact is confirmed stale or incorrect. |
+| `ctx_update_node` | Update a node's fact text (+ optional confidence). Use to correct outdated facts in-place. |
+| `ctx_synthesize` | Create a new synthesis node linking to source nodes via `relates_to`. |
+
+**Files changed:**
+- `context_broker/store.py`: Added `delete_node()` and `update_node_fact()` methods
+- `orchestrator/tool_executor.py`: Added `_run_ctx_delete_node`, `_run_ctx_update_node`, `_run_ctx_synthesize` handlers; `_STORE_HANDLERS` dict; updated `execute_tool` and `execute_tools` to accept and thread `store` kwarg
+- `orchestrator/llm_adapter.py`: Added `ctx_delete_node`, `ctx_update_node`, `ctx_synthesize` to `_TOOL_SCHEMAS`
+- `orchestrator/conversation.py`: Saved `self._store` in `__init__`; passes `store=self._store` to `execute_tools`
+- `config.yaml`: Added three tools to `orchestrator.tools.enabled`
+
+**Design note:** Store-aware tools are dispatched through a separate `_STORE_HANDLERS` dict so they don't require changing the `(args, cfg)` signature of sandbox tools. If `store` is `None` (e.g., a session without a loaded project), the tool returns a descriptive error rather than crashing.

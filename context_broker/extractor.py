@@ -15,6 +15,7 @@ from .prompts import (
     build_extraction_prompt,
     build_incremental_prompt,
     build_reconcile_prompt,
+    build_synthesis_prompt,
     build_targeted_prompt,
     build_verification_prompt,
 )
@@ -288,6 +289,27 @@ async def extract_targeted(
     return assign_ids_incremental(extraction, existing_ids)
 
 
+async def synthesize_extraction(existing_nodes: list[dict], config: dict) -> dict:
+    """Create cross-cutting summary nodes from already-extracted graph nodes.
+
+    Unlike other passes, this takes existing nodes (not a transcript) as input
+    and produces synthetic summary nodes that aggregate parallel facts across
+    subjects — e.g. "Benchmark recall across all models: Gemini = 93%, ..."
+
+    Typical use: run after extraction is complete and nodes are merged into the
+    store, passing in all graph nodes so synthesis spans the full graph.
+
+    Returns:
+        dict with "nodes" (list[dict]) and "edges" (list[dict]) for new nodes.
+        Use assign_ids_incremental to resolve IDs before merging.
+    """
+    prompt = build_synthesis_prompt(existing_nodes)
+    content = await _call_llm(prompt, config)
+    extraction = parse_llm_response(content)
+    existing_ids = {n["id"] for n in existing_nodes}
+    return assign_ids_incremental(extraction, existing_ids)
+
+
 async def extract_turn(turn_text: str, existing_nodes: list[dict], config: dict) -> dict:
     """Extract structured facts from a single conversation turn with existing context.
 
@@ -390,7 +412,7 @@ def _extract_balanced_object(text: str, start: int) -> str | None:
     return None
 
 
-VALID_TYPES = {"decision", "constraint", "implementation", "question", "resolved", "preference", "lesson_learned"}
+VALID_TYPES = {"decision", "constraint", "implementation", "question", "resolved", "preference", "lesson_learned", "transition"}
 VALID_RELATIONS = {"depends_on", "flows_to", "relates_to", "supersedes"}
 
 # Some models return edges with "source"/"target" or "from_id"/"to_id" instead of "from"/"to"

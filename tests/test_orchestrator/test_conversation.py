@@ -395,12 +395,12 @@ async def test_llm_loop_max_tool_rounds(conversation):
     with patch("orchestrator.conversation.call_llm") as mock_llm, \
          patch("orchestrator.conversation.execute_tools") as mock_execute:
 
-        # Return tool calls on every round until we hit max
+        # Return tool calls on every round until we hit max (_MAX_TOOL_ROUNDS = 4)
         tool_call = ToolCall(id="tc1", name="bash", args={"command": "test"})
         mock_llm.side_effect = [
-            (None, [tool_call], "tool_calls"),  # Rounds 1-10
-        ] * 10 + [
-            ("Final answer after max rounds", None, "stop"),  # Round 11 (after max)
+            (None, [tool_call], "tool_calls"),  # Rounds 1-4
+        ] * 4 + [
+            ("Final answer after max rounds", None, "stop"),  # Round 5 (after max)
         ]
 
         tool_result = ToolResult(tool_call_id="tc1", name="bash", output="result", error=None)
@@ -414,7 +414,7 @@ async def test_llm_loop_max_tool_rounds(conversation):
         reply = await conversation._llm_loop("System prompt")
 
         # Should have made max_rounds + 1 call
-        assert mock_llm.call_count == 11
+        assert mock_llm.call_count == 5
         # Last call should have tools=None
         last_call = mock_llm.call_args_list[-1]
         assert last_call[1]["tools"] is None

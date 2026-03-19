@@ -17,6 +17,7 @@ from .extractor import (
     reconcile_group,
     score_extraction_quality,
     split_transcript_into_turns,
+    synthesize_extraction,
     verify_extraction,
 )
 from .retriever import bfs_collect, cluster_by_tags, extract_keywords, retrieve_with_stats, score_by_relevance
@@ -116,11 +117,12 @@ _MAX_FILE_BYTES = 50 * 1024 * 1024  # 50 MB hard limit
 @click.option("--decisions", is_flag=True, help="Run a targeted pass hunting for decision nodes and their rationale")
 @click.option("--questions", is_flag=True, help="Run a targeted pass hunting for open questions and unresolved items")
 @click.option("--constraints", is_flag=True, help="Run a targeted pass hunting for hard constraints and requirements")
+@click.option("--synthesize", is_flag=True, help="Run a synthesis pass after extraction: create cross-cutting summary nodes across all graph nodes")
 @click.option("--timeout", type=float, default=None, help="LLM timeout in seconds (overrides config)")
 @click.option("--chunk-size", type=int, default=None, metavar="CHARS",
               help="Max chars per LLM call (default: 20000 for Gemini; auto-applied when file > 20000 chars)")
 @click.pass_context
-def extract_cmd(ctx, project, transcript_file, verify, lessons, decisions, questions, constraints, timeout, chunk_size):
+def extract_cmd(ctx, project, transcript_file, verify, lessons, decisions, questions, constraints, synthesize, timeout, chunk_size):
     """Extract facts from a transcript and merge into the project graph."""
     config = _load_cfg(ctx.obj["config_path"])
 
@@ -238,9 +240,11 @@ def extract_cmd(ctx, project, transcript_file, verify, lessons, decisions, quest
             return nodes, edges
 
         t0 = time.monotonic()
-        raw_results = asyncio.run(
-            asyncio.gather(*[_extract_chunk(c, verify) for c in chunks], return_exceptions=True)
-        )
+        async def _run_all_chunks():
+            return await asyncio.gather(
+                *[_extract_chunk(c, verify) for c in chunks], return_exceptions=True
+            )
+        raw_results = asyncio.run(_run_all_chunks())
         elapsed = time.monotonic() - t0
 
         for i, r in enumerate(raw_results, 1):
@@ -273,6 +277,31 @@ def extract_cmd(ctx, project, transcript_file, verify, lessons, decisions, quest
     store.merge_extraction(nodes, edges)
     store.close()
 
+    if synthesize:
+        # Load ALL graph nodes (not just newly extracted) so synthesis spans full graph.
+        # Filter to types most likely to contain parallel metrics — avoids prompt bloat.
+        _SYNTHESIS_TYPES = {"decision", "implementation", "transition"}
+        store = GraphStore(db_path)
+        all_graph_nodes = store.get_all_nodes()
+        store.close()
+        candidate_nodes = [n for n in all_graph_nodes if n.get("type") in _SYNTHESIS_TYPES]
+        click.echo(f"  Running synthesis pass over {len(candidate_nodes)} candidate nodes ({len(all_graph_nodes)} total)...")
+        _SYNTHESIS_SOURCE = "__synthesis__"
+        try:
+            sr = asyncio.run(synthesize_extraction(candidate_nodes, config))
+            if sr["nodes"]:
+                click.echo(f"  +{len(sr['nodes'])} summary nodes, +{len(sr['edges'])} edges (--synthesize)")
+                for sn in sr["nodes"]:
+                    sn["source_transcript"] = _SYNTHESIS_SOURCE
+                    sn.setdefault("created_at", datetime.now(timezone.utc).isoformat())
+                store = GraphStore(db_path)
+                store.merge_extraction(sr["nodes"], sr["edges"])
+                store.close()
+            else:
+                click.echo("  No synthesis clusters found (need ≥3 parallel nodes on same metric).")
+        except Exception as e:
+            click.echo(f"  Synthesis pass failed (continuing): {e}", err=True)
+
     # Copy transcript to project's transcripts dir
     dest = get_project_dir(config, project) / "transcripts" / transcript_path.name
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -291,6 +320,84 @@ def extract_cmd(ctx, project, transcript_file, verify, lessons, decisions, quest
             f"  Warning: {quality['low_tag_nodes']} node(s) have < 4 tags — "
             "may be hard to retrieve. Run 'ctx show {project}' to inspect."
         )
+
+
+@cli.command("synthesize")
+@click.argument("project")
+@click.option("--dry-run", is_flag=True, help="Print synthesis nodes without storing them")
+@click.option("--max-nodes", type=int, default=1000, show_default=True,
+              help="Max nodes to send to LLM (sorted by confidence desc); use 0 for no limit")
+@click.option("--tags", multiple=True, metavar="TAG",
+              help="Only include nodes tagged with at least one of these tags (e.g. --tags benchmark --tags model)")
+@click.pass_context
+def synthesize_cmd(ctx, project, dry_run, max_nodes, tags):
+    """Create cross-cutting summary nodes from all nodes in the project graph.
+
+    Scans the full graph for clusters of parallel facts (3+ nodes sharing the
+    same metric/attribute across different subjects) and creates one comprehensive
+    summary node per cluster — tagged with all subject names so survey queries
+    like "rank all models" can find everything in one hop.
+    """
+    config = _load_cfg(ctx.obj["config_path"])
+    db_path = get_db_path(config, project)
+
+    if not db_path.parent.exists():
+        click.echo(f"Error: Project '{project}' not found.", err=True)
+        sys.exit(1)
+
+    store = GraphStore(db_path)
+    all_graph_nodes = store.get_all_nodes()
+    store.close()
+
+    # Filter to types most likely to contain parallel cross-subject metrics.
+    _SYNTHESIS_TYPES = {"decision", "implementation", "transition"}
+    candidate_nodes = [n for n in all_graph_nodes if n.get("type") in _SYNTHESIS_TYPES]
+
+    # Optional tag filter
+    if tags:
+        tag_set = set(t.lower() for t in tags)
+        candidate_nodes = [
+            n for n in candidate_nodes
+            if tag_set & {t.lower() for t in n.get("tags", [])}
+        ]
+
+    # Cap node count (sorted by confidence desc) to keep prompt manageable
+    candidate_nodes.sort(key=lambda n: n.get("confidence", 0.0), reverse=True)
+    if max_nodes and len(candidate_nodes) > max_nodes:
+        click.echo(f"  Capping to {max_nodes} highest-confidence nodes (of {len(candidate_nodes)} candidates).")
+        candidate_nodes = candidate_nodes[:max_nodes]
+
+    click.echo(
+        f"Running synthesis over {len(candidate_nodes)} candidate nodes "
+        f"({len(all_graph_nodes)} total) in '{project}'..."
+    )
+    try:
+        sr = asyncio.run(synthesize_extraction(candidate_nodes, config))
+    except Exception as e:
+        click.echo(f"Error: Synthesis failed: {e}", err=True)
+        sys.exit(1)
+
+    if not sr["nodes"]:
+        click.echo("No synthesis clusters found (need ≥3 parallel nodes on same metric).")
+        return
+
+    click.echo(f"Found {len(sr['nodes'])} summary node(s), {len(sr['edges'])} edge(s):")
+    for sn in sr["nodes"]:
+        click.echo(f"  [{sn['type']}] {sn['fact'][:100]}")
+
+    if dry_run:
+        click.echo("(dry-run: not stored)")
+        return
+
+    _SYNTHESIS_SOURCE = "__synthesis__"
+    for sn in sr["nodes"]:
+        sn["source_transcript"] = _SYNTHESIS_SOURCE
+        sn.setdefault("created_at", datetime.now(timezone.utc).isoformat())
+
+    store = GraphStore(db_path)
+    store.merge_extraction(sr["nodes"], sr["edges"])
+    store.close()
+    click.echo(f"Stored {len(sr['nodes'])} summary node(s).")
 
 
 @cli.command()
@@ -595,6 +702,83 @@ def reconcile_cmd(ctx, project, dry_run, max_cluster_size):
         click.echo(f"\nWrote {total_written} supersedes edge(s) to '{project}' graph.")
         if total_written:
             click.echo("Run 'ctx show' to inspect, or 'ctx query' to see the pruned results.")
+
+
+@cli.command("prune")
+@click.argument("project")
+@click.option(
+    "--older-than",
+    "older_than_days",
+    default=None,
+    type=int,
+    help="Remove nodes older than N days",
+)
+@click.option(
+    "--confidence-below",
+    "confidence_below",
+    default=None,
+    type=float,
+    help="Remove nodes with confidence below this threshold",
+)
+@click.option(
+    "--source",
+    "source_pattern",
+    default=None,
+    help="Remove nodes whose source_transcript contains this substring (e.g. 'live')",
+)
+@click.option(
+    "--execute",
+    is_flag=True,
+    help="Actually delete matched nodes (default: preview only)",
+)
+@click.pass_context
+def prune_cmd(ctx, project, older_than_days, confidence_below, source_pattern, execute):
+    """Preview or remove graph nodes matching the given criteria.
+
+    Runs in preview mode by default — prints what would be removed.
+    Use --execute to actually delete. All criteria are ANDed.
+
+    Examples:
+
+    \b
+      ctx prune myproject --source live
+      ctx prune myproject --older-than 90 --confidence-below 0.5
+      ctx prune myproject --source live --execute
+    """
+    if older_than_days is None and confidence_below is None and source_pattern is None:
+        click.echo("Error: at least one filter (--older-than, --confidence-below, --source) is required.", err=True)
+        ctx.exit(1)
+
+    cfg = _load_cfg(ctx.obj["config_path"])
+    db_path = get_db_path(cfg, project)
+    store = GraphStore(db_path)
+
+    ids = store.prune_nodes(
+        older_than_days=older_than_days,
+        confidence_below=confidence_below,
+        source_pattern=source_pattern,
+        dry_run=not execute,
+    )
+
+    if not ids:
+        store.close()
+        click.echo("No nodes matched the given criteria.")
+        return
+
+    if not execute:
+        click.echo(f"Would remove {len(ids)} node(s):")
+        for nid in ids:
+            row = store.conn.execute(
+                "SELECT fact, confidence, source_transcript FROM nodes WHERE id = ?", (nid,)
+            ).fetchone()
+            if row:
+                fact_preview = (row["fact"][:77] + "...") if len(row["fact"]) > 80 else row["fact"]
+                click.echo(f"  [{nid}] (conf={row['confidence']:.2f}, src={row['source_transcript']}) {fact_preview}")
+        click.echo("\nRun with --execute to delete.")
+    else:
+        click.echo(f"Deleted {len(ids)} node(s) from '{project}'.")
+
+    store.close()
 
 
 @cli.command("hook-init")

@@ -131,6 +131,81 @@ _TOOL_SCHEMAS: dict[str, dict] = {
             },
         },
     },
+    "ctx_delete_node": {
+        "type": "function",
+        "function": {
+            "name": "ctx_delete_node",
+            "description": (
+                "Delete a node and all its edges from the project knowledge graph. "
+                "Use when a fact is confirmed stale, incorrect, or superseded and "
+                "should not appear in future context retrievals."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "node_id": {"type": "string", "description": "ID of the node to delete (e.g. 'n_1a2b3c4d')."},
+                },
+                "required": ["node_id"],
+            },
+        },
+    },
+    "ctx_update_node": {
+        "type": "function",
+        "function": {
+            "name": "ctx_update_node",
+            "description": (
+                "Update the fact text of an existing node in the project knowledge graph. "
+                "Use to correct outdated or inaccurate facts rather than deleting and re-adding."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "node_id": {"type": "string", "description": "ID of the node to update."},
+                    "new_fact": {"type": "string", "description": "Replacement fact text."},
+                    "new_confidence": {
+                        "type": "number",
+                        "description": "Optional updated confidence score (0.0–1.0).",
+                    },
+                },
+                "required": ["node_id", "new_fact"],
+            },
+        },
+    },
+    "ctx_synthesize": {
+        "type": "function",
+        "function": {
+            "name": "ctx_synthesize",
+            "description": (
+                "Create a new synthesis node that summarizes or consolidates multiple existing nodes. "
+                "Links the synthesis node to source nodes via 'relates_to' edges."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "summary_fact": {"type": "string", "description": "The synthesized fact text."},
+                    "node_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "IDs of the source nodes being summarized.",
+                    },
+                    "node_type": {
+                        "type": "string",
+                        "description": "Node type for the synthesis node (default: 'decision').",
+                    },
+                    "tags": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Tags to attach to the synthesis node.",
+                    },
+                    "confidence": {
+                        "type": "number",
+                        "description": "Confidence score for the synthesis node (default: 0.9).",
+                    },
+                },
+                "required": ["summary_fact", "node_ids"],
+            },
+        },
+    },
 }
 
 
