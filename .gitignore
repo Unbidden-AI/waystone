@@ -7,3 +7,7 @@ build/
 .venv/
 .env
 projects/
+benchmarks/results/
+.DS_Store
+.context-broker
+.claude/
