@@ -82,7 +82,12 @@ class SystemPromptBuilder:
     # Public API
     # ------------------------------------------------------------------
 
-    def build(self, context_markdown: str = "", task_description: str = "") -> str:
+    def build(
+        self,
+        context_markdown: str = "",
+        task_description: str = "",
+        recent_turns: str = "",
+    ) -> str:
         """Assemble and return the full system prompt string.
 
         Parameters
@@ -92,6 +97,10 @@ class SystemPromptBuilder:
             May be empty or None — treated as no context available.
         task_description:
             The current user task (used only for logging).
+        recent_turns:
+            Verbatim recent turn pairs from ``ContextManager.get_recent_turns_markdown()``.
+            Appended after graph context as a "hot cache" to bridge the extraction lag
+            from async background compaction.  May be empty.
 
         Returns
         -------
@@ -111,6 +120,13 @@ class SystemPromptBuilder:
                 "SystemPromptBuilder: task=%r ctx_tokens=%d",
                 (task_description or "")[:80],
                 estimate_tokens(ctx),
+            )
+
+        if recent_turns and recent_turns.strip():
+            parts.append(recent_turns.strip() + "\n---\n")
+            log.debug(
+                "SystemPromptBuilder: recent_turns_tokens=%d",
+                estimate_tokens(recent_turns),
             )
 
         prompt = "\n\n".join(parts)

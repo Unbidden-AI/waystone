@@ -43,7 +43,7 @@ def minimal_cfg(tmp_path):
             "context": {
                 "window_size": 20,
                 "token_budget": 8000,
-                "compaction_batch": 5,
+                "compaction_batch": 20,
                 "idle_seconds_before_compact": 9999,
                 "token_trigger_ratio": 0.8,
                 "context_token_limit": 2000,

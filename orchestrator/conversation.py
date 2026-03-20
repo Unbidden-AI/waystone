@@ -100,18 +100,20 @@ class Conversation:
         """
         # 1. Retrieve graph context keyed to this message
         context_md = self._context_mgr.retrieve_context(user_message)
+        recent_turns = self._context_mgr.get_recent_turns_markdown()
 
         # 2. Build system prompt
         system = self._prompt_builder.build(
             context_markdown=context_md,
             task_description=user_message,
+            recent_turns=recent_turns,
         )
 
         # 3. Add user message to history
         user_msg = Message(role="user", content=user_message)
         self._context_mgr.add_message(user_msg)
 
-        # 4. Proactive compaction before calling the LLM
+        # 4. Proactive compaction — history is pruned synchronously; extraction runs in background
         compaction = await self._context_mgr.compact_if_needed()
         if compaction:
             log.info(
@@ -140,18 +142,20 @@ class Conversation:
         """
         # 1. Retrieve graph context
         context_md = self._context_mgr.retrieve_context(user_message)
+        recent_turns = self._context_mgr.get_recent_turns_markdown()
 
         # 2. Build system prompt
         system = self._prompt_builder.build(
             context_markdown=context_md,
             task_description=user_message,
+            recent_turns=recent_turns,
         )
 
         # 3. Add user message to history
         user_msg = Message(role="user", content=user_message)
         self._context_mgr.add_message(user_msg)
 
-        # 4. Proactive compaction
+        # 4. Proactive compaction — history pruned synchronously; extraction runs in background
         compaction = await self._context_mgr.compact_if_needed()
         if compaction:
             log.info(
