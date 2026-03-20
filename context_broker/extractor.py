@@ -651,6 +651,95 @@ def score_extraction_quality(nodes: list[dict], edges: list[dict], transcript_te
     }
 
 
+def split_into_chunks(text: str, max_chars: int) -> list[str]:
+    """Split text into chunks at paragraph boundaries, each ≤ max_chars.
+
+    Splits on double-newlines so chunks never cut through a paragraph.
+    If a single paragraph exceeds max_chars it is emitted as its own chunk.
+    """
+    paragraphs = text.split("\n\n")
+    chunks: list[str] = []
+    current: list[str] = []
+    current_len = 0
+    for para in paragraphs:
+        para_len = len(para) + 2  # +2 for the "\n\n" separator
+        if current and current_len + para_len > max_chars:
+            chunks.append("\n\n".join(current))
+            current = [para]
+            current_len = para_len
+        else:
+            current.append(para)
+            current_len += para_len
+    if current:
+        chunks.append("\n\n".join(current))
+    return chunks
+
+
+async def extract_chunked(
+    text: str,
+    config: dict,
+    chunk_size: int,
+    *,
+    verify: bool = False,
+) -> dict:
+    """Extract from a large transcript by splitting into chunks and merging results.
+
+    Each chunk is extracted independently (in parallel). Nodes and edges from
+    all chunks are combined; IDs are already unique UUIDs so there are no
+    collisions. Edges can only connect nodes within the same chunk (the LLM
+    only sees one chunk at a time).
+
+    Returns:
+        dict with "nodes" (list[dict]) and "edges" (list[dict])
+    """
+    chunks = split_into_chunks(text, chunk_size)
+    if len(chunks) == 1:
+        result = await extract(chunks[0], config)
+        if verify:
+            vr = await verify_extraction(chunks[0], result["nodes"], config)
+            result = {
+                "nodes": result["nodes"] + vr["nodes"],
+                "edges": result["edges"] + vr["edges"],
+            }
+        return result
+
+    log.info("extract_chunked: splitting %d chars into %d chunks of ≤%d", len(text), len(chunks), chunk_size)
+
+    async def _one_chunk(chunk_text: str) -> tuple[list, list]:
+        r = await extract(chunk_text, config)
+        nodes, edges = r["nodes"], r["edges"]
+        if verify:
+            try:
+                vr = await verify_extraction(chunk_text, nodes, config)
+                nodes = nodes + vr["nodes"]
+                edges = edges + vr["edges"]
+            except Exception as exc:
+                log.warning("verify_extraction failed for chunk (continuing): %s", exc)
+        return nodes, edges
+
+    results = await asyncio.gather(*[_one_chunk(c) for c in chunks], return_exceptions=True)
+
+    all_nodes: list[dict] = []
+    all_edges: list[dict] = []
+    failed = 0
+    for i, r in enumerate(results):
+        if isinstance(r, BaseException):
+            log.error("Chunk %d/%d failed: %s", i + 1, len(chunks), r)
+            failed += 1
+        else:
+            nodes, edges = r
+            all_nodes.extend(nodes)
+            all_edges.extend(edges)
+
+    if failed == len(chunks):
+        raise RuntimeError(f"All {len(chunks)} extraction chunks failed")
+    if failed:
+        log.warning("%d/%d chunks failed; continuing with partial extraction", failed, len(chunks))
+
+    log.info("extract_chunked: %d total nodes, %d total edges from %d chunks", len(all_nodes), len(all_edges), len(chunks))
+    return {"nodes": all_nodes, "edges": all_edges}
+
+
 def split_transcript_into_turns(text: str, turn_size: int = 2) -> list[str]:
     """Split a transcript into turns (groups of turn_size messages).
 

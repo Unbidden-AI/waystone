@@ -4,10 +4,16 @@ import re
 
 import pytest
 
+from unittest.mock import AsyncMock, patch
+
+import pytest
+
 from context_broker.extractor import (
     assign_ids,
     assign_ids_incremental,
+    extract_chunked,
     parse_llm_response,
+    split_into_chunks,
     split_transcript_into_turns,
 )
 
@@ -257,3 +263,145 @@ class TestSplitTranscriptIntoTurns:
         # Plain text with no **Speaker**: pattern — treated as one chunk
         turns = split_transcript_into_turns("Just some text without speakers.", turn_size=2)
         assert len(turns) == 1
+
+
+class TestSplitIntoChunks:
+    def test_single_chunk_when_under_limit(self):
+        text = "Hello world.\n\nSecond paragraph."
+        chunks = split_into_chunks(text, max_chars=1000)
+        assert len(chunks) == 1
+        assert chunks[0] == text
+
+    def test_splits_at_paragraph_boundary(self):
+        # Two paragraphs of ~20 chars each; limit of 25 forces a split
+        a = "A" * 20
+        b = "B" * 20
+        text = f"{a}\n\n{b}"
+        chunks = split_into_chunks(text, max_chars=25)
+        assert len(chunks) == 2
+        assert a in chunks[0]
+        assert b in chunks[1]
+
+    def test_respects_max_chars(self):
+        # Every chunk should be ≤ max_chars (except oversized single paragraphs)
+        paras = ["x" * 50 for _ in range(6)]
+        text = "\n\n".join(paras)
+        chunks = split_into_chunks(text, max_chars=110)
+        for chunk in chunks:
+            assert len(chunk) <= 110
+
+    def test_oversized_single_paragraph_emitted_alone(self):
+        # A paragraph larger than max_chars must still be returned
+        big = "Z" * 500
+        chunks = split_into_chunks(big, max_chars=100)
+        assert len(chunks) == 1
+        assert chunks[0] == big
+
+    def test_empty_string_returns_empty_list(self):
+        chunks = split_into_chunks("", max_chars=100)
+        # Empty string splits into one empty string (falsy but present) or zero chunks
+        # The implementation returns [""] when there is one empty paragraph
+        assert chunks == [""] or chunks == []
+
+    def test_multiple_chunks_cover_all_content(self):
+        paras = [f"Para {i}: " + "x" * 30 for i in range(5)]
+        text = "\n\n".join(paras)
+        chunks = split_into_chunks(text, max_chars=50)
+        rejoined = "\n\n".join(chunks)
+        assert rejoined == text
+
+
+class TestExtractChunked:
+    """Tests for extract_chunked() — parallel multi-chunk extraction."""
+
+    def _fake_extract_result(self, tag: str = "a"):
+        return {
+            "nodes": [
+                {"id": f"n_{tag}000000", "fact": f"Fact {tag}", "type": "decision",
+                 "confidence": 0.9, "source_message_index": 0, "tags": [tag], "supersedes": []}
+            ],
+            "edges": [],
+        }
+
+    @pytest.mark.asyncio
+    async def test_single_chunk_calls_extract_once(self):
+        text = "Short text — fits in one chunk."
+        config = {}
+        mock_result = self._fake_extract_result("s")
+
+        with patch("context_broker.extractor.extract", new=AsyncMock(return_value=mock_result)) as mock_ext:
+            result = await extract_chunked(text, config, chunk_size=10_000)
+
+        mock_ext.assert_called_once_with(text, config)
+        assert result["nodes"] == mock_result["nodes"]
+
+    @pytest.mark.asyncio
+    async def test_multi_chunk_runs_in_parallel(self):
+        # Build a text large enough to split into 2 chunks at chunk_size=50
+        para1 = "A" * 40
+        para2 = "B" * 40
+        text = f"{para1}\n\n{para2}"
+        config = {}
+
+        call_args: list[str] = []
+
+        async def fake_extract(chunk_text, cfg):
+            call_args.append(chunk_text)
+            tag = "a" if "A" in chunk_text else "b"
+            return self._fake_extract_result(tag)
+
+        with patch("context_broker.extractor.extract", new=fake_extract):
+            result = await extract_chunked(text, config, chunk_size=50)
+
+        assert len(call_args) == 2
+        assert len(result["nodes"]) == 2
+
+    @pytest.mark.asyncio
+    async def test_verify_passed_through_single_chunk(self):
+        text = "Short text."
+        config = {}
+        extract_result = self._fake_extract_result("x")
+        verify_result = self._fake_extract_result("v")
+
+        with patch("context_broker.extractor.extract", new=AsyncMock(return_value=extract_result)), \
+             patch("context_broker.extractor.verify_extraction", new=AsyncMock(return_value=verify_result)) as mock_verify:
+            result = await extract_chunked(text, config, chunk_size=10_000, verify=True)
+
+        mock_verify.assert_called_once()
+        assert len(result["nodes"]) == 2  # one from extract + one from verify
+
+    @pytest.mark.asyncio
+    async def test_all_chunks_failed_raises_runtime_error(self):
+        para1 = "A" * 40
+        para2 = "B" * 40
+        text = f"{para1}\n\n{para2}"
+        config = {}
+
+        async def always_fail(chunk_text, cfg):
+            raise ValueError("LLM error")
+
+        with patch("context_broker.extractor.extract", new=always_fail):
+            with pytest.raises(RuntimeError, match="All .* extraction chunks failed"):
+                await extract_chunked(text, config, chunk_size=50)
+
+    @pytest.mark.asyncio
+    async def test_partial_failure_returns_successful_chunks(self):
+        para1 = "A" * 40
+        para2 = "B" * 40
+        text = f"{para1}\n\n{para2}"
+        config = {}
+        call_count = 0
+
+        async def sometimes_fail(chunk_text, cfg):
+            nonlocal call_count
+            call_count += 1
+            if "A" in chunk_text:
+                raise ValueError("first chunk failed")
+            return self._fake_extract_result("b")
+
+        with patch("context_broker.extractor.extract", new=sometimes_fail):
+            result = await extract_chunked(text, config, chunk_size=50)
+
+        assert call_count == 2
+        assert len(result["nodes"]) == 1
+        assert result["nodes"][0]["tags"] == ["b"]

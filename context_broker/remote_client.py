@@ -109,6 +109,7 @@ class RemoteContextBroker:
         *,
         source_name: str = "api",
         verify: bool = False,
+        chunk_size: int | None = None,
     ) -> dict:
         """POST /v1/projects/{project}/extract.
 
@@ -118,7 +119,12 @@ class RemoteContextBroker:
         async with self._client() as c:
             r = await c.post(
                 f"{self.base_url}/v1/projects/{project}/extract",
-                json={"text": text, "source_name": source_name, "verify": verify},
+                json={
+                    "text": text,
+                    "source_name": source_name,
+                    "verify": verify,
+                    **({"chunk_size": chunk_size} if chunk_size else {}),
+                },
             )
             r.raise_for_status()
             return r.json()

@@ -16,6 +16,7 @@ from .extractor import (
     extract_turn,
     reconcile_group,
     score_extraction_quality,
+    split_into_chunks,
     split_transcript_into_turns,
     synthesize_extraction,
     verify_extraction,
@@ -86,25 +87,6 @@ def init(ctx, project):
     click.echo(f"Initialized project '{project}' at {project_dir}")
 
 
-def _split_at_paragraphs(text: str, max_chars: int) -> list[str]:
-    """Split text into chunks at paragraph boundaries, each at most max_chars."""
-    paragraphs = text.split("\n\n")
-    chunks = []
-    current: list[str] = []
-    current_len = 0
-    for para in paragraphs:
-        para_len = len(para) + 2  # account for the "\n\n" separator
-        if current and current_len + para_len > max_chars:
-            chunks.append("\n\n".join(current))
-            current = [para]
-            current_len = para_len
-        else:
-            current.append(para)
-            current_len += para_len
-    if current:
-        chunks.append("\n\n".join(current))
-    return chunks
-
 
 _MAX_FILE_BYTES = 50 * 1024 * 1024  # 50 MB hard limit
 
@@ -153,7 +135,7 @@ def extract_cmd(ctx, project, transcript_file, verify, lessons, decisions, quest
     _AUTO_CHUNK = 20_000
     effective_chunk_size = chunk_size or (_AUTO_CHUNK if len(transcript_text) > _AUTO_CHUNK else None)
     if effective_chunk_size:
-        chunks = _split_at_paragraphs(transcript_text, effective_chunk_size)
+        chunks = split_into_chunks(transcript_text, effective_chunk_size)
     else:
         chunks = [transcript_text]
 
@@ -1403,7 +1385,7 @@ def onboard_cmd(ctx, project, limit, verify, chunk_size, timeout):
             click.echo("SKIP (empty after conversion)")
             continue
 
-        chunks = _split_at_paragraphs(text, chunk_size) if len(text) > chunk_size else [text]
+        chunks = split_into_chunks(text, chunk_size) if len(text) > chunk_size else [text]
         chunk_label = f" ({len(chunks)} chunks)" if len(chunks) > 1 else ""
         click.echo(f"converting{chunk_label}... ", nl=False)
 
@@ -1536,7 +1518,7 @@ def import_sessions_cmd(ctx, project, session_files, verify, chunk_size, timeout
             click.echo("SKIP (empty)")
             continue
 
-        chunks = _split_at_paragraphs(text, chunk_size) if len(text) > chunk_size else [text]
+        chunks = split_into_chunks(text, chunk_size) if len(text) > chunk_size else [text]
         session_nodes: list[dict] = []
         session_edges: list[dict] = []
         source_name = f"claude_session:{path.stem}"

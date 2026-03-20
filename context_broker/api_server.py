@@ -26,7 +26,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
 from .config import get_db_path, load_config
-from .extractor import extract as _extract, score_extraction_quality, verify_extraction
+from .extractor import extract as _extract, extract_chunked as _extract_chunked, score_extraction_quality, verify_extraction
 from .retriever import retrieve_with_stats
 from .store import GraphStore
 
@@ -82,10 +82,15 @@ def _open_store(config: dict, project: str, must_exist: bool = True) -> GraphSto
 # Request / Response models
 # ---------------------------------------------------------------------------
 
+_AUTO_CHUNK_THRESHOLD = 20_000   # chars; texts above this are auto-chunked
+_AUTO_CHUNK_SIZE = 20_000        # target chunk size when auto-chunking
+
+
 class ExtractRequest(BaseModel):
     text: str
     source_name: str = "api"
     verify: bool = False
+    chunk_size: int | None = None  # set to split large texts; None = auto
 
 
 class QueryRequest(BaseModel):
@@ -220,17 +225,30 @@ async def extract_project(project: str, req: ExtractRequest, _: AuthDep) -> Extr
             detail=f"Project '{project}' not found. Create it first: POST /v1/projects/{project}",
         )
 
-    result = await _extract(req.text, config)
-    nodes = result["nodes"]
-    edges = result["edges"]
+    # Determine effective chunk size:
+    #   - explicit chunk_size param overrides everything
+    #   - auto-chunk texts over threshold at the default chunk size
+    #   - otherwise single-pass
+    effective_chunk = req.chunk_size
+    if effective_chunk is None and len(req.text) > _AUTO_CHUNK_THRESHOLD:
+        effective_chunk = _AUTO_CHUNK_SIZE
 
-    if req.verify:
-        try:
-            v = await verify_extraction(req.text, nodes, config)
-            nodes = nodes + v["nodes"]
-            edges = edges + v["edges"]
-        except Exception:
-            pass  # verification failure is non-fatal
+    if effective_chunk:
+        result = await _extract_chunked(req.text, config, effective_chunk, verify=req.verify)
+        nodes = result["nodes"]
+        edges = result["edges"]
+    else:
+        result = await _extract(req.text, config)
+        nodes = result["nodes"]
+        edges = result["edges"]
+
+        if req.verify:
+            try:
+                v = await verify_extraction(req.text, nodes, config)
+                nodes = nodes + v["nodes"]
+                edges = edges + v["edges"]
+            except Exception:
+                pass  # verification failure is non-fatal
 
     now = datetime.now(timezone.utc).isoformat()
     for node in nodes:
