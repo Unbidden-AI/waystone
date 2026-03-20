@@ -1,5 +1,8 @@
 """Configuration loading for Context Broker."""
 
+from __future__ import annotations
+
+import os
 from pathlib import Path
 
 import yaml
@@ -69,6 +72,42 @@ def get_project_dir(config: dict, project_name: str) -> Path:
 def get_db_path(config: dict, project_name: str) -> Path:
     """Resolve the SQLite database path for a given project."""
     return get_project_dir(config, project_name) / "context.db"
+
+
+# ---------------------------------------------------------------------------
+# Remote API helpers
+# ---------------------------------------------------------------------------
+
+def is_remote(config: dict) -> bool:
+    """Return True when config points to a hosted API instead of local SQLite."""
+    return bool(config.get("api_url"))
+
+
+def get_api_url(config: dict) -> str:
+    """Return the remote API base URL (raises if not configured)."""
+    url = config.get("api_url")
+    if not url:
+        raise ValueError(
+            "No api_url in config. Add 'api_url: https://...' to config.yaml "
+            "to use the hosted API."
+        )
+    return url.rstrip("/")
+
+
+def get_api_key(config: dict) -> str | None:
+    """Return API key from config or CB_API_KEY env var."""
+    return config.get("api_key") or os.environ.get("CB_API_KEY") or None
+
+
+def make_remote_client(config: dict):
+    """Build a RemoteContextBroker from config."""
+    from .remote_client import RemoteContextBroker  # local import to avoid circular dep
+
+    return RemoteContextBroker(
+        api_url=get_api_url(config),
+        api_key=get_api_key(config),
+        timeout=config.get("llm", {}).get("timeout", 120.0),
+    )
 
 
 def _merge(defaults: dict, overrides: dict) -> dict:

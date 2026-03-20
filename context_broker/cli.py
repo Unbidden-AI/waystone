@@ -1156,6 +1156,40 @@ def last_context_cmd(ctx, raw):
         click.echo_via_pager(content)
 
 
+@cli.command("serve")
+@click.option("--host", default="0.0.0.0", show_default=True, help="Bind address")
+@click.option("--port", default=8000, show_default=True, type=int, help="Listen port")
+@click.option("--reload", is_flag=True, help="Auto-reload on code changes (dev mode)")
+@click.pass_context
+def serve_cmd(ctx, host, port, reload):
+    """Start the Context Broker HTTP API server.
+
+    \b
+    Clients configure api_url in config.yaml to route requests here:
+        api_url: http://localhost:8000
+        api_key: my-secret   # optional; set CB_API_KEY on server to require it
+
+    Requires the 'api' extra:  pip install 'context-broker[api]'
+    """
+    try:
+        import uvicorn
+    except ImportError:
+        click.echo(
+            "Error: uvicorn not installed.\n"
+            "Install with:  pip install 'context-broker[api]'",
+            err=True,
+        )
+        sys.exit(1)
+
+    click.echo(f"Context Broker API → http://{host}:{port}  (docs: /docs)")
+    uvicorn.run(
+        "context_broker.api_server:app",
+        host=host,
+        port=port,
+        reload=reload,
+    )
+
+
 @cli.command("mcp-serve")
 @click.option(
     "--transport",

@@ -17,7 +17,7 @@ from typing import Annotated
 
 from mcp.server.fastmcp import FastMCP
 
-from .config import get_db_path, load_config
+from .config import get_db_path, is_remote, load_config, make_remote_client
 from .extractor import extract, score_extraction_quality, verify_extraction
 from .retriever import retrieve_with_stats
 from .store import GraphStore
@@ -85,6 +85,12 @@ def context_broker_query(
     project_name = _resolve_project(project, cwd)  # raises ValueError → MCP error response
 
     config = _load_config()
+
+    if is_remote(config):
+        client = make_remote_client(config)
+        result = asyncio.run(client.query(project_name, task, hops=hops, top_k=top_k))
+        return result["markdown"] or f"(graph is empty for '{project_name}')"
+
     db_path = get_db_path(config, project_name)
 
     if not db_path.exists():
@@ -136,6 +142,19 @@ def context_broker_extract(
     project_name = _resolve_project(project, cwd)
 
     config = _load_config()
+
+    if is_remote(config):
+        client = make_remote_client(config)
+        result = asyncio.run(
+            client.extract(project_name, text, source_name=source_name, verify=verify)
+        )
+        return (
+            f"Extracted {result['nodes_extracted']} nodes, {result['edges_extracted']} edges "
+            f"into '{project_name}'.\n"
+            f"Density: {result['nodes_per_1k_chars']}/1kc  "
+            f"Avg tags: {result['avg_tags_per_node']}"
+        )
+
     db_path = get_db_path(config, project_name)
 
     if not db_path.parent.exists():
@@ -190,6 +209,20 @@ def context_broker_stats(
     project_name = _resolve_project(project, cwd)
 
     config = _load_config()
+
+    if is_remote(config):
+        client = make_remote_client(config)
+        stats = asyncio.run(client.get_stats(project_name))
+        lines = [
+            f"Project: {project_name}",
+            f"Nodes: {stats['node_count']}  Edges: {stats['edge_count']}",
+        ]
+        if stats.get("type_counts"):
+            lines.append("By type: " + ", ".join(
+                f"{t}={c}" for t, c in sorted(stats["type_counts"].items())
+            ))
+        return "\n".join(lines)
+
     db_path = get_db_path(config, project_name)
 
     if not db_path.exists():
@@ -214,6 +247,17 @@ def context_broker_stats(
 def context_broker_list_projects() -> str:
     """List all available Context Broker projects on this machine."""
     config = _load_config()
+
+    if is_remote(config):
+        client = make_remote_client(config)
+        projects = asyncio.run(client.list_projects())
+        if not projects:
+            return "No projects found on remote server."
+        lines = [f"Available projects ({len(projects)}):"]
+        for p in projects:
+            lines.append(f"  {p['name']}  ({p['node_count']} nodes, {p['edge_count']} edges)")
+        return "\n".join(lines)
+
     projects_dir = Path(config.get("projects_dir", Path.home() / ".context-broker" / "projects"))
 
     if not projects_dir.exists():

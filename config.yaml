@@ -30,9 +30,9 @@ orchestrator:
     log_level: "WARNING"  # suppress LiteLLM verbose output
 
   context:
-    window_size: 20              # max turns before compaction triggered
+    window_size: 20              # kept for reference; depth trigger now fires at compaction_batch
     token_budget: 8000           # max tokens per API call (system + history + context)
-    compaction_batch: 10         # number of oldest messages to compact at once
+    compaction_batch: 3          # oldest N messages to extract+prune per compaction pass
     idle_seconds_before_compact: 600
     extraction_buffer:
       min_turns: 3

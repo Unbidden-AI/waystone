@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Generation Quality Eval — tests whether retrieved context improves LLM answers.
+"""Generation Quality Eval — three-way comparison of LLM answer quality.
 
-Extracts a transcript into a temp project, then for each selected question:
-  1. Retrieves context using the normal retrieval pipeline
-  2. Asks the LLM the question WITH context
-  3. Asks the LLM the same question WITHOUT context
-  4. Grades both answers against ground_truth_elements
+Extracts a transcript into a temp project, then for each selected question asks
+the LLM three ways and grades each answer against ground_truth_elements:
+  1. CB context   — CB-retrieved graph subgraph (~1-2K tokens)
+  2. Full transcript — raw transcript stuffed into system prompt (naive upper bound)
+  3. No context   — parametric knowledge only (lower bound)
 
 Usage:
     python benchmarks/generation_eval.py
@@ -13,6 +13,7 @@ Usage:
     python benchmarks/generation_eval.py --transcript project_api_design --questions q_api_01 q_api_02 q_api_03
     python benchmarks/generation_eval.py --project /path/to/existing/context.db  # skip extraction
     python benchmarks/generation_eval.py --verify
+    python benchmarks/generation_eval.py --no-full-transcript  # skip full-transcript condition
 """
 
 import argparse
@@ -31,7 +32,7 @@ ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
 from context_broker.config import get_db_path, get_project_dir, load_config
-from context_broker.extractor import extract, verify_extraction
+from context_broker.extractor import extract, verify_extraction, extract_targeted
 from context_broker.cli import _split_at_paragraphs
 from context_broker.retriever import retrieve_with_stats
 from context_broker.store import GraphStore
@@ -122,7 +123,7 @@ def score_recall(text: str, ground_truth_elements: list) -> tuple:
 # LLM call
 # ---------------------------------------------------------------------------
 
-def call_llm_sync(question: str, context_markdown: str | None, config: dict) -> str:
+def call_llm_sync(question: str, context_markdown: str | None, config: dict, context_label: str = "Project Knowledge") -> str:
     """Call LLM with or without context and return the answer string."""
     import litellm
     import logging
@@ -144,7 +145,7 @@ def call_llm_sync(question: str, context_markdown: str | None, config: dict) -> 
         system = (
             "You are a knowledgeable assistant. "
             "Use the project context below to answer the question accurately and concisely.\n\n"
-            "## Project Knowledge\n\n"
+            f"## {context_label}\n\n"
             + context_markdown
             + "\n\n---"
         )
@@ -185,7 +186,7 @@ def call_llm_sync(question: str, context_markdown: str | None, config: dict) -> 
 # Extraction
 # ---------------------------------------------------------------------------
 
-def run_extraction(config: dict, project_name: str, transcript_path: Path, verify: bool) -> int:
+def run_extraction(config: dict, project_name: str, transcript_path: Path, verify: bool, targeted: list[str] | None = None) -> int:
     """Extract transcript into project. Returns node count."""
     transcript_text = transcript_path.read_text()
 
@@ -231,6 +232,17 @@ def run_extraction(config: dict, project_name: str, transcript_path: Path, verif
         nodes = extra["nodes"] or nodes
         edges = extra["edges"] or edges
 
+    for category in (targeted or []):
+        db_path = get_db_path(config, project_name)
+        store = GraphStore(db_path)
+        store.merge_extraction(nodes, edges)
+        current_nodes = store.get_all_nodes()
+        extra = asyncio.run(extract_targeted(transcript_text, category, current_nodes, config))
+        print(f" [{len(extra['nodes'])}n {category}]", end="", flush=True)
+        if extra["nodes"]:
+            nodes = extra["nodes"]
+            edges = extra["edges"]
+
     db_path = get_db_path(config, project_name)
     store = GraphStore(db_path)
     store.merge_extraction(nodes, edges)
@@ -257,10 +269,14 @@ def main():
                         help="Path to existing context.db — skip extraction")
     parser.add_argument("--verify", action="store_true",
                         help="Run verification pass during extraction")
+    parser.add_argument("--decisions", action="store_true",
+                        help="Run targeted decisions pass during extraction")
     parser.add_argument("--hops", type=int, default=3, help="BFS hops for retrieval")
     parser.add_argument("--top-k", type=int, default=30, help="Max nodes to retrieve")
     parser.add_argument("--save", action="store_true",
                         help="Save results JSON to benchmarks/results/generation_eval_<timestamp>/")
+    parser.add_argument("--no-full-transcript", action="store_true",
+                        help="Skip the full-transcript baseline condition")
     args = parser.parse_args()
 
     # ── Load config ──────────────────────────────────────────────────────────
@@ -291,6 +307,17 @@ def main():
     print(f"Model: {config['llm'].get('model', '?')}")
     print(f"Questions: {[q['id'] for q in selected]}\n")
 
+    # ── Locate transcript text (needed for full-transcript baseline) ──────────
+    run_full_transcript = not args.no_full_transcript
+    transcript_path = TRANSCRIPTS_DIR / f"{transcript_name}.md"
+    transcript_text: str | None = None
+    if run_full_transcript:
+        if not transcript_path.exists():
+            print(f"Transcript not found: {transcript_path} — disabling full-transcript condition", file=sys.stderr)
+            run_full_transcript = False
+        else:
+            transcript_text = transcript_path.read_text()
+
     # ── Set up project ────────────────────────────────────────────────────────
     tmp_dir = None
     if args.project:
@@ -306,7 +333,6 @@ def main():
         config = dict(config)
         config["projects_dir"] = tmp_dir
 
-        transcript_path = TRANSCRIPTS_DIR / f"{transcript_name}.md"
         if not transcript_path.exists():
             print(f"Transcript not found: {transcript_path}", file=sys.stderr)
             if tmp_dir:
@@ -314,25 +340,28 @@ def main():
             sys.exit(1)
 
         print("Extracting transcript...")
-        run_extraction(config, project_name, transcript_path, verify=args.verify)
+        targeted = ["decisions"] if args.decisions else None
+        run_extraction(config, project_name, transcript_path, verify=args.verify, targeted=targeted)
         db_path = get_db_path(config, project_name)
         print()
 
     # ── Run generation eval ───────────────────────────────────────────────────
     store = GraphStore(db_path)
     total_with = 0
+    total_full = 0
     total_without = 0
     total_elements = 0
     question_results = []
 
+    conditions = ["CB context", "full transcript", "no context"] if run_full_transcript else ["CB context", "no context"]
+    print(f"Conditions: {' | '.join(conditions)}\n")
     print("=" * 78)
     for q in selected:
         qid = q["id"]
         question = q["question"]
         ground_truth = q["ground_truth_elements"]
-        relevant_tags = q.get("relevant_tags", [])
 
-        # Retrieve context
+        # Retrieve CB context
         context_result = retrieve_with_stats(
             store=store,
             task_description=question,
@@ -352,14 +381,22 @@ def main():
         print(f"\n[{qid}] {question}")
         print(f"  Retrieved: {node_count} nodes")
 
-        # Answer WITH context
-        print("  Calling LLM with context...", end="", flush=True)
+        # Answer WITH CB context
+        print("  Calling LLM [CB context]...", end="", flush=True)
         t0 = time.time()
         answer_with = call_llm_sync(question, context_md, config)
         print(f" ({time.time()-t0:.1f}s)")
 
+        # Answer WITH full transcript
+        answer_full: str | None = None
+        if run_full_transcript:
+            print("  Calling LLM [full transcript]...", end="", flush=True)
+            t0 = time.time()
+            answer_full = call_llm_sync(question, transcript_text, config, context_label="Full Project Transcript")
+            print(f" ({time.time()-t0:.1f}s)")
+
         # Answer WITHOUT context
-        print("  Calling LLM without context...", end="", flush=True)
+        print("  Calling LLM [no context]...", end="", flush=True)
         t0 = time.time()
         answer_without = call_llm_sync(question, None, config)
         print(f" ({time.time()-t0:.1f}s)")
@@ -367,12 +404,17 @@ def main():
         # Grade
         recall_with, matched_with, missed_with = score_recall(answer_with, ground_truth)
         recall_without, matched_without, missed_without = score_recall(answer_without, ground_truth)
+        recall_full, matched_full, missed_full = (
+            score_recall(answer_full, ground_truth) if answer_full is not None else (None, [], [])
+        )
 
         total_with += len(matched_with)
         total_without += len(matched_without)
+        if recall_full is not None:
+            total_full += len(matched_full)
         total_elements += len(ground_truth)
 
-        question_results.append({
+        result = {
             "id": qid,
             "question": question,
             "node_count": node_count,
@@ -384,38 +426,61 @@ def main():
             "missed_without": missed_without,
             "answer_with": answer_with,
             "answer_without": answer_without,
-        })
+        }
+        if answer_full is not None:
+            result["recall_full"] = recall_full
+            result["matched_full"] = matched_full
+            result["missed_full"] = missed_full
+            result["answer_full"] = answer_full
+        question_results.append(result)
 
         # Print results
-        print(f"\n  ── Recall: WITH context {recall_with:.0%}  |  WITHOUT context {recall_without:.0%} ──")
-        print(f"\n  ANSWER WITH CONTEXT:")
+        if run_full_transcript:
+            print(f"\n  ── Recall: CB={recall_with:.0%}  |  full-transcript={recall_full:.0%}  |  no-ctx={recall_without:.0%} ──")
+        else:
+            print(f"\n  ── Recall: CB={recall_with:.0%}  |  no-ctx={recall_without:.0%} ──")
+
+        print(f"\n  ANSWER [CB CONTEXT]:")
         for line in answer_with.strip().splitlines():
             print(f"    {line}")
 
-        print(f"\n  ANSWER WITHOUT CONTEXT:")
+        if answer_full is not None:
+            print(f"\n  ANSWER [FULL TRANSCRIPT]:")
+            for line in answer_full.strip().splitlines():
+                print(f"    {line}")
+
+        print(f"\n  ANSWER [NO CONTEXT]:")
         for line in answer_without.strip().splitlines():
             print(f"    {line}")
 
         print(f"\n  Ground truth ({len(ground_truth)} elements):")
         for el in ground_truth:
             with_hit = el in matched_with
+            full_hit = el in matched_full if answer_full is not None else None
             without_hit = el in matched_without
-            ctx_mark  = "✓" if with_hit else "✗"
-            noctx_mark = "✓" if without_hit else "✗"
-            print(f"    ctx:{ctx_mark}  no-ctx:{noctx_mark}  \"{el}\"")
+            cb_mark = "✓" if with_hit else "✗"
+            no_mark = "✓" if without_hit else "✗"
+            if full_hit is not None:
+                ft_mark = "✓" if full_hit else "✗"
+                print(f"    cb:{cb_mark}  ft:{ft_mark}  no-ctx:{no_mark}  \"{el}\"")
+            else:
+                print(f"    cb:{cb_mark}  no-ctx:{no_mark}  \"{el}\"")
 
         print("=" * 78)
 
     # ── Summary ───────────────────────────────────────────────────────────────
     pct_with = total_with / total_elements * 100 if total_elements else 0
     pct_without = total_without / total_elements * 100 if total_elements else 0
-    gain = pct_with - pct_without
+    pct_full = total_full / total_elements * 100 if (total_elements and run_full_transcript) else None
 
     print(f"\n{'='*78}")
     print(f"SUMMARY: {len(selected)} questions, {total_elements} ground truth elements")
-    print(f"  WITH context:    {total_with}/{total_elements} = {pct_with:.0f}%")
-    print(f"  WITHOUT context: {total_without}/{total_elements} = {pct_without:.0f}%")
-    print(f"  Context gain:    {gain:+.0f}pp")
+    print(f"  CB context:       {total_with}/{total_elements} = {pct_with:.0f}%")
+    if pct_full is not None:
+        print(f"  Full transcript:  {total_full}/{total_elements} = {pct_full:.0f}%")
+        print(f"  CB vs full-xscr:  {pct_with - pct_full:+.0f}pp")
+    print(f"  No context:       {total_without}/{total_elements} = {pct_without:.0f}%")
+    print(f"  CB vs no-ctx:     {pct_with - pct_without:+.0f}pp")
     print(f"{'='*78}\n")
 
     # ── Save results ──────────────────────────────────────────────────────────
@@ -424,23 +489,31 @@ def main():
         ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         out_dir = BENCHMARKS_DIR / "results" / f"generation_eval_{ts}"
         out_dir.mkdir(parents=True, exist_ok=True)
+        summary = {
+            "questions": len(selected),
+            "elements": total_elements,
+            "cb_context": total_with,
+            "without_context": total_without,
+            "recall_cb_pct": round(pct_with, 1),
+            "recall_without_pct": round(pct_without, 1),
+            "gain_cb_vs_no_ctx_pp": round(pct_with - pct_without, 1),
+        }
+        if pct_full is not None:
+            summary["full_transcript"] = total_full
+            summary["recall_full_pct"] = round(pct_full, 1)
+            summary["gain_cb_vs_full_pp"] = round(pct_with - pct_full, 1)
+
         payload = {
             "timestamp": ts,
             "transcript": transcript_name,
             "model": config["llm"].get("model", "?"),
             "config_file": str(args.config),
             "verify": args.verify,
+            "decisions": args.decisions,
             "hops": args.hops,
             "top_k": args.top_k,
-            "summary": {
-                "questions": len(selected),
-                "elements": total_elements,
-                "with_context": total_with,
-                "without_context": total_without,
-                "recall_with_pct": round(pct_with, 1),
-                "recall_without_pct": round(pct_without, 1),
-                "gain_pp": round(gain, 1),
-            },
+            "full_transcript_condition": run_full_transcript,
+            "summary": summary,
             "questions": question_results,
         }
         results_path = out_dir / "results.json"
