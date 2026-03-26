@@ -14,7 +14,7 @@ This document outlines the path from the current open-source CLI tool to a comme
 - The API abstraction enables team sharing, cross-machine sync, and usage-based billing
 
 **One-click onboarding** is the unlock for retention:
-- The current setup (manual `ctx extract`, CLI hooks) has too much friction for mainstream adoption
+- The current setup (manual `engram extract`, CLI hooks) has too much friction for mainstream adoption
 - Users need to see value within 60 seconds or they churn
 - "Import your last 5 Claude sessions" requires zero domain knowledge — it just works
 
@@ -52,7 +52,7 @@ The MCP server is a thin wrapper around the existing `retrieve()` and `extract()
 
 1. Add `mcp` dependency (`pip install mcp`)
 2. Create `context_broker/mcp_server.py` implementing the four tools above
-3. Add `ctx mcp-serve` CLI command (launches the MCP server on stdio or SSE)
+3. Add `engram mcp-serve` CLI command (launches the MCP server on stdio or SSE)
 4. Add `mcp_server` entry point to `pyproject.toml`
 5. Write `claude_mcp_config.json` snippet users can paste into their Claude Code settings
 6. Update `GETTING_STARTED.md` with MCP setup instructions (replaces hook-based setup)
@@ -64,7 +64,7 @@ The MCP server is a thin wrapper around the existing `retrieve()` and `extract()
 {
   "mcpServers": {
     "context-broker": {
-      "command": "ctx",
+      "command": "engram",
       "args": ["mcp-serve"]
     }
   }
@@ -126,10 +126,10 @@ When two users share a project name and API key, they write to and read from the
 ### What
 A single command that auto-discovers recent Claude Code sessions, imports them into Context Broker, and shows the user what was extracted — all in under 2 minutes.
 
-### Implementation: `ctx onboard` command
+### Implementation: `engram onboard` command
 
 ```bash
-ctx onboard [project]
+engram onboard [project]
 ```
 
 **Step 1 — Discover sessions**
@@ -144,7 +144,7 @@ For new users who haven't set up the hook yet, also check Claude Code's own sess
 ~/.claude/projects/<project-hash>/*.jsonl
 ```
 
-Provide a `ctx import-claude-sessions` subcommand that reads `.jsonl` files and converts them to the markdown transcript format Context Broker expects.
+Provide a `engram import-claude-sessions` subcommand that reads `.jsonl` files and converts them to the markdown transcript format Context Broker expects.
 
 **Step 2 — Present a menu**
 
@@ -162,11 +162,11 @@ Import all 5? [Y/n]  or select (e.g. 1,3,5):
 
 **Step 3 — Batch extract**
 
-Run `ctx extract` on each selected transcript with `--verify`. Show a progress bar. Use `--chunk-size 30000` automatically for transcripts over 40k chars.
+Run `engram extract` on each selected transcript with `--verify`. Show a progress bar. Use `--chunk-size 30000` automatically for transcripts over 40k chars.
 
 **Step 4 — Show value immediately**
 
-After import, run `ctx query <project> "what are the key architectural decisions?"` and print the result. The user sees their own knowledge reflected back at them in under 2 minutes.
+After import, run `engram query <project> "what are the key architectural decisions?"` and print the result. The user sees their own knowledge reflected back at them in under 2 minutes.
 
 ### JSONL → markdown converter
 
@@ -196,11 +196,11 @@ Submit to Anthropic's MCP server registry once it exists. This is the single hig
 
 ### Cursor / Windsurf plugins
 
-Both support MCP. The same `ctx mcp-serve` command works. Publish to each tool's plugin marketplace with a one-paragraph description.
+Both support MCP. The same `engram mcp-serve` command works. Publish to each tool's plugin marketplace with a one-paragraph description.
 
 ### Team network effect
 
-The most compelling long-term use case: a software team where multiple developers contribute to a shared knowledge graph. Every design session, every architecture decision, every "why did we do it this way" is captured. New team members onboard by running `ctx query <project> "give me an overview of the architecture"`.
+The most compelling long-term use case: a software team where multiple developers contribute to a shared knowledge graph. Every design session, every architecture decision, every "why did we do it this way" is captured. New team members onboard by running `engram query <project> "give me an overview of the architecture"`.
 
 Lean into this in marketing: **"Shared memory for your entire engineering team."**
 

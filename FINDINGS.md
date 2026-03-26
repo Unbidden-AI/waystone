@@ -173,14 +173,14 @@ Context Broker can integrate with the Claude Code CLI via hooks to silently inje
 
 **`UserPromptSubmit` hook** — runs before each user prompt reaches the model:
 1. Receives the user's prompt text on stdin as JSON
-2. Runs `ctx query <project> "<prompt>"` locally (SQLite lookup, <5ms)
+2. Runs `engram query <project> "<prompt>"` locally (SQLite lookup, <5ms)
 3. Writes the retrieved context block to stdout
 4. Claude Code prepends this to the prompt automatically
 
 **`Stop` hook** — runs after each assistant response:
 1. Receives the last assistant message and last user message
 2. Formats them as a turn: `**User**: ... \n\n**Assistant**: ...`
-3. Pipes the turn to `ctx extract-turn <project>`
+3. Pipes the turn to `engram extract-turn <project>`
 4. The buffered extractor decides whether to flush to the LLM
 
 ### What this achieves
@@ -237,7 +237,7 @@ The 18% call rate observed in benchmarks (7 calls for 39 turns) is close to the 
 
 ### Buffer persistence
 
-The buffer persists to `buffer.json` in the project directory between `ctx extract-turn` invocations. This means a buffer can span multiple shell sessions — a turn added via hook in one process is still buffered when the next prompt arrives. The `ctx query` command auto-flushes any pending buffer before retrieval to ensure the graph reflects all available conversation content.
+The buffer persists to `buffer.json` in the project directory between `engram extract-turn` invocations. This means a buffer can span multiple shell sessions — a turn added via hook in one process is still buffered when the next prompt arrives. The `engram query` command auto-flushes any pending buffer before retrieval to ensure the graph reflects all available conversation content.
 
 ---
 
@@ -304,10 +304,10 @@ Each pass is designed to be independently useful — you can run any subset. Ded
 
 ```bash
 # Single targeted pass
-ctx extract myproject transcript.md --lessons
+engram extract myproject transcript.md --lessons
 
 # Multiple targeted passes
-ctx extract myproject transcript.md --verify --lessons --decisions
+engram extract myproject transcript.md --verify --lessons --decisions
 
 # Benchmark with targeted pass
 python benchmarks/run_benchmark.py --config benchmarks/model_configs/gemini_25_flash.yaml --verify --lessons
@@ -438,7 +438,7 @@ Re-extracting the same transcript (or running a verify pass) produces duplicate 
 
 **Status: not implemented**
 
-Extend the `ctx reconcile` command (which already detects supersedes relationships) with a dedup phase. The LLM is shown clusters of nodes with similar fact text (pre-filtered by token overlap or BM25 similarity) and asked to identify which are duplicates vs. genuinely distinct facts. For duplicates, it selects the canonical fact and flags the rest for merge or deletion.
+Extend the `engram reconcile` command (which already detects supersedes relationships) with a dedup phase. The LLM is shown clusters of nodes with similar fact text (pre-filtered by token overlap or BM25 similarity) and asked to identify which are duplicates vs. genuinely distinct facts. For duplicates, it selects the canonical fact and flags the rest for merge or deletion.
 
 **When to use:** Periodic maintenance pass on large graphs that have accumulated duplicates from many extraction runs. More expensive than Option B but handles paraphrased duplicates that hash differently.
 
@@ -505,9 +505,9 @@ SQLite handles concurrent reads correctly (especially in WAL mode) but permits o
 | Shared network SQLite | Medium | Small teams, low extraction concurrency, acceptable failure mode |
 | PostgreSQL backend | High | Proper solution, concurrent writes, enables REST API layer |
 
-**Git-tracked JSON export** is the path of least resistance. The `ctx export` command already writes a graph snapshot. If that snapshot is committed to the shared repo, any developer can import it locally. The limitation is that SQLite binary files don't merge in git — switching `ctx export` to a line-oriented JSON format (one node per line, one edge per line) would make diffs readable and merges tractable.
+**Git-tracked JSON export** is the path of least resistance. The `engram export` command already writes a graph snapshot. If that snapshot is committed to the shared repo, any developer can import it locally. The limitation is that SQLite binary files don't merge in git — switching `engram export` to a line-oriented JSON format (one node per line, one edge per line) would make diffs readable and merges tractable.
 
-**PostgreSQL backend** is the right long-term answer. The `GraphStore` API (`add_node`, `add_edge`, `get_nodes_by_tags`, etc.) maps directly to PostgreSQL with no interface changes. Every developer connects to the shared instance. Concurrent writes are handled natively. This also enables a `ctx serve` REST layer so developers without direct database access (different networks, managed environments) can push extractions and pull queries over HTTP.
+**PostgreSQL backend** is the right long-term answer. The `GraphStore` API (`add_node`, `add_edge`, `get_nodes_by_tags`, etc.) maps directly to PostgreSQL with no interface changes. Every developer connects to the shared instance. Concurrent writes are handled natively. This also enables a `engram serve` REST layer so developers without direct database access (different networks, managed environments) can push extractions and pull queries over HTTP.
 
 ### Design challenges
 
@@ -533,9 +533,9 @@ The smallest change set that enables genuine team use:
 
 2. **`contributor` field on nodes** — set at extraction time from `git config user.name` or a `CTX_CONTRIBUTOR` env var. Stored alongside `source_transcript`. No schema changes required beyond adding the column.
 
-3. **Conflict flagging on cross-author supersedes** — instead of silently pruning, mark conflicts with a `conflict: true` field. The `superseded_pruning` strategy skips conflicted nodes; a `ctx conflicts` command lists them for resolution.
+3. **Conflict flagging on cross-author supersedes** — instead of silently pruning, mark conflicts with a `conflict: true` field. The `superseded_pruning` strategy skips conflicted nodes; a `engram conflicts` command lists them for resolution.
 
-4. **`ctx sync` command** — pushes the local buffer to the shared graph and pulls nodes added by other contributors since the last sync. Enables async collaboration without requiring always-on connectivity.
+4. **`engram sync` command** — pushes the local buffer to the shared graph and pulls nodes added by other contributors since the last sync. Enables async collaboration without requiring always-on connectivity.
 
 5. **Per-contributor transcript namespacing** — convention only, no code change: `contributor/topic_date.md`. Attribution is already implicit in `source_transcript`.
 
@@ -569,10 +569,10 @@ Add domain synonyms to the extraction prompt or as a post-processing pass. Targe
 A per-transcript extraction quality score (node count relative to transcript length, tag density, edge-to-node ratio) would make it easy to identify transcripts that need re-extraction or a different model.
 
 **6. PostgreSQL backend for shared team graphs**
-Swap `GraphStore`'s SQLite connection for PostgreSQL. The store API is unchanged; PostgreSQL handles concurrent multi-developer writes natively and enables a `ctx serve` REST layer for teams without direct database access. See the Multi-Developer Shared Graph section for full architecture.
+Swap `GraphStore`'s SQLite connection for PostgreSQL. The store API is unchanged; PostgreSQL handles concurrent multi-developer writes natively and enables a `engram serve` REST layer for teams without direct database access. See the Multi-Developer Shared Graph section for full architecture.
 
 **7. Git-exportable graph format**
-Switch `ctx export` output from a single JSON blob to a line-oriented format (one node/edge per line) so graph snapshots can be diff'd and merged in git. Enables async team collaboration without any server infrastructure.
+Switch `engram export` output from a single JSON blob to a line-oriented format (one node/edge per line) so graph snapshots can be diff'd and merged in git. Enables async team collaboration without any server infrastructure.
 
 **8. Multi-project graph queries**
 Currently each project is an isolated SQLite database. Cross-project queries (e.g., "what auth patterns have we used across all projects?") would require either a merged graph or a query federation layer.
@@ -610,12 +610,12 @@ Currently each project is an isolated SQLite database. Cross-project queries (e.
 **Plan:**
 
 *Onboarding flow:*
-- Ship a `ctx demo` command that populates a sample project graph from a bundled transcript, then runs a set of example queries against it. Users see the output format and retrieval quality before investing any extraction effort.
-- On first `ctx query` against an empty graph, print an actionable message: "No context found. Run `ctx extract <project> <transcript>` to build your graph."
+- Ship a `engram demo` command that populates a sample project graph from a bundled transcript, then runs a set of example queries against it. Users see the output format and retrieval quality before investing any extraction effort.
+- On first `engram query` against an empty graph, print an actionable message: "No context found. Run `engram extract <project> <transcript>` to build your graph."
 
 *Progressive extraction:*
 - For Claude Code hook users, the graph builds automatically in the background from the first conversation. Make this visible: after each buffered flush, print a brief status line — "Context Broker: +8 nodes extracted (42 total)" — so users see the graph growing without any manual steps.
-- Offer a `ctx bootstrap` command that takes an existing codebase and generates a starter graph from README files, architecture docs, and any markdown in the repo. Not as rich as conversation extraction, but provides immediate value.
+- Offer a `engram bootstrap` command that takes an existing codebase and generates a starter graph from README files, architecture docs, and any markdown in the repo. Not as rich as conversation extraction, but provides immediate value.
 
 *Seeded starter graphs:*
 - For common tech stacks (React/Node, Django, Rails, Go microservices), provide downloadable starter graphs containing common architectural constraints and best practices. Users merge these into a new project to get instant useful context, then their conversations enrich and override it over time.
@@ -651,10 +651,10 @@ Currently each project is an isolated SQLite database. Cross-project queries (e.
 The hook integration is fully designed. Ship the hook scripts and document the setup. Establish the pattern, collect feedback, and build the user base within the Claude Code ecosystem before expanding.
 
 *Phase 2 — VS Code extension:*
-A VS Code extension can integrate with GitHub Copilot Chat, Cursor, and Continue.dev (among others) via the Language Model API or by reading from the workspace chat history. The extension calls `ctx query` on every prompt submission and injects the result as a context message. Reaches the largest IDE user base without requiring CLI tool adoption.
+A VS Code extension can integrate with GitHub Copilot Chat, Cursor, and Continue.dev (among others) via the Language Model API or by reading from the workspace chat history. The extension calls `engram query` on every prompt submission and injects the result as a context message. Reaches the largest IDE user base without requiring CLI tool adoption.
 
 *Phase 3 — Browser extension:*
-For web-based LLM tools (ChatGPT, Claude.ai, Gemini), a browser extension intercepts prompt submission, calls a local Context Broker server (`ctx serve --port 7070`), and injects the retrieved context block. This covers the remaining surface area. Technically feasible but requires maintaining extension manifests across Chrome/Firefox and adapting to UI changes in each web app.
+For web-based LLM tools (ChatGPT, Claude.ai, Gemini), a browser extension intercepts prompt submission, calls a local Context Broker server (`engram serve --port 7070`), and injects the retrieved context block. This covers the remaining surface area. Technically feasible but requires maintaining extension manifests across Chrome/Firefox and adapting to UI changes in each web app.
 
 *Phase 4 — Native integrations:*
 Formal partnerships or plugin listings with Cursor, Cline, Windsurf, and other AI coding tools. These tools have plugin APIs; a Context Broker plugin published to their marketplaces provides discoverability without requiring users to find the CLI tool independently.
@@ -714,17 +714,17 @@ Monitor Zep and MemGPT/Letta closely — they are the closest architectural neig
 **Plan:**
 
 *Inspection commands:*
-- `ctx last` — show the exact context block that was injected into the most recent query, with node IDs, confidence scores, and source transcripts. Makes the broker's contribution visible on demand without making it noisy by default.
-- `ctx explain "<query>"` — show which keywords were extracted from the query, which entry nodes matched, how BFS traversed the graph, and which strategies pruned what. Full retrieval trace for debugging.
+- `engram last` — show the exact context block that was injected into the most recent query, with node IDs, confidence scores, and source transcripts. Makes the broker's contribution visible on demand without making it noisy by default.
+- `engram explain "<query>"` — show which keywords were extracted from the query, which entry nodes matched, how BFS traversed the graph, and which strategies pruned what. Full retrieval trace for debugging.
 
 *Optional verbose mode for hooks:*
-Add a `--verbose` flag to the hook integration that appends a collapsed summary to each prompt: "Context Broker injected 6 nodes (42 tokens) — run `ctx last` to inspect." Users who want visibility get it; users who prefer silence stay silent by default.
+Add a `--verbose` flag to the hook integration that appends a collapsed summary to each prompt: "Context Broker injected 6 nodes (42 tokens) — run `engram last` to inspect." Users who want visibility get it; users who prefer silence stay silent by default.
 
 *Confidence surfacing in output:*
 The markdown output already includes confidence scores. Make them more prominent and add a color-coded indicator (in terminals that support it) so users can glance at the reliability of injected context. A block of 0.9+ confidence nodes reads differently than a block of 0.4–0.6 nodes.
 
 *Conflict visibility:*
-For the multi-developer case, flagged cross-author conflicts should appear prominently in retrieval output: "⚠ Conflicting decisions found — run `ctx conflicts` to resolve." Silent conflict suppression is worse than noisy conflict surfacing.
+For the multi-developer case, flagged cross-author conflicts should appear prominently in retrieval output: "⚠ Conflicting decisions found — run `engram conflicts` to resolve." Silent conflict suppression is worse than noisy conflict surfacing.
 
 ---
 
@@ -740,7 +740,7 @@ For the multi-developer case, flagged cross-author conflicts should appear promi
 - No extraction cost to the company on this tier (users supply their own API keys).
 
 *Team tier (primary revenue):*
-- Shared PostgreSQL graph, contributor attribution, conflict resolution, `ctx sync`.
+- Shared PostgreSQL graph, contributor attribution, conflict resolution, `engram sync`.
 - Cloud-managed extraction service with a monthly credit allocation.
 - Pricing: per-seat, per month. Target: $15–25/developer/month, competitive with other developer productivity tools.
 - This is the product that the current architecture is one PostgreSQL backend swap away from reaching.
@@ -1021,8 +1021,8 @@ Four tests to run in sequence. Each validates a different aspect of the end-to-e
 #### Test 1 — Auth system transcript (in progress)
 **Goal:** Verify prior-state tagging fix works across a different domain with more numeric facts.
 ```bash
-ctx extract auth_debug benchmarks/transcripts/project_auth_system.md --verify
-ctx orchestrate auth_debug
+engram extract auth_debug benchmarks/transcripts/project_auth_system.md --verify
+engram orchestrate auth_debug
 ```
 **Questions to ask:**
 - "What authentication mechanism was chosen?"
@@ -1052,7 +1052,7 @@ the provided context, say so explicitly — do not infer or reason from general 
 #### Test 4 — `--decisions` targeted pass on auth_debug
 **Goal:** Verify the `--decisions` flag improves recall for auth-domain rationale facts (q_auth_04 was 0% without it).
 ```bash
-ctx extract auth_debug benchmarks/transcripts/project_auth_system.md --verify --decisions
+engram extract auth_debug benchmarks/transcripts/project_auth_system.md --verify --decisions
 ```
 Then query: "Why was the chosen auth mechanism selected over alternatives?"
 **Success criteria:** Decision rationale (the "why" behind auth choices) surfaces that wasn't in the base `--verify` pass.
@@ -1104,13 +1104,13 @@ Multi-turn conversation with `pipe_debug` project. Facts introduced in turn 1 (K
 
 ### What it is
 
-`ctx synthesize <project>` is a post-extraction maintenance command that runs an LLM pass over **existing graph nodes** (not a transcript). It looks for clusters of 3+ parallel facts about the same metric across different subjects and creates cross-cutting summary nodes — e.g., a single "Overall Recall Ranking" node that aggregates all model results.
+`engram synthesize <project>` is a post-extraction maintenance command that runs an LLM pass over **existing graph nodes** (not a transcript). It looks for clusters of 3+ parallel facts about the same metric across different subjects and creates cross-cutting summary nodes — e.g., a single "Overall Recall Ranking" node that aggregates all model results.
 
 This solves the **survey query problem**: BFS retrieval with top_k=20 may explore only one model's cluster at a time. "Rank all models" needs a single node tagged with all model names for retrieval to surface the complete answer.
 
 ### Observed behavior (2026-03-18)
 
-Run: `ctx synthesize ContextBroker --tags benchmark --tags recall --tags gpt-4o --tags nemotron`
+Run: `engram synthesize ContextBroker --tags benchmark --tags recall --tags gpt-4o --tags nemotron`
 - 873 candidate nodes filtered from 8590 total
 - 22 summary nodes created, 769 edges
 - Produced "Overall Recall Ranking" node, per-preset comparison nodes, extraction time comparisons
@@ -1128,15 +1128,15 @@ Three patterns for when to run synthesis:
 
 | Option | Command | Scope | Latency | Best for |
 |--------|---------|-------|---------|----------|
-| **A. Periodic maintenance** | `ctx synthesize` | Full graph (filtered by type/tags) | High (~30–120s) | After multiple sessions have accumulated; before demo/query-heavy sessions |
-| **B. Post-extract (full graph)** | `ctx extract --synthesize` | Full graph | Adds ~30–120s to extraction | When a new transcript is likely to complete a cluster already partially in the graph |
-| **C. Post-extract (recent only)** | `ctx extract --synthesize-recent` *(not yet implemented)* | `get_recent_nodes(limit=100)` | Low (~5–15s) | Lightweight per-session synthesis; won't catch cross-session patterns |
+| **A. Periodic maintenance** | `engram synthesize` | Full graph (filtered by type/tags) | High (~30–120s) | After multiple sessions have accumulated; before demo/query-heavy sessions |
+| **B. Post-extract (full graph)** | `engram extract --synthesize` | Full graph | Adds ~30–120s to extraction | When a new transcript is likely to complete a cluster already partially in the graph |
+| **C. Post-extract (recent only)** | `engram extract --synthesize-recent` *(not yet implemented)* | `get_recent_nodes(limit=100)` | Low (~5–15s) | Lightweight per-session synthesis; won't catch cross-session patterns |
 
-**Current recommendation:** Use option A (periodic `ctx synthesize`) as the primary pattern. Run with `--tags` to target specific subject clusters when you know what you're looking for. Option B (`--synthesize` on extract) is viable when running full re-extractions. Option C is a potential future improvement.
+**Current recommendation:** Use option A (periodic `engram synthesize`) as the primary pattern. Run with `--tags` to target specific subject clusters when you know what you're looking for. Option B (`--synthesize` on extract) is viable when running full re-extractions. Option C is a potential future improvement.
 
 ### Synthesis is additive
 
-Synthesis nodes accumulate — each run with different `--tags` adds new summary nodes without deleting previous ones. The existing fact-hash deduplication prevents exact duplicates. If you need to prune stale synthesis nodes, a future `ctx prune --synthesis` command can use the `source_transcript = "__synthesis__"` tag to identify them.
+Synthesis nodes accumulate — each run with different `--tags` adds new summary nodes without deleting previous ones. The existing fact-hash deduplication prevents exact duplicates. If you need to prune stale synthesis nodes, a future `engram prune --synthesis` command can use the `source_transcript = "__synthesis__"` tag to identify them.
 
 ---
 
@@ -1166,7 +1166,7 @@ A-MEM is a Zettelkasten-inspired memory system where the LLM agent autonomously 
 | **iText2KG** (arXiv:2409.03284) | Cosine-similarity entity matching for KG construction — semantic dedup in `merge_extraction()` to catch near-duplicates that text-hash misses |
 | **Zep/Graphiti** (arXiv:2501.13956) | Bi-temporal fact validity (event time + ingestion time + validity windows) — principled replacement for `recency_decay`; facts expire rather than decay |
 | **HippoRAG** (arXiv:2405.14831) | Personalized PageRank on a knowledge graph for retrieval — potential replacement for BFS traversal with semantic re-ranking |
-| **RAPTOR** (arXiv:2401.18059) | Recursive abstractive tree construction — hierarchical synthesis that clusters leaf nodes into progressively abstract summaries; complements `ctx synthesize` |
+| **RAPTOR** (arXiv:2401.18059) | Recursive abstractive tree construction — hierarchical synthesis that clusters leaf nodes into progressively abstract summaries; complements `engram synthesize` |
 | **G-RAG** (arXiv:2405.16506) | Graph-aware reranker using GNN embeddings — reranks retrieved nodes based on graph topology, not just text similarity |
 | **MemoryBank** (arXiv:2305.10250) | Ebbinghaus forgetting curve applied to memory strength — time-decay model more nuanced than a binary superseded flag |
 | **GraphRAG** (arXiv:2404.16130) | Microsoft's community detection + hierarchical summarization — scales graph retrieval to very large corpora; relevant as CB node count grows past 10K |

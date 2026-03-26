@@ -20,25 +20,25 @@ All notable changes to Context Broker are documented here.
 
 **Core**
 - DAG-based graph store (`GraphStore`) backed by SQLite with WAL mode for concurrent access
-- LLM-based extraction via any OpenAI-compatible endpoint (`ctx extract`)
-- BFS graph traversal with configurable depth (`ctx query --hops`)
+- LLM-based extraction via any OpenAI-compatible endpoint (`engram extract`)
+- BFS graph traversal with configurable depth (`engram query --hops`)
 - Strategy pipeline: `superseded_pruning`, `confidence_threshold`, `recency_decay`, `token_budget`, `relevance_scoring`
-- Incremental per-turn extraction (`ctx extract-replay`)
-- Graph reconciliation to find missed supersedes edges (`ctx reconcile`)
+- Incremental per-turn extraction (`engram extract-replay`)
+- Graph reconciliation to find missed supersedes edges (`engram reconcile`)
 - Structured logging in all library modules (`logging.getLogger(__name__)`)
 
 **CLI commands**
-- `ctx init <project>` — create a new project
-- `ctx extract <project> <file>` — extract from transcript (50 MB guard, `--verify` flag)
-- `ctx extract-replay <project> <file>` — turn-by-turn incremental extraction
-- `ctx query <project> "<task>"` — retrieve relevant context as markdown
-- `ctx show <project>` — list all nodes
-- `ctx export <project>` — export graph to markdown
-- `ctx reconcile <project>` — find and add missed supersedes edges (`--dry-run`)
-- `ctx onboard` — interactive import of recent Claude Code sessions
-- `ctx import-claude-sessions` — batch import Claude Code `.jsonl` sessions
-- `ctx doctor` — preflight check: config, API key, LLM reachability, DB state, hooks
-- `ctx mcp-serve` — start the MCP server on stdio
+- `engram init <project>` — create a new project
+- `engram extract <project> <file>` — extract from transcript (50 MB guard, `--verify` flag)
+- `engram extract-replay <project> <file>` — turn-by-turn incremental extraction
+- `engram query <project> "<task>"` — retrieve relevant context as markdown
+- `engram show <project>` — list all nodes
+- `engram export <project>` — export graph to markdown
+- `engram reconcile <project>` — find and add missed supersedes edges (`--dry-run`)
+- `engram onboard` — interactive import of recent Claude Code sessions
+- `engram import-claude-sessions` — batch import Claude Code `.jsonl` sessions
+- `engram doctor` — preflight check: config, API key, LLM reachability, DB state, hooks
+- `engram mcp-serve` — start the MCP server on stdio
 
 **MCP server** (`context_broker/mcp_server.py`)
 - `context_broker_query` — retrieve context for a task

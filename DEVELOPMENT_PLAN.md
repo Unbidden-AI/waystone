@@ -50,7 +50,7 @@ QA agent outputs test results directly to the orchestrator. All failing tests mu
 **Deliverables:**
 - Add `litellm` to `pyproject.toml` dependencies
 - Add `tiktoken` to `pyproject.toml` (accurate token estimation)
-- Add `orchestrator` package to `pyproject.toml` entry points (`ctx chat`)
+- Add `orchestrator` package to `pyproject.toml` entry points (`engram chat`)
 - Extend `config.yaml` with `orchestrator:` section (schema in `ORCHESTRATOR_PLAN.md`)
 - Create `orchestrator/` directory with `__init__.py`
 - Create `tests/test_orchestrator/` directory with `__init__.py`
@@ -239,7 +239,7 @@ Note: Anthropic-side 500s hitting *Claude Code itself* (as seen in this session)
   - `run_interactive()` — REPL entry point
 
 - `orchestrator/cli.py`
-  - `ctx chat <project> [--config CONFIG] [--model MODEL] [--dry-run]`
+  - `engram chat <project> [--config CONFIG] [--model MODEL] [--dry-run]`
   - `--dry-run`: prints composed system prompt + message list without calling LLM
 
 **process_turn flow:**
@@ -340,7 +340,7 @@ After Phase 1 stabilizes. Each milestone follows the same agent sequence pattern
 
 4. **`tests/test_orchestrator/` directory** — parallel to `tests/test_store.py`. QA agent owns this directory. Tests committed with each milestone, never after.
 
-5. **`--dry-run` flag on `ctx chat`** — prints composed system prompt + message list without calling LLM. Invaluable for debugging token budget and context composition without burning API credits.
+5. **`--dry-run` flag on `engram chat`** — prints composed system prompt + message list without calling LLM. Invaluable for debugging token budget and context composition without burning API credits.
 
 6. **Graceful degradation** — if graph DB is unavailable or corrupted, conversation loop continues without context rather than crashing. QA tests this explicitly.
 

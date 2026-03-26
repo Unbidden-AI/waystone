@@ -1,10 +1,10 @@
-# Context Broker API Server
+# Engram API Server
 #
 # Build:
-#   docker build -t context-broker .
+#   docker build -t engram .
 #
 # Run (local, no auth):
-#   docker run -p 8000:8000 -v /host/projects:/data/projects context-broker
+#   docker run -p 8000:8000 -v /host/projects:/data/projects engram
 #
 # Run (production, with auth):
 #   docker run -p 8000:8000 \
@@ -13,7 +13,7 @@
 #     -e LLM_BASE_URL=https://api.openai.com/v1 \
 #     -e LLM_MODEL=gpt-4o-mini \
 #     -e LLM_API_KEY=sk-... \
-#     context-broker
+#     engram
 
 FROM python:3.12-slim
 
@@ -26,13 +26,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy dependency manifest first for layer caching
 COPY pyproject.toml ./
-COPY context_broker/__init__.py ./context_broker/__init__.py
+COPY engram/__init__.py ./engram/__init__.py
 
 # Install package with API extras (fastapi + uvicorn)
 RUN pip install --no-cache-dir -e ".[api]"
 
 # Copy source after deps to keep the expensive install layer cached
-COPY context_broker/ ./context_broker/
+COPY engram/ ./engram/
 
 # Persistent project storage — mount a volume here
 RUN mkdir -p /data/projects
@@ -52,6 +52,6 @@ ENV LLM_MODEL="gpt-4o-mini"
 EXPOSE 8000
 
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
-CMD ["uvicorn", "context_broker.api_server:app", \
+CMD ["uvicorn", "engram.api_server:app", \
      "--host", "0.0.0.0", "--port", "8000", \
      "--workers", "1"]

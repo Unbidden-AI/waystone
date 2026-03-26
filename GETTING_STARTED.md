@@ -7,7 +7,7 @@ Context Broker extracts facts from your Claude Code conversations into a knowled
 | | MCP Server (recommended) | Hooks (manual) |
 |---|---|---|
 | **Setup** | One JSON snippet in Claude Code config | Run `hooks/install.py` |
-| **Extraction** | `ctx onboard` or call `context_broker_extract` from Claude | `ctx extract` after each session |
+| **Extraction** | `engram onboard` or call `context_broker_extract` from Claude | `engram extract` after each session |
 | **Context injection** | Claude calls `context_broker_query` automatically | Hook injects on every `UserPromptSubmit` |
 | **Best for** | New users, quick start | Power users, background auto-extraction |
 
@@ -33,7 +33,7 @@ pip install -e ".[dev]"
 Verify it worked:
 
 ```bash
-ctx --help
+engram --help
 ```
 
 ---
@@ -60,7 +60,7 @@ Add Context Broker as an MCP server so Claude Code can call it directly as a too
 
 **Option 1 — Claude Code CLI:**
 ```bash
-claude mcp add context-broker ctx -- mcp-serve
+claude mcp add context-broker engram mcp-serve
 ```
 
 **Option 2 — Manual config:**
@@ -71,7 +71,7 @@ Edit `~/.claude/claude_desktop_config.json` (create it if it doesn't exist) and 
 {
   "mcpServers": {
     "context-broker": {
-      "command": "ctx",
+      "command": "engram",
       "args": ["mcp-serve"]
     }
   }
@@ -82,16 +82,16 @@ A ready-to-paste snippet is at `claude_mcp_config.json` in this repo.
 
 **Restart Claude Code.** You should see `context-broker` appear in the MCP server list.
 
-> **Skip ahead:** Once the MCP server is running, jump to [Step 3A Quick Start](#step-3a-quick-start-ctx-onboard) to import your existing sessions with one command.
+> **Skip ahead:** Once the MCP server is running, jump to [Step 3A Quick Start](#step-3a-quick-start-engram-onboard) to import your existing sessions with one command.
 
 ---
 
-## Step 3A Quick Start: `ctx onboard`
+## Step 3A Quick Start: `engram onboard`
 
 If you've already used Claude Code, import your recent sessions in one step:
 
 ```bash
-ctx onboard myproject
+engram onboard myproject
 ```
 
 You'll see a menu of your recent Claude Code sessions:
@@ -135,7 +135,7 @@ This adds three things to `~/.claude/settings.json`:
 In the root of the project you want to track:
 
 ```bash
-ctx hook-init myproject
+engram hook-init myproject
 ```
 
 Or manually:
@@ -176,18 +176,18 @@ Tech stack: React Native 0.73, Expo, PostgreSQL 15, FastAPI, SQLAlchemy 2.0.
 **Extract it:**
 
 ```bash
-ctx extract myproject project_brief.md
+engram extract myproject project_brief.md
 ```
 
 You'll get 20–50 nodes covering the decisions and constraints you wrote down. Every session from that point forward will have those facts available.
 
-> **Tip:** Design documents, ADRs, a README, or existing specifications work just as well — `ctx extract` handles any markdown file, not just conversation transcripts.
+> **Tip:** Design documents, ADRs, a README, or existing specifications work just as well — `engram extract` handles any markdown file, not just conversation transcripts.
 
 ---
 
 ## Step 4C: Set a project brief in the orchestrator static prompt (orchestrator mode only)
 
-If you're using `ctx orchestrate` instead of the hooks/MCP path, add a 1–2 sentence project brief to the `static` field in your config. This gives the model orientation before it sees any retrieved graph context — particularly important on the first turn of a session when the graph may return nothing relevant.
+If you're using `engram orchestrate` instead of the hooks/MCP path, add a 1–2 sentence project brief to the `static` field in your config. This gives the model orientation before it sees any retrieved graph context — particularly important on the first turn of a session when the graph may return nothing relevant.
 
 Open `~/.context-broker/config.yaml` and find the `orchestrator.system_prompt` section:
 
@@ -237,7 +237,7 @@ No action needed — it happens automatically at the end of every session.
 After a session (or using any existing transcript):
 
 ```bash
-ctx extract myproject ~/.context-broker/transcripts/myproject/latest.md
+engram extract myproject ~/.context-broker/transcripts/myproject/latest.md
 ```
 
 You'll see output like:
@@ -254,13 +254,13 @@ The graph is now stored at `~/.context-broker/projects/myproject/context.db`.
 ## Step 7: Verify retrieval is working
 
 ```bash
-ctx query myproject "how does the authentication work" --stats
+engram query myproject "how does the authentication work" --stats
 ```
 
 Then check what the hook would inject for that query:
 
 ```bash
-ctx last-context
+engram last-context
 ```
 
 ---
@@ -283,19 +283,19 @@ Claude Sonnet 4.6 │ ctx [████░░░░] 12% │ $0.0041 │ CB(mypr
 ## Ongoing workflow
 
 ```
-Session ends → transcript auto-saved → run ctx extract → next session has context
+Session ends → transcript auto-saved → run engram extract → next session has context
 ```
 
 After a few sessions, accumulate transcripts and re-extract to grow the graph:
 
 ```bash
-ctx extract myproject ~/.context-broker/transcripts/myproject/20260309_*.md
+engram extract myproject ~/.context-broker/transcripts/myproject/20260309_*.md
 ```
 
 Or extract each new session as it happens:
 
 ```bash
-ctx extract myproject ~/.context-broker/transcripts/myproject/latest.md
+engram extract myproject ~/.context-broker/transcripts/myproject/latest.md
 ```
 
 ---
@@ -304,32 +304,32 @@ ctx extract myproject ~/.context-broker/transcripts/myproject/latest.md
 
 ```bash
 # One-click import from recent Claude Code sessions
-ctx onboard myproject
+engram onboard myproject
 
 # Import specific .jsonl session files
-ctx import-claude-sessions myproject ~/.claude/projects/abc123/session.jsonl
+engram import-claude-sessions myproject ~/.claude/projects/abc123/session.jsonl
 
 # List discoverable sessions without importing
-ctx import-claude-sessions myproject --list-only
+engram import-claude-sessions myproject --list-only
 
 # Start the MCP server (for Claude Code integration)
-ctx mcp-serve                  # stdio (default, for Claude Code)
-ctx mcp-serve --transport sse  # HTTP SSE (for other clients)
+engram mcp-serve                  # stdio (default, for Claude Code)
+engram mcp-serve --transport sse  # HTTP SSE (for other clients)
 
 # See what's in your graph
-ctx show myproject
+engram show myproject
 
 # Query manually (useful for testing)
-ctx query myproject "describe the data pipeline" --stats
+engram query myproject "describe the data pipeline" --stats
 
 # See exactly what was injected into the last prompt
-ctx last-context
+engram last-context
 
 # Export the full graph as markdown
-ctx export myproject
+engram export myproject
 
 # Initialize a fresh empty graph
-ctx init myproject
+engram init myproject
 ```
 
 ---
@@ -361,7 +361,7 @@ If you prefer to edit manually instead, open `~/.claude/settings.json` and remov
 
 ### Step 2: Remove the project marker file
 
-In any project directory where you ran `ctx hook-init` (or manually created `.context-broker`):
+In any project directory where you ran `engram hook-init` (or manually created `.context-broker`):
 
 ```bash
 rm /path/to/your/project/.context-broker
@@ -393,14 +393,14 @@ pip uninstall context-broker
 ## Troubleshooting
 
 **"No graph found" in the status line**
-→ Run `ctx onboard myproject` or `ctx extract myproject <transcript>` to build the graph first.
+→ Run `engram onboard myproject` or `engram extract myproject <transcript>` to build the graph first.
 
 **MCP server not showing up in Claude Code**
-→ Confirm `ctx mcp-serve` runs without error: `ctx mcp-serve --help`
+→ Confirm `engram mcp-serve` runs without error: `engram mcp-serve --help`
 → Check that `~/.claude/claude_desktop_config.json` has the correct JSON syntax.
 → Restart Claude Code after editing the config.
 
-**`ctx onboard` finds no sessions**
+**`engram onboard` finds no sessions**
 → Sessions appear in `~/.claude/projects/` after using Claude Code at least once.
 → Check: `ls ~/.claude/projects/`
 
@@ -409,7 +409,7 @@ pip uninstall context-broker
 → Check `~/.claude/settings.json` for the hook entries.
 
 **"No relevant context found" on every query**
-→ Try `ctx show myproject` to confirm nodes exist, then try a broader query term.
+→ Try `engram show myproject` to confirm nodes exist, then try a broader query term.
 → Check that the `.context-broker` file in your project directory contains the correct project name.
 
 **Extraction fails with auth error**

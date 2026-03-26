@@ -74,7 +74,7 @@ Submit `context-broker` to:
 - Cursor marketplace
 - Windsurf marketplace
 
-The MCP server already works (`ctx mcp-serve`). This is just writing marketplace listings using existing `GETTING_STARTED.md` and `SALES_PITCHES.md` as source material.
+The MCP server already works (`engram mcp-serve`). This is just writing marketplace listings using existing `GETTING_STARTED.md` and `SALES_PITCHES.md` as source material.
 
 ### What NOT to build for monetization yet
 
