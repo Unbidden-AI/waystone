@@ -28,8 +28,7 @@ ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
 from engram.config import get_db_path, get_project_dir, load_config
-from engram.extractor import ExtractionBuffer, extract, extract_targeted, extract_turn, split_transcript_into_turns, verify_extraction
-from engram.cli import _split_at_paragraphs
+from engram.extractor import ExtractionBuffer, extract, extract_targeted, extract_turn, split_transcript_into_turns, split_into_chunks, verify_extraction
 from engram.retriever import (
     bfs_collect,
     extract_keywords,
@@ -158,7 +157,7 @@ def run_extraction(config: dict, project_name: str, transcripts: list, verify: b
             if effective_chunk_size and len(transcript_text) > effective_chunk_size:
                 chunk_size = effective_chunk_size
             if chunk_size and len(transcript_text) > chunk_size:
-                chunks = _split_at_paragraphs(transcript_text, chunk_size)
+                chunks = split_into_chunks(transcript_text, chunk_size)
                 print(f" [{len(chunks)} chunks]", end="", flush=True)
 
                 async def extract_all_chunks():
@@ -702,6 +701,11 @@ def main():
         help="Run a targeted pass hunting for hard constraints and requirements",
     )
     parser.add_argument(
+        "--numerics",
+        action="store_true",
+        help="Run a targeted pass hunting for numeric values, measurements, and quantified facts",
+    )
+    parser.add_argument(
         "--stack-runs",
         type=int,
         default=1,
@@ -741,7 +745,8 @@ def main():
     print(f"  Verify pass: {'yes' if args.verify else 'no'}")
     _targeted_categories = [
         c for c, flag in [("lessons", args.lessons), ("decisions", args.decisions),
-                          ("questions", args.questions), ("constraints", args.constraints)]
+                          ("questions", args.questions), ("constraints", args.constraints),
+                          ("numerics", args.numerics)]
         if flag
     ]
     if _targeted_categories:

@@ -647,6 +647,56 @@ RULES:
 
 TRANSCRIPT:
 {transcript}""",
+
+    "numerics": """You are a context extraction engine hunting specifically for numeric values, measurements, thresholds, and quantified facts.
+
+Return ONLY a valid JSON object — no markdown fences, no commentary, no preamble. Start your response with { and end with }.
+
+Schema:
+{
+  "nodes": [
+    {
+      "id": "n1",
+      "fact": "Clear, self-contained statement including the exact numeric value and its context",
+      "type": "implementation",
+      "confidence": 0.9,
+      "source_message": 0,
+      "supersedes": [],
+      "tags": ["keyword1", "keyword2"]
+    }
+  ],
+  "edges": [
+    {
+      "from": "n1",
+      "to": "n_existingid",
+      "relation": "relates_to"
+    }
+  ]
+}
+
+EXISTING CONTEXT (already extracted — do NOT re-extract these):
+{existing_context}
+
+HUNT ONLY for these patterns — emit a node for EVERY instance found:
+
+1. TIME ESTIMATES / DURATIONS: "6+ weeks", "2-3 days", "takes about 4 hours", migration timelines, effort estimates
+2. PERFORMANCE THRESHOLDS: Latency budgets ("100ms p99"), throughput targets ("10k req/s"), availability SLOs ("99.9%")
+3. SIZE / SCALE FIGURES: Data volumes ("10TB"), row counts, user counts, batch sizes, queue depths
+4. CONFIGURATION VALUES: Timeout settings, connection pool sizes, retry counts, page sizes, thread counts
+5. VERSION NUMBERS: Language/runtime versions ("Python 3.11"), library/framework versions pinned to specific numbers
+6. COST / BUDGET FIGURES: Dollar amounts, percentage cost changes, resource unit costs
+7. RATIONALE NUMERICS: Numbers embedded in decision rationale ("switching would cost 6+ weeks", "saves 30% cost") — these MUST be captured even when the main decision node exists; emit a relates_to edge to the existing decision node
+
+RULES:
+- Each fact MUST include the specific number — do NOT emit a node if the number is vague or missing.
+- The fact must be self-contained: include WHAT the number measures AND the context (system/component it applies to).
+- Use type: "constraint" if the numeric is a hard requirement or SLO. Use type: "implementation" for configuration values and estimates.
+- Tag with: the thing being measured, the unit or domain, related component names. Include synonyms.
+- If a numeric is already captured verbatim in EXISTING CONTEXT, do NOT re-extract it — but if the existing node omits the number, emit a new node with the full numeric and link it.
+- If nothing is found, return {"nodes": [], "edges": []}.
+
+TRANSCRIPT:
+{transcript}""",
 }
 
 

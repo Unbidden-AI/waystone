@@ -102,12 +102,13 @@ _MAX_FILE_BYTES = 50 * 1024 * 1024  # 50 MB hard limit
 @click.option("--decisions", is_flag=True, help="Run a targeted pass hunting for decision nodes and their rationale")
 @click.option("--questions", is_flag=True, help="Run a targeted pass hunting for open questions and unresolved items")
 @click.option("--constraints", is_flag=True, help="Run a targeted pass hunting for hard constraints and requirements")
+@click.option("--numerics", is_flag=True, help="Run a targeted pass hunting for numeric values, measurements, and quantified facts")
 @click.option("--synthesize", is_flag=True, help="Run a synthesis pass after extraction: create cross-cutting summary nodes across all graph nodes")
 @click.option("--timeout", type=float, default=None, help="LLM timeout in seconds (overrides config)")
 @click.option("--chunk-size", type=int, default=None, metavar="CHARS",
               help="Max chars per LLM call (default: 20000 for Gemini; auto-applied when file > 20000 chars)")
 @click.pass_context
-def extract_cmd(ctx, project, transcript_file, verify, lessons, decisions, questions, constraints, synthesize, timeout, chunk_size):
+def extract_cmd(ctx, project, transcript_file, verify, lessons, decisions, questions, constraints, numerics, synthesize, timeout, chunk_size):
     """Extract facts from a transcript and merge into the project graph."""
     config = _load_cfg(ctx.obj["config_path"])
 
@@ -152,7 +153,8 @@ def extract_cmd(ctx, project, transcript_file, verify, lessons, decisions, quest
 
     _targeted_categories = [
         c for c, flag in [("lessons", lessons), ("decisions", decisions),
-                          ("questions", questions), ("constraints", constraints)]
+                          ("questions", questions), ("constraints", constraints),
+                          ("numerics", numerics)]
         if flag
     ]
 
