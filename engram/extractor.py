@@ -132,7 +132,7 @@ async def _call_llm(prompt: str, config: dict, domain_profile=None) -> str:
         }
 
     _RETRYABLE_STATUS = {429, 500, 502, 503, 504}
-    _MAX_RETRIES = 4
+    _MAX_RETRIES = 6
 
     use_streaming = llm_cfg.get("stream", False)
     if use_streaming:
@@ -150,10 +150,17 @@ async def _call_llm(prompt: str, config: dict, domain_profile=None) -> str:
                 async with httpx.AsyncClient(timeout=timeout) as client:
                     response = await client.post(url, headers=headers, json=request_body)
                     if response.status_code in _RETRYABLE_STATUS and attempt < _MAX_RETRIES - 1:
-                        wait = 2 ** attempt
-                        retry_after = response.headers.get("Retry-After")
-                        if retry_after and retry_after.isdigit():
-                            wait = min(int(retry_after), 60)
+                        if response.status_code == 429:
+                            # Rate limited: honor Retry-After header if present, else use
+                            # long exponential backoff (30s, 60s, 90s, 120s). The 1s→4s
+                            # default is far too short for Gemini free-tier quota windows.
+                            retry_after = response.headers.get("Retry-After")
+                            if retry_after and retry_after.isdigit():
+                                wait = int(retry_after)
+                            else:
+                                wait = min(30 * (attempt + 1), 120)
+                        else:
+                            wait = 2 ** attempt
                         log.warning("LLM returned %s (attempt %d/%d), retrying in %ds", response.status_code, attempt + 1, _MAX_RETRIES, wait)
                         await asyncio.sleep(wait)
                         continue

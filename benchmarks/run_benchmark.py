@@ -774,6 +774,21 @@ def main():
     extraction_time = time.time() - t0
     print(f"\nExtraction done in {extraction_time:.1f}s\n")
 
+    # Embed all nodes so semantic search contributes to retrieval during evaluation.
+    # This is a no-op when sentence-transformers / sqlite-vec is unavailable.
+    try:
+        from engram import embedder
+        if embedder.is_available():
+            _store = GraphStore(get_db_path(config, project_name))
+            if _store._vec_available:
+                print("── Embedding nodes for semantic search ──")
+                t_emb = time.time()
+                n_embedded = _store.embed_missing_nodes()
+                print(f"  Embedded {n_embedded} nodes in {time.time() - t_emb:.1f}s\n")
+            _store.close()
+    except Exception as _emb_err:
+        print(f"  Embedding skipped: {_emb_err}\n")
+
     # Phase 2: Query evaluation (local only, no LLM)
     print("── Phase 2: Retrieval Evaluation (local, no LLM) ──")
     t0 = time.time()
