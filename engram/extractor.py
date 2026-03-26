@@ -242,6 +242,15 @@ async def extract(transcript_text: str, config: dict, store=None, source_transcr
         keywords = extract_keywords(transcript_text)
         if keywords:
             candidates = store.get_nodes_by_tags(keywords)
+            # Augment with semantic search so nodes with different vocabulary are included.
+            from engram import embedder
+            if embedder.is_available() and store._vec_available:
+                query_blob = embedder.embed_text(transcript_text[:2000])  # first 2k chars as query
+                sem_ids = store.search_by_embedding(query_blob, top_k=30)
+                if sem_ids:
+                    existing_ids = {n["id"] for n in candidates}
+                    sem_nodes = store.get_nodes_by_ids(sem_ids)
+                    candidates.extend(n for n in sem_nodes if n["id"] not in existing_ids)
             if candidates:
                 # Rank by keyword overlap count — nodes matching more keywords rank higher.
                 # This ensures the top-30 cap selects the most relevant candidates rather

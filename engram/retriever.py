@@ -105,17 +105,21 @@ def retrieve_with_stats(
                 added += 1
         log.debug("Fact-text search added %d new entry nodes (total: %d)", added, len(entry_nodes))
 
+    # Semantic augmentation: always union semantic results when available, not just as fallback.
+    # This catches nodes whose vocabulary differs from extraction-time tags.
+    from engram import embedder
+    if embedder.is_available() and store._vec_available:
+        query_blob = embedder.embed_text(task_description)
+        sem_ids = store.search_by_embedding(query_blob, top_k=top_k)
+        if sem_ids:
+            existing_ids = {n["id"] for n in entry_nodes}
+            sem_nodes = store.get_nodes_by_ids(sem_ids)
+            added = sum(1 for n in sem_nodes if n["id"] not in existing_ids)
+            entry_nodes.extend(n for n in sem_nodes if n["id"] not in existing_ids)
+            log.debug("Semantic augmentation: %d new entry nodes (total: %d)", added, len(entry_nodes))
+
     if not entry_nodes:
-        # Semantic fallback: embed the task description and search by vector similarity
-        from engram import embedder
-        if embedder.is_available() and store._vec_available:
-            query_blob = embedder.embed_text(task_description)
-            sem_ids = store.search_by_embedding(query_blob, top_k=top_k)
-            if sem_ids:
-                entry_nodes = store.get_nodes_by_ids(sem_ids)
-                log.debug("Semantic fallback: %d nodes via embedding search", len(entry_nodes))
-        if not entry_nodes:
-            return RetrievalResult(markdown="No relevant context found.", nodes_before_strategies=0, nodes_after_strategies=0)
+        return RetrievalResult(markdown="No relevant context found.", nodes_before_strategies=0, nodes_after_strategies=0)
 
     # Strategy: Relevance scoring — rank entry nodes by tag overlap count
     if strats["relevance_scoring"]:
