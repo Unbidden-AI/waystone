@@ -221,17 +221,44 @@ async def extract(transcript_text: str, config: dict, store=None, source_transcr
     Calls an OpenAI-compatible chat/completions endpoint and parses
     the JSON response into nodes and edges with proper IDs.
 
+    When *store* is provided, relevant existing nodes are retrieved via tag
+    overlap and injected into the prompt so the LLM can detect supersedence
+    at extraction time and avoid re-extracting already-captured facts.
+
     Args:
         transcript_text: The transcript content to extract from
         config: LLM configuration dict
-        store: Optional GraphStore instance for logging failures
+        store: Optional GraphStore instance for failure logging and context retrieval
         source_transcript: Optional transcript name/path for failure logging
 
     Returns:
         dict with "nodes" (list[dict]) and "edges" (list[dict])
     """
     log.info("Extracting from %d chars of transcript", len(transcript_text))
-    prompt = build_extraction_prompt(transcript_text)
+
+    existing_nodes: list[dict] | None = None
+    if store is not None:
+        from .retriever import extract_keywords
+        keywords = extract_keywords(transcript_text)
+        if keywords:
+            candidates = store.get_nodes_by_tags(keywords)
+            if candidates:
+                # Rank by keyword overlap count — nodes matching more keywords rank higher.
+                # This ensures the top-30 cap selects the most relevant candidates rather
+                # than arbitrary insertion-order results.
+                kw_set = set(keywords)
+                candidates.sort(
+                    key=lambda n: len(kw_set.intersection(n.get("tags", []))),
+                    reverse=True,
+                )
+                existing_nodes = candidates[:30]
+                log.info(
+                    "Context-aware extraction: injecting %d existing nodes (%d candidates) into prompt",
+                    len(existing_nodes),
+                    len(candidates),
+                )
+
+    prompt = build_extraction_prompt(transcript_text, existing_nodes=existing_nodes)
     try:
         content = await _call_llm(prompt, config)
         extraction = parse_llm_response(content)

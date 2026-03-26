@@ -136,6 +136,14 @@ class GraphStore:
             log.info("Backfilled fact_hash for %d existing nodes", len(rows))
         self.conn.commit()
 
+        # Migration: add weight column to edges if it doesn't exist yet
+        try:
+            self.conn.execute("ALTER TABLE edges ADD COLUMN weight REAL DEFAULT 1.0")
+            self.conn.commit()
+            log.info("Migrated edges table: added weight column")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
     def add_node(self, node: dict) -> str:
         """Insert a node, deduplicating by fact text hash.
 
@@ -219,9 +227,11 @@ class GraphStore:
         return True
 
     def add_edge(self, from_id: str, to_id: str, relation: str):
-        """Insert an edge, ignoring duplicates."""
+        """Insert an edge, or increment its weight if it already exists."""
         self.conn.execute(
-            "INSERT OR IGNORE INTO edges (from_id, to_id, relation) VALUES (?, ?, ?)",
+            """INSERT INTO edges (from_id, to_id, relation, weight)
+               VALUES (?, ?, ?, 1.0)
+               ON CONFLICT (from_id, to_id, relation) DO UPDATE SET weight = weight + 1.0""",
             (from_id, to_id, relation),
         )
         self.conn.commit()

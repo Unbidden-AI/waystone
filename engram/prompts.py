@@ -121,16 +121,46 @@ def _format_edge_relations_section(profile: "DomainProfile") -> str:
     return "\n".join(lines)
 
 
-def build_extraction_prompt(transcript_text: str, domain_profile=None) -> str:
-    """Format the extraction prompt with the given transcript and domain profile."""
+def build_extraction_prompt(
+    transcript_text: str,
+    domain_profile=None,
+    existing_nodes: list[dict] | None = None,
+) -> str:
+    """Format the extraction prompt with the given transcript and domain profile.
+
+    When *existing_nodes* is provided, an EXISTING CONTEXT section is injected
+    before the TRANSCRIPT so the LLM can detect supersedence at extraction time
+    and avoid re-extracting already-captured facts.
+    """
     from .domain_profiles import SOFTWARE_DEV
     profile = domain_profile or SOFTWARE_DEV
-    return (
+    base = (
         EXTRACTION_PROMPT
         .replace("{node_types_section}", _format_node_types_section(profile))
         .replace("{edge_relations_section}", _format_edge_relations_section(profile))
-        .replace("{transcript}", transcript_text)
     )
+
+    if existing_nodes:
+        lines = []
+        for node in existing_nodes:
+            tags_str = ", ".join(node.get("tags", [])[:5])
+            lines.append(
+                f'[{node["id"]}] ({node["type"]}, conf={node.get("confidence", 0.5):.1f})'
+                f' "{node["fact"]}" tags:[{tags_str}]'
+            )
+        existing_section = (
+            "\nEXISTING CONTEXT (already in graph — do NOT re-extract these facts):\n"
+            + "\n".join(lines)
+            + "\n\nFor existing nodes above:\n"
+            "- Use their exact IDs (e.g. n_a1b2c3d4) in supersedes arrays and edges."
+            " Do NOT emit them as new nodes.\n"
+            "- When a fact in this transcript SUPERSEDES an existing one, set"
+            ' supersedes: ["n_existingid"] on the new node.\n'
+            "- Do NOT create new nodes for facts already captured above — skip them entirely.\n"
+        )
+        base = base.replace("TRANSCRIPT:", existing_section + "\nTRANSCRIPT:")
+
+    return base.replace("{transcript}", transcript_text)
 
 
 INCREMENTAL_EXTRACTION_PROMPT = """You are a context extraction engine. Analyze the following conversation turn and extract NEW facts, decisions, constraints, and implementation details that are NOT already captured in the existing context.
