@@ -106,7 +106,16 @@ def retrieve_with_stats(
         log.debug("Fact-text search added %d new entry nodes (total: %d)", added, len(entry_nodes))
 
     if not entry_nodes:
-        return RetrievalResult(markdown="No relevant context found.", nodes_before_strategies=0, nodes_after_strategies=0)
+        # Semantic fallback: embed the task description and search by vector similarity
+        from engram import embedder
+        if embedder.is_available() and store._vec_available:
+            query_blob = embedder.embed_text(task_description)
+            sem_ids = store.search_by_embedding(query_blob, top_k=top_k)
+            if sem_ids:
+                entry_nodes = store.get_nodes_by_ids(sem_ids)
+                log.debug("Semantic fallback: %d nodes via embedding search", len(entry_nodes))
+        if not entry_nodes:
+            return RetrievalResult(markdown="No relevant context found.", nodes_before_strategies=0, nodes_after_strategies=0)
 
     # Strategy: Relevance scoring — rank entry nodes by tag overlap count
     if strats["relevance_scoring"]:

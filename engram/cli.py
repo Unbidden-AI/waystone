@@ -260,6 +260,7 @@ def extract_cmd(ctx, project, transcript_file, verify, lessons, decisions, quest
 
     store = GraphStore(db_path)
     store.merge_extraction(nodes, edges)
+    store.embed_missing_nodes()
     store.close()
 
     if synthesize:

@@ -60,7 +60,21 @@ class GraphStore:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(str(self.db_path))
         self.conn.row_factory = sqlite3.Row
+        self._vec_available = self._load_sqlite_vec()
         self.init_db()
+
+    def _load_sqlite_vec(self) -> bool:
+        """Attempt to load the sqlite-vec extension. Returns True if successful."""
+        try:
+            import sqlite_vec
+            self.conn.enable_load_extension(True)
+            sqlite_vec.load(self.conn)
+            self.conn.enable_load_extension(False)
+            log.debug("sqlite-vec extension loaded")
+            return True
+        except (ImportError, AttributeError, Exception) as e:
+            log.debug("sqlite-vec not available (%s: %s) — semantic search disabled", type(e).__name__, e)
+            return False
 
     def init_db(self):
         """Create tables if they don't exist."""
@@ -143,6 +157,15 @@ class GraphStore:
             log.info("Migrated edges table: added weight column")
         except sqlite3.OperationalError:
             pass  # Column already exists
+
+        # Create vec0 virtual table for semantic search (requires sqlite-vec loaded)
+        if self._vec_available:
+            from engram.embedder import EMBEDDING_DIM
+            self.conn.execute(
+                f"CREATE VIRTUAL TABLE IF NOT EXISTS node_embeddings USING vec0("
+                f"node_id TEXT PRIMARY KEY, embedding float[{EMBEDDING_DIM}])"
+            )
+            self.conn.commit()
 
     def add_node(self, node: dict) -> str:
         """Insert a node, deduplicating by fact text hash.
@@ -329,7 +352,7 @@ class GraphStore:
         rows = self.conn.execute("SELECT * FROM edges").fetchall()
         return [dict(r) for r in rows]
 
-    def merge_extraction(self, nodes: list[dict], edges: list[dict]):
+    def merge_extraction(self, nodes: list[dict], edges: list[dict]) -> dict[str, str]:
         """Merge extracted nodes and edges into the graph.
 
         Handles supersedes: when a new node supersedes existing ones,
@@ -339,6 +362,9 @@ class GraphStore:
         node are merged into that node (tags unioned, confidence max). The
         id_map tracks new_id → canonical_id so edges are rewritten to point
         at canonical nodes.
+
+        Returns id_map so callers can resolve canonical IDs for post-merge
+        work (e.g. embedding new nodes with their final IDs).
         """
         log.info("Merging %d nodes, %d edges into %s", len(nodes), len(edges), self.db_path.name)
         id_map: dict[str, str] = {}
@@ -366,6 +392,7 @@ class GraphStore:
                             (json.dumps(supersedes_list), from_id),
                         )
                         self.conn.commit()
+        return id_map
 
     def propagate_edge_tags(self):
         """Bidirectionally propagate tags along non-supersedes edges (1 hop).
@@ -656,6 +683,66 @@ class GraphStore:
             (limit,),
         ).fetchall()
         return [dict(r) for r in rows]
+
+    # ------------------------------------------------------------------
+    # Semantic search (sqlite-vec)
+    # ------------------------------------------------------------------
+
+    def embed_missing_nodes(self) -> int:
+        """Embed all nodes that don't yet have an entry in node_embeddings.
+
+        Returns the number of nodes embedded. No-op if sqlite-vec or
+        sentence-transformers are unavailable.
+        """
+        if not self._vec_available:
+            return 0
+        from engram import embedder
+        if not embedder.is_available():
+            return 0
+        rows = self.conn.execute(
+            """SELECT n.id, n.fact FROM nodes n
+               LEFT JOIN node_embeddings e ON n.id = e.node_id
+               WHERE e.node_id IS NULL"""
+        ).fetchall()
+        if not rows:
+            return 0
+        ids = [r[0] for r in rows]
+        facts = [r[1] for r in rows]
+        blobs = embedder.embed_texts(facts)
+        self.store_embeddings(list(zip(ids, blobs)))
+        log.debug("Embedded %d new nodes", len(ids))
+        return len(ids)
+
+    def store_embeddings(self, pairs: list[tuple[str, bytes]]) -> None:
+        """Upsert (node_id, embedding_blob) pairs into node_embeddings.
+
+        No-op if sqlite-vec is not available.
+        """
+        if not self._vec_available or not pairs:
+            return
+        self.conn.executemany(
+            "INSERT OR REPLACE INTO node_embeddings(node_id, embedding) VALUES (?, ?)",
+            pairs,
+        )
+        self.conn.commit()
+
+    def search_by_embedding(self, query_blob: bytes, top_k: int = 10) -> list[str]:
+        """Return up to top_k node IDs ranked by cosine similarity to query_blob.
+
+        Returns an empty list if sqlite-vec is not available or if the
+        node_embeddings table is empty.
+        """
+        if not self._vec_available:
+            return []
+        rows = self.conn.execute(
+            """SELECT node_id, distance
+               FROM node_embeddings
+               WHERE embedding MATCH ?
+               ORDER BY distance
+               LIMIT ?""",
+            (query_blob, top_k),
+        ).fetchall()
+        return [r[0] for r in rows]
 
     def close(self):
         """Close the database connection."""
