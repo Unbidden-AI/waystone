@@ -89,11 +89,32 @@ STOP_WORDS = {
 }
 
 
+def _keyword_variants(word: str) -> list[str]:
+    """Return a word plus morphological variants to improve keyword matching.
+
+    Handles:
+    - Hyphenated compounds: "ip-level" → also checks "ip" + "level" separately
+    - Basic singular/plural: "minutes" ↔ "minute", "containers" ↔ "container"
+    - Number+unit compounds: "15-minute" also matches "minutes"
+    """
+    variants = [word]
+    if "-" in word:
+        parts = [p for p in word.split("-") if len(p) > 2 and p not in STOP_WORDS]
+        variants.extend(parts)
+    # Singular ↔ plural
+    if word.endswith("s") and len(word) > 3:
+        variants.append(word[:-1])   # "minutes" → "minute"
+    elif not word.endswith("s"):
+        variants.append(word + "s")  # "minute" → "minutes"
+    return variants
+
+
 def score_recall(retrieved_markdown: str, ground_truth_elements: list) -> tuple:
     """Score recall: fraction of ground truth elements found in retrieved output.
 
     Checks full phrase first, then falls back to keyword overlap (>=70% of
-    non-stop-words must be present).
+    non-stop-words must be present). Keyword matching handles hyphenated
+    compounds and basic singular/plural variants.
 
     Returns:
         (recall: float, matched: list[str], missed: list[str])
@@ -109,14 +130,20 @@ def score_recall(retrieved_markdown: str, ground_truth_elements: list) -> tuple:
             matched.append(element)
             continue
 
-        # Keyword overlap fallback
-        key_words = [
+        # Keyword overlap fallback — expand each keyword to variants
+        raw_words = [
             w.strip(".,;:()\"'—")
             for w in element_lower.split()
-            if w.strip(".,;:()\"'—") not in STOP_WORDS and len(w) > 2
+        ]
+        key_words = [
+            w for w in raw_words
+            if w not in STOP_WORDS and len(w) > 2
         ]
         if key_words:
-            found = sum(1 for w in key_words if w in text)
+            found = sum(
+                1 for w in key_words
+                if any(v in text for v in _keyword_variants(w))
+            )
             if found / len(key_words) >= 0.7:
                 matched.append(element)
             else:
@@ -503,6 +530,7 @@ def run_queries(config: dict, project_name: str, questions: list, presets: dict)
                 "recall": round(recall, 3),
                 "matched": matched,
                 "missed": missed,
+                "retrieved_context": result.markdown,
                 "nodes_before_strategies": result.nodes_before_strategies,
                 "nodes_after_strategies": result.nodes_after_strategies,
                 "tokens_estimated": result.tokens_estimated,
