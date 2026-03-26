@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from context_broker.store import GraphStore
+from engram.store import GraphStore
 
 
 @pytest.fixture
@@ -55,9 +55,9 @@ class TestContextBrokerQuery:
         monkeypatch.chdir(tmp_path)
         (tmp_path / ".context-broker").write_text("test-project\n")
 
-        from context_broker.mcp_server import context_broker_query
-        with patch("context_broker.mcp_server._load_config", return_value=config):
-            result = context_broker_query(task="database storage", project="test-project")
+        from engram.mcp_server import engram_query
+        with patch("engram.mcp_server._load_config", return_value=config):
+            result = engram_query(task="database storage", project="test-project")
 
         assert "PostgreSQL" in result
 
@@ -65,28 +65,28 @@ class TestContextBrokerQuery:
         monkeypatch.chdir(tmp_path)
         config = {"llm": {}, "defaults": {}, "strategies": {}, "projects_dir": str(tmp_path / "projects")}
 
-        from context_broker.mcp_server import context_broker_query
-        with patch("context_broker.mcp_server._load_config", return_value=config):
+        from engram.mcp_server import engram_query
+        with patch("engram.mcp_server._load_config", return_value=config):
             with pytest.raises(FileNotFoundError):
-                context_broker_query(task="anything", project="nonexistent-project")
+                engram_query(task="anything", project="nonexistent-project")
 
     def test_raises_when_no_project_detected(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         config = {"llm": {}, "defaults": {}, "strategies": {}, "projects_dir": str(tmp_path / "projects")}
 
-        from context_broker.mcp_server import context_broker_query
-        with patch("context_broker.mcp_server._load_config", return_value=config):
+        from engram.mcp_server import engram_query
+        with patch("engram.mcp_server._load_config", return_value=config):
             with pytest.raises(ValueError, match="No project specified"):
-                context_broker_query(task="anything")
+                engram_query(task="anything")
 
 
 class TestContextBrokerStats:
     def test_returns_stats(self, project_setup):
         tmp_path, db_path, config = project_setup
 
-        from context_broker.mcp_server import context_broker_stats
-        with patch("context_broker.mcp_server._load_config", return_value=config):
-            result = context_broker_stats(project="test-project")
+        from engram.mcp_server import engram_stats
+        with patch("engram.mcp_server._load_config", return_value=config):
+            result = engram_stats(project="test-project")
 
         assert "Nodes: 2" in result
         assert "test-project" in result
@@ -94,19 +94,19 @@ class TestContextBrokerStats:
     def test_raises_on_missing_project(self, tmp_path):
         config = {"llm": {}, "defaults": {}, "strategies": {}, "projects_dir": str(tmp_path / "projects")}
 
-        from context_broker.mcp_server import context_broker_stats
-        with patch("context_broker.mcp_server._load_config", return_value=config):
+        from engram.mcp_server import engram_stats
+        with patch("engram.mcp_server._load_config", return_value=config):
             with pytest.raises(FileNotFoundError):
-                context_broker_stats(project="nonexistent")
+                engram_stats(project="nonexistent")
 
 
 class TestContextBrokerListProjects:
     def test_lists_existing_projects(self, project_setup):
         tmp_path, db_path, config = project_setup
 
-        from context_broker.mcp_server import context_broker_list_projects
-        with patch("context_broker.mcp_server._load_config", return_value=config):
-            result = context_broker_list_projects()
+        from engram.mcp_server import engram_list_projects
+        with patch("engram.mcp_server._load_config", return_value=config):
+            result = engram_list_projects()
 
         assert "test-project" in result
         assert "2 nodes" in result
@@ -114,9 +114,9 @@ class TestContextBrokerListProjects:
     def test_returns_message_when_no_projects(self, tmp_path):
         config = {"llm": {}, "defaults": {}, "strategies": {}, "projects_dir": str(tmp_path / "nonexistent")}
 
-        from context_broker.mcp_server import context_broker_list_projects
-        with patch("context_broker.mcp_server._load_config", return_value=config):
-            result = context_broker_list_projects()
+        from engram.mcp_server import engram_list_projects
+        with patch("engram.mcp_server._load_config", return_value=config):
+            result = engram_list_projects()
 
         assert "No projects found" in result
 
@@ -125,10 +125,10 @@ class TestContextBrokerExtract:
     def test_raises_on_oversized_input(self, project_setup):
         tmp_path, db_path, config = project_setup
 
-        from context_broker.mcp_server import _MAX_EXTRACT_CHARS, context_broker_extract
-        with patch("context_broker.mcp_server._load_config", return_value=config):
+        from engram.mcp_server import _MAX_EXTRACT_CHARS, engram_extract
+        with patch("engram.mcp_server._load_config", return_value=config):
             with pytest.raises(ValueError, match="exceeds the"):
-                context_broker_extract(
+                engram_extract(
                     text="x" * (_MAX_EXTRACT_CHARS + 1),
                     project="test-project",
                 )
@@ -136,10 +136,10 @@ class TestContextBrokerExtract:
     def test_raises_on_missing_project(self, tmp_path):
         config = {"llm": {}, "defaults": {}, "strategies": {}, "projects_dir": str(tmp_path / "projects")}
 
-        from context_broker.mcp_server import context_broker_extract
-        with patch("context_broker.mcp_server._load_config", return_value=config):
+        from engram.mcp_server import engram_extract
+        with patch("engram.mcp_server._load_config", return_value=config):
             with pytest.raises(FileNotFoundError):
-                context_broker_extract(text="some text", project="nonexistent")
+                engram_extract(text="some text", project="nonexistent")
 
     def test_extract_merges_into_graph(self, project_setup):
         tmp_path, db_path, config = project_setup
@@ -156,10 +156,10 @@ class TestContextBrokerExtract:
             "edges": [],
         }
 
-        from context_broker.mcp_server import context_broker_extract
-        with patch("context_broker.mcp_server._load_config", return_value=config):
-            with patch("context_broker.mcp_server.extract", new=AsyncMock(return_value=mock_result)):
-                result = context_broker_extract(
+        from engram.mcp_server import engram_extract
+        with patch("engram.mcp_server._load_config", return_value=config):
+            with patch("engram.mcp_server.extract", new=AsyncMock(return_value=mock_result)):
+                result = engram_extract(
                     text="We decided to use Redis for rate limiting.",
                     project="test-project",
                 )
@@ -176,11 +176,11 @@ class TestContextBrokerExtract:
 class TestMcpToolsAllLoad:
     def test_all_four_tools_registered(self):
         """Smoke test: all four tools load without decorator errors."""
-        from context_broker.mcp_server import mcp
+        from engram.mcp_server import mcp
 
         tool_names = asyncio.run(mcp.list_tools())
         names = {t.name for t in tool_names}
-        assert "context_broker_query" in names
-        assert "context_broker_extract" in names
-        assert "context_broker_stats" in names
-        assert "context_broker_list_projects" in names
+        assert "engram_query" in names
+        assert "engram_extract" in names
+        assert "engram_stats" in names
+        assert "engram_list_projects" in names

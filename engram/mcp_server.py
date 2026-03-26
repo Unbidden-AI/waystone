@@ -1,11 +1,11 @@
-"""MCP server for Context Broker.
+"""MCP server for Engram.
 
 Exposes context retrieval and extraction as MCP tools so Claude Code
 (and any MCP-compatible client) can call them directly without hook setup.
 
 Usage:
-    ctx mcp-serve                   # run on stdio (for Claude Code)
-    ctx mcp-serve --transport sse   # run as HTTP SSE server
+    engram mcp-serve                   # run on stdio (for Claude Code)
+    engram mcp-serve --transport sse   # run as HTTP SSE server
 """
 
 from __future__ import annotations
@@ -57,7 +57,7 @@ def _resolve_project(project: str | None, cwd: str | None = None) -> str:
         "No project specified and no .context-broker marker found. "
         "Pass project= explicitly, or pass cwd= (your working directory) "
         "so the server can locate the correct .context-broker marker. "
-        "Run 'ctx hook-init <project>' to create one."
+        "Run 'engram hook-init <project>' to create one."
     )
 
 
@@ -70,7 +70,7 @@ def _load_config() -> dict:
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-def context_broker_query(
+def engram_query(
     task: Annotated[str, "Task description or question to retrieve context for"],
     project: Annotated[str | None, "Project name (auto-detected from .context-broker if omitted)"] = None,
     cwd: Annotated[str | None, "Your working directory (pass this when auto-detecting project, so the server resolves the correct .context-broker marker)"] = None,
@@ -96,7 +96,7 @@ def context_broker_query(
     if not db_path.exists():
         raise FileNotFoundError(
             f"No graph found for project '{project_name}'. "
-            f"Extract a transcript first: ctx extract {project_name} <transcript_file>"
+            f"Extract a transcript first: engram extract {project_name} <transcript_file>"
         )
 
     store = GraphStore(db_path)
@@ -119,7 +119,7 @@ def context_broker_query(
 
 
 @mcp.tool()
-def context_broker_extract(
+def engram_extract(
     text: Annotated[str, "Text to extract facts from (transcript, spec, notes, etc.)"],
     project: Annotated[str | None, "Project name (auto-detected from .context-broker if omitted)"] = None,
     cwd: Annotated[str | None, "Your working directory (pass this when auto-detecting project)"] = None,
@@ -160,7 +160,7 @@ def context_broker_extract(
     if not db_path.parent.exists():
         raise FileNotFoundError(
             f"Project '{project_name}' not found. "
-            f"Initialize it first: ctx init {project_name}"
+            f"Initialize it first: engram init {project_name}"
         )
 
     async def _run() -> str:
@@ -198,7 +198,7 @@ def context_broker_extract(
 
 
 @mcp.tool()
-def context_broker_stats(
+def engram_stats(
     project: Annotated[str | None, "Project name (auto-detected if omitted)"] = None,
     cwd: Annotated[str | None, "Your working directory (pass this when auto-detecting project)"] = None,
 ) -> str:
@@ -244,8 +244,8 @@ def context_broker_stats(
 
 
 @mcp.tool()
-def context_broker_list_projects() -> str:
-    """List all available Context Broker projects on this machine."""
+def engram_list_projects() -> str:
+    """List all available Engram projects on this machine."""
     config = _load_config()
 
     if is_remote(config):
@@ -261,7 +261,7 @@ def context_broker_list_projects() -> str:
     projects_dir = Path(config.get("projects_dir", Path.home() / ".context-broker" / "projects"))
 
     if not projects_dir.exists():
-        return "No projects found. Run 'ctx init <project>' to create one."
+        return "No projects found. Run 'engram init <project>' to create one."
 
     projects = [
         d.name for d in sorted(projects_dir.iterdir())
@@ -269,7 +269,7 @@ def context_broker_list_projects() -> str:
     ]
 
     if not projects:
-        return "No projects found. Run 'ctx init <project>' to create one."
+        return "No projects found. Run 'engram init <project>' to create one."
 
     lines = [f"Available projects ({len(projects)}):"]
     for name in projects:

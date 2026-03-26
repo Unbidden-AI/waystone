@@ -1,6 +1,9 @@
-"""CLI for Context Broker."""
+"""CLI for Engram."""
 
 import asyncio
+import json
+import os
+import subprocess
 import sys
 import time
 from datetime import datetime, timezone
@@ -59,7 +62,7 @@ def _load_cfg(config_path):
 @click.option("--config", "config_path", default=None, help="Path to config.yaml")
 @click.pass_context
 def cli(ctx, config_path):
-    """Context Broker — DAG-based context intelligence for LLM workflows."""
+    """Engram — DAG-based context intelligence for LLM workflows."""
     ctx.ensure_object(dict)
     ctx.obj["config_path"] = config_path
 
@@ -116,7 +119,7 @@ def extract_cmd(ctx, project, transcript_file, verify, lessons, decisions, quest
     db_path = get_db_path(config, project)
 
     if not db_path.parent.exists():
-        click.echo(f"Error: Project '{project}' not found. Run 'ctx init {project}' first.", err=True)
+        click.echo(f"Error: Project '{project}' not found. Run 'engram init {project}' first.", err=True)
         sys.exit(1)
 
     transcript_path = Path(transcript_file)
@@ -300,7 +303,7 @@ def extract_cmd(ctx, project, transcript_file, verify, lessons, decisions, quest
     if quality["low_tag_nodes"]:
         click.echo(
             f"  Warning: {quality['low_tag_nodes']} node(s) have < 4 tags — "
-            "may be hard to retrieve. Run 'ctx show {project}' to inspect."
+            "may be hard to retrieve. Run 'engram show {project}' to inspect."
         )
 
 
@@ -466,9 +469,9 @@ def query(ctx, project, task, hops, top_k, enable, disable, confidence, token_bu
     if stats["node_count"] == 0:
         click.echo(
             f"Graph is empty. Extract a transcript first:\n"
-            f"  ctx extract {project} <transcript_file>\n"
+            f"  engram extract {project} <transcript_file>\n"
             f"Or replay an existing transcript turn-by-turn:\n"
-            f"  ctx extract-replay {project} <transcript_file>",
+            f"  engram extract-replay {project} <transcript_file>",
             err=True,
         )
         store.close()
@@ -489,9 +492,10 @@ def query(ctx, project, task, hops, top_k, enable, disable, confidence, token_bu
 
 @cli.command()
 @click.argument("project")
+@click.option("--failures", is_flag=True, help="Show recent extraction failures instead of nodes")
 @click.pass_context
-def show(ctx, project):
-    """Display graph statistics and recent nodes."""
+def show(ctx, project, failures):
+    """Display graph statistics and recent nodes, or extraction failures."""
     config = _load_cfg(ctx.obj["config_path"])
     db_path = get_db_path(config, project)
 
@@ -500,23 +504,42 @@ def show(ctx, project):
         sys.exit(1)
 
     store = GraphStore(db_path)
-    stats = store.get_stats()
 
-    click.echo(f"Project: {project}")
-    click.echo(f"Nodes: {stats['node_count']}")
-    click.echo(f"Edges: {stats['edge_count']}")
+    if failures:
+        # Show extraction failures
+        failure_list = store.get_extraction_failures(limit=50)
+        if not failure_list:
+            click.echo("No extraction failures recorded.")
+        else:
+            click.echo("Extraction Failures (last 50)")
+            click.echo("─" * 100)
+            for failure in failure_list:
+                created = failure["created_at"][:16] if failure["created_at"] else "unknown"
+                source = failure["source_transcript"] or "unknown"
+                error_type = failure["error_type"] or "unknown"
+                model = failure["model"] or "unknown"
+                msg = failure["error_message"] or ""
+                msg_short = msg[:50] + "..." if len(msg) > 50 else msg
+                click.echo(f"{created}  {error_type:12}  {source:25}  {model:20}  {msg_short}")
+    else:
+        # Show graph statistics
+        stats = store.get_stats()
 
-    if stats["type_counts"]:
-        click.echo("\nBy type:")
-        for t, count in sorted(stats["type_counts"].items()):
-            click.echo(f"  {t}: {count}")
+        click.echo(f"Project: {project}")
+        click.echo(f"Nodes: {stats['node_count']}")
+        click.echo(f"Edges: {stats['edge_count']}")
 
-    recent = store.get_recent_nodes(10)
-    if recent:
-        click.echo("\nRecent nodes:")
-        for node in recent:
-            tags = ", ".join(node["tags"][:3]) if node["tags"] else ""
-            click.echo(f"  [{node['type']}] {node['fact'][:80]}  ({tags})")
+        if stats["type_counts"]:
+            click.echo("\nBy type:")
+            for t, count in sorted(stats["type_counts"].items()):
+                click.echo(f"  {t}: {count}")
+
+        recent = store.get_recent_nodes(10)
+        if recent:
+            click.echo("\nRecent nodes:")
+            for node in recent:
+                tags = ", ".join(node["tags"][:3]) if node["tags"] else ""
+                click.echo(f"  [{node['type']}] {node['fact'][:80]}  ({tags})")
 
     store.close()
 
@@ -683,7 +706,7 @@ def reconcile_cmd(ctx, project, dry_run, max_cluster_size):
     else:
         click.echo(f"\nWrote {total_written} supersedes edge(s) to '{project}' graph.")
         if total_written:
-            click.echo("Run 'ctx show' to inspect, or 'ctx query' to see the pruned results.")
+            click.echo("Run 'engram show' to inspect, or 'engram query' to see the pruned results.")
 
 
 @cli.command("prune")
@@ -723,9 +746,9 @@ def prune_cmd(ctx, project, older_than_days, confidence_below, source_pattern, e
     Examples:
 
     \b
-      ctx prune myproject --source live
-      ctx prune myproject --older-than 90 --confidence-below 0.5
-      ctx prune myproject --source live --execute
+      engram prune myproject --source live
+      engram prune myproject --older-than 90 --confidence-below 0.5
+      engram prune myproject --source live --execute
     """
     if older_than_days is None and confidence_below is None and source_pattern is None:
         click.echo("Error: at least one filter (--older-than, --confidence-below, --source) is required.", err=True)
@@ -779,8 +802,8 @@ def hook_init_cmd(ctx, project, target_dir):
     reads this when determining which graph to query for context injection.
 
     Example:
-        ctx hook-init myproject          # marks current directory
-        ctx hook-init myproject --dir ~/code/myapp
+        engram hook-init myproject          # marks current directory
+        engram hook-init myproject --dir ~/code/myapp
     """
     marker = Path(target_dir).resolve() / ".context-broker"
     if marker.exists():
@@ -810,7 +833,7 @@ def extract_turn_cmd(ctx, project, turn_file, context_k, context_hops):
     db_path = get_db_path(config, project)
 
     if not db_path.parent.exists():
-        click.echo(f"Error: Project '{project}' not found. Run 'ctx init {project}' first.", err=True)
+        click.echo(f"Error: Project '{project}' not found. Run 'engram init {project}' first.", err=True)
         sys.exit(1)
 
     inc_cfg = config.get("incremental", {})
@@ -912,7 +935,7 @@ def extract_replay_cmd(ctx, project, transcript_file, turn_size, context_k, cont
     db_path = get_db_path(config, project)
 
     if not db_path.parent.exists():
-        click.echo(f"Error: Project '{project}' not found. Run 'ctx init {project}' first.", err=True)
+        click.echo(f"Error: Project '{project}' not found. Run 'engram init {project}' first.", err=True)
         sys.exit(1)
 
     inc_cfg = config.get("incremental", {})
@@ -1144,7 +1167,7 @@ def last_context_cmd(ctx, raw):
 @click.option("--reload", is_flag=True, help="Auto-reload on code changes (dev mode)")
 @click.pass_context
 def serve_cmd(ctx, host, port, reload):
-    """Start the Context Broker HTTP API server.
+    """Start the Engram HTTP API server.
 
     \b
     Clients configure api_url in config.yaml to route requests here:
@@ -1163,9 +1186,9 @@ def serve_cmd(ctx, host, port, reload):
         )
         sys.exit(1)
 
-    click.echo(f"Context Broker API → http://{host}:{port}  (docs: /docs)")
+    click.echo(f"Engram API → http://{host}:{port}  (docs: /docs)")
     uvicorn.run(
-        "context_broker.api_server:app",
+        "engram.api_server:app",
         host=host,
         port=port,
         reload=reload,
@@ -1181,14 +1204,14 @@ def serve_cmd(ctx, host, port, reload):
     help="Transport protocol: 'stdio' for Claude Code, 'sse' for HTTP clients",
 )
 def mcp_serve_cmd(transport):
-    """Start the Context Broker MCP server.
+    """Start the Engram MCP server.
 
     \b
     For Claude Code, add to ~/.claude/claude_desktop_config.json:
       {
         "mcpServers": {
           "context-broker": {
-            "command": "ctx",
+            "command": "engram",
             "args": ["mcp-serve"]
           }
         }
@@ -1290,8 +1313,8 @@ def onboard_cmd(ctx, project, limit, verify, chunk_size, timeout):
 
     \b
     Example:
-        ctx onboard myproject
-        ctx onboard myproject --verify --limit 5
+        engram onboard myproject
+        engram onboard myproject --verify --limit 5
     """
     config = _load_cfg(ctx.obj["config_path"])
 
@@ -1306,7 +1329,7 @@ def onboard_cmd(ctx, project, limit, verify, chunk_size, timeout):
         if marker.exists():
             project = marker.read_text().strip()
         if not project:
-            click.echo("Error: specify a project name or run 'ctx hook-init <project>' first.", err=True)
+            click.echo("Error: specify a project name or run 'engram hook-init <project>' first.", err=True)
             sys.exit(1)
 
     # Ensure project exists
@@ -1450,7 +1473,7 @@ def onboard_cmd(ctx, project, limit, verify, chunk_size, timeout):
     store.close()
     click.echo(result.markdown)
     click.echo("─" * 60)
-    click.echo(f"\nRun 'ctx query {project} \"<your task>\"' to retrieve context anytime.")
+    click.echo(f"\nRun 'engram query {project} \"<your task>\"' to retrieve context anytime.")
 
 
 @cli.command("import-claude-sessions")
@@ -1468,8 +1491,8 @@ def import_sessions_cmd(ctx, project, session_files, verify, chunk_size, timeout
 
     \b
     Examples:
-        ctx import-claude-sessions myproject ~/.claude/projects/abc123/session.jsonl
-        ctx import-claude-sessions myproject --list-only
+        engram import-claude-sessions myproject ~/.claude/projects/abc123/session.jsonl
+        engram import-claude-sessions myproject --list-only
     """
     config = _load_cfg(ctx.obj["config_path"])
 
@@ -1480,7 +1503,7 @@ def import_sessions_cmd(ctx, project, session_files, verify, chunk_size, timeout
 
     db_path = get_db_path(config, project)
     if not db_path.parent.exists():
-        click.echo(f"Error: Project '{project}' not found. Run 'ctx init {project}' first.", err=True)
+        click.echo(f"Error: Project '{project}' not found. Run 'engram init {project}' first.", err=True)
         sys.exit(1)
 
     if session_files:
@@ -1564,7 +1587,7 @@ def doctor_cmd(ctx):
     """Run a preflight check: config, LLM reachability, project marker, MCP.
 
     Prints a checklist of what's working and what needs attention.
-    Use this to diagnose setup issues before running ctx extract or ctx query.
+    Use this to diagnose setup issues before running engram extract or engram query.
     """
     import os as _os
 
@@ -1581,7 +1604,7 @@ def doctor_cmd(ctx):
         if not passed:
             ok = False
 
-    click.echo("Context Broker — Doctor\n")
+    click.echo("Engram — Doctor\n")
 
     # --- Config file ---
     try:
@@ -1589,7 +1612,7 @@ def doctor_cmd(ctx):
         cfg_path = config_path or "~/.context-broker/config.yaml or ./config.yaml"
         _check("Config file loaded", True, cfg_path)
     except SystemExit:
-        _check("Config file loaded", False, "run 'ctx --help' for config path options")
+        _check("Config file loaded", False, "run 'engram --help' for config path options")
         click.echo("\nCannot continue without a valid config.")
         sys.exit(1)
 
@@ -1637,7 +1660,7 @@ def doctor_cmd(ctx):
     _check(
         ".context-broker marker found",
         marker_found,
-        f"project='{marker_project}'" if marker_found else "run 'ctx hook-init <project>' to create one",
+        f"project='{marker_project}'" if marker_found else "run 'engram hook-init <project>' to create one",
     )
 
     # --- Project graph exists ---
@@ -1647,7 +1670,7 @@ def doctor_cmd(ctx):
         _check(
             f"Graph DB exists for '{marker_project}'",
             db_exists,
-            str(db_path) if db_exists else f"run 'ctx init {marker_project}' or 'ctx onboard {marker_project}'",
+            str(db_path) if db_exists else f"run 'engram init {marker_project}' or 'engram onboard {marker_project}'",
         )
         if db_exists:
             store = GraphStore(db_path)
@@ -1657,7 +1680,7 @@ def doctor_cmd(ctx):
             _check(
                 f"Graph populated ({stats['node_count']} nodes)",
                 has_nodes,
-                "" if has_nodes else f"run 'ctx onboard {marker_project}' to import sessions",
+                "" if has_nodes else f"run 'engram onboard {marker_project}' to import sessions",
             )
 
     # --- Claude Code hooks ---
@@ -1668,11 +1691,11 @@ def doctor_cmd(ctx):
             settings = _json.loads(settings_path.read_text())
             hooks = settings.get("hooks", {})
             has_submit = any(
-                "context_broker" in str(h)
+                "engram" in str(h)
                 for h in hooks.get("UserPromptSubmit", [])
             )
             has_stop = any(
-                "context_broker" in str(h)
+                "engram" in str(h)
                 for h in hooks.get("Stop", [])
             )
             _check("UserPromptSubmit hook installed", has_submit,
@@ -1687,7 +1710,7 @@ def doctor_cmd(ctx):
 
     click.echo()
     if ok:
-        click.echo("All checks passed. Context Broker is ready.")
+        click.echo("All checks passed. Engram is ready.")
     else:
         click.echo("Some checks failed. See above for remediation steps.")
         sys.exit(1)
@@ -1697,7 +1720,7 @@ def doctor_cmd(ctx):
 def pause_cmd():
     """Pause background extraction (context injection continues from existing graph).
 
-    Creates ~/.context-broker/paused. Run 'ctx resume' to re-enable.
+    Creates ~/.context-broker/paused. Run 'engram resume' to re-enable.
     Prompts continue to be buffered while paused so no turns are lost.
     """
     pause_file = Path.home() / ".context-broker" / "paused"
@@ -1707,12 +1730,12 @@ def pause_cmd():
     else:
         pause_file.touch()
         click.echo("Extraction paused. Context injection from existing graph continues.")
-        click.echo("Run 'ctx resume' to re-enable.")
+        click.echo("Run 'engram resume' to re-enable.")
 
 
 @cli.command("resume")
 def resume_cmd():
-    """Resume background extraction after 'ctx pause'.
+    """Resume background extraction after 'engram pause'.
 
     Removes ~/.context-broker/paused. Buffered turns will be extracted
     on the next flush trigger.
@@ -1734,3 +1757,394 @@ try:
     cli.add_command(_orchestrate_cmd, name="orchestrate")
 except ImportError:
     pass  # orchestrator package not installed — skip gracefully
+
+
+# ---------------------------------------------------------------------------
+# Feedback labeling
+# ---------------------------------------------------------------------------
+
+@cli.command("feedback")
+@click.argument("project")
+@click.option("--node", "node_id", default=None, help="Rate a specific node by ID (non-interactive)")
+@click.option("--rating", type=click.Choice(["up", "down", "1", "-1"]), default=None,
+              help="Rating for --node: up/1 or down/-1")
+@click.option("--comment", default="", help="Optional comment to attach to rating")
+@click.option("--export", "export_path", default=None, metavar="FILE.jsonl",
+              help="Export rated nodes to JSONL for LoRA fine-tuning")
+@click.option("--only-up", is_flag=True, help="Export only thumbs-up nodes")
+@click.option("--only-down", is_flag=True, help="Export only thumbs-down nodes")
+@click.option("--limit", default=50, show_default=True, type=int,
+              help="Max unrated nodes to show in interactive mode")
+@click.option("--stats", "show_stats", is_flag=True, help="Show feedback statistics")
+@click.option("--auto-label", "auto_label_mode", is_flag=True, help="Use LLM-as-judge to auto-rate unrated nodes")
+@click.option("--dry-run", is_flag=True, help="Show what would be rated without writing to DB")
+@click.pass_context
+def feedback_cmd(ctx, project, node_id, rating, comment, export_path, only_up, only_down, limit, show_stats, auto_label_mode, dry_run):
+    """Label extracted facts with thumbs up/down for LoRA fine-tuning.
+
+    Interactive mode (default): steps through unrated nodes one by one.
+    Keypresses: [u]p  [d]own  [s]kip  [q]uit
+
+    \b
+    Rate a specific node:
+        engram feedback myproject --node n_abc123 --rating up
+
+    Auto-label nodes with LLM-as-judge:
+        engram feedback myproject --auto-label
+        engram feedback myproject --auto-label --dry-run
+
+    Export rated nodes to JSONL:
+        engram feedback myproject --export training.jsonl
+        engram feedback myproject --export good_only.jsonl --only-up
+
+    Show statistics:
+        engram feedback myproject --stats
+    """
+    from .feedback import export_jsonl, rate_node, review_loop, auto_label
+
+    config = _load_cfg(ctx.obj["config_path"])
+    db_path = get_db_path(config, project)
+
+    if not db_path.parent.exists():
+        click.echo(f"Error: Project '{project}' not found.", err=True)
+        sys.exit(1)
+
+    store = GraphStore(db_path)
+
+    # --auto-label: use LLM to rate unrated nodes
+    if auto_label_mode:
+        cfg = _load_cfg(ctx.obj["config_path"])
+        transcripts_dir = Path(os.environ.get("HOME", "~")).expanduser() / ".context-broker" / "transcripts" / project
+        result = auto_label(store, project, transcripts_dir, cfg["llm"], limit=limit, dry_run=dry_run)
+        store.close()
+        if dry_run:
+            click.echo(f"[dry-run] Would rate {result['rated']} nodes ({result['thumbs_up']} up, {result['thumbs_down']} down; {result['skipped']} skipped)")
+        else:
+            click.echo(f"Auto-labeled {result['rated']} nodes: {result['thumbs_up']} up, {result['thumbs_down']} down ({result['skipped']} skipped)")
+        return
+
+    # --stats: show feedback summary
+    if show_stats:
+        fb_stats = store.get_feedback_stats()
+        click.echo(f"Project: {project}")
+        click.echo(f"  Total nodes:   {fb_stats['total']}")
+        click.echo(f"  Rated:         {fb_stats['rated']}  ({fb_stats['thumbs_up']} up / {fb_stats['thumbs_down']} down)")
+        click.echo(f"  Unrated:       {fb_stats['unrated']}")
+        store.close()
+        return
+
+    # --export: dump JSONL
+    if export_path:
+        export_rating = None
+        if only_up:
+            export_rating = 1
+        elif only_down:
+            export_rating = -1
+        out = Path(export_path)
+        count = export_jsonl(store, out, rating=export_rating)
+        store.close()
+        if count == 0:
+            click.echo("No rated nodes to export.")
+        else:
+            click.echo(f"Exported {count} record(s) to {out}")
+        return
+
+    # --node + --rating: single non-interactive rating
+    if node_id is not None:
+        if rating is None:
+            click.echo("Error: --rating required when using --node", err=True)
+            store.close()
+            sys.exit(1)
+        int_rating = 1 if rating in ("up", "1") else -1
+        ok = rate_node(store, node_id, int_rating, comment=comment)
+        store.close()
+        if ok:
+            label = "thumbs up" if int_rating == 1 else "thumbs down"
+            click.echo(f"Rated {node_id}: {label}")
+        else:
+            click.echo(f"Error: node '{node_id}' not found.", err=True)
+            sys.exit(1)
+        return
+
+    # Default: interactive review loop
+    summary = review_loop(store, limit=limit)
+    store.close()
+
+    if summary["rated"] > 0:
+        click.echo(f"\nTip: export your labels with:")
+        click.echo(f"  engram feedback {project} --export training.jsonl")
+
+
+# ---------------------------------------------------------------------------
+# Domain bootstrapper
+# ---------------------------------------------------------------------------
+
+@cli.command("bootstrap-domain")
+@click.option("--name", required=True, help="Short snake_case name for the new domain (e.g. medical)")
+@click.option("--samples", "sample_files", required=True, multiple=True, type=click.Path(exists=True),
+              help="Text files representative of the domain. Pass multiple: --samples a.txt b.txt")
+@click.option("--output", default=None, metavar="FILE",
+              help="Write Python source for domain_profiles.py to FILE (default: print to stdout)")
+@click.option("--yaml", "print_yaml", is_flag=True,
+              help="Also print config.yaml snippet for using the new domain")
+@click.pass_context
+def bootstrap_domain_cmd(ctx, name, sample_files, output, print_yaml):
+    """Derive a DomainProfile from sample documents.
+
+    \b
+    Runs a two-pass LLM analysis:
+      1. Discovery — for each sample, proposes domain-specific node/edge types
+      2. Synthesis  — consolidates proposals into a clean, non-redundant schema
+
+    \b
+    Example:
+        engram bootstrap-domain --name medical \\
+            --samples consult1.txt consult2.txt discharge_summary.txt \\
+            --output medical_profile.py
+    """
+    from .domain_bootstrapper import bootstrap_domain, profile_to_python, profile_to_yaml
+
+    config = _load_cfg(ctx.obj["config_path"])
+
+    samples = []
+    for path in sample_files:
+        try:
+            text = Path(path).read_text(encoding="utf-8", errors="replace")
+            samples.append(text)
+        except OSError as e:
+            click.echo(f"Error reading {path}: {e}", err=True)
+            sys.exit(1)
+
+    click.echo(f"Bootstrapping domain '{name}' from {len(samples)} sample(s)...")
+
+    result = asyncio.run(bootstrap_domain(name, samples, config, verbose=True))
+    profile = result.profile
+
+    click.echo(f"\nDerived profile '{name}':")
+    click.echo(f"  Node types:     {', '.join(profile.node_types)}")
+    click.echo(f"  Edge relations: {', '.join(profile.edge_relations)}")
+    if profile.node_types_note:
+        click.echo(f"  Note: {profile.node_types_note[:120]}...")
+
+    py_code = profile_to_python(profile)
+
+    if output:
+        Path(output).write_text(py_code + "\n", encoding="utf-8")
+        click.echo(f"\nPython source written to {output}")
+        click.echo("Add the variable to BUILTIN_PROFILES in engram/domain_profiles.py to register it.")
+    else:
+        click.echo("\n--- Python source (paste into engram/domain_profiles.py) ---")
+        click.echo(py_code)
+
+    if print_yaml:
+        click.echo("\n--- config.yaml snippet ---")
+        click.echo(profile_to_yaml(profile))
+
+
+# ---------------------------------------------------------------------------
+# Automated maintenance — watch + auto-import
+# ---------------------------------------------------------------------------
+
+@cli.command("watch")
+@click.argument("project")
+@click.argument("paths", nargs=-1, required=True, type=click.Path())
+@click.option("--interval", default=60, show_default=True, type=int, help="Poll interval in seconds")
+@click.option("--verify", is_flag=True, help="Pass --verify to each extraction call")
+@click.option("--extensions", default="md,txt,rst", show_default=True,
+              help="Comma-separated file extensions to watch")
+@click.pass_context
+def watch_cmd(ctx, project, paths, interval, verify, extensions):
+    """Watch directories for new or changed docs and auto-extract them.
+
+    Polls PATH(s) every INTERVAL seconds. Any file whose mtime has changed
+    since the last extraction is sent through `engram extract`. State is
+    persisted in the project directory so restarts don't re-extract unchanged
+    files.
+
+    \b
+    Example:
+        engram watch Engram ~/Apps/ContextBroker/docs --interval 120 --verify
+        engram watch myproject ./docs ./notes --extensions md,txt
+    """
+    import time as _time
+
+    config = _load_cfg(ctx.obj["config_path"])
+    db_path = get_db_path(config, project)
+
+    if not db_path.parent.exists():
+        click.echo(f"Error: Project '{project}' not found. Run 'engram init {project}' first.", err=True)
+        sys.exit(1)
+
+    exts = {("." + e.lstrip(".").lower()) for e in extensions.split(",")}
+    manifest_path = db_path.parent / "watch_manifest.json"
+    manifest: dict = {}
+    if manifest_path.exists():
+        try:
+            manifest = json.loads(manifest_path.read_text())
+        except Exception:
+            pass
+
+    def _save_manifest():
+        try:
+            manifest_path.write_text(json.dumps(manifest))
+        except Exception:
+            pass
+
+    def _scan() -> list[Path]:
+        found = []
+        for p in paths:
+            root = Path(p).expanduser().resolve()
+            if root.is_file():
+                if root.suffix.lower() in exts:
+                    found.append(root)
+            elif root.is_dir():
+                for f in root.rglob("*"):
+                    if f.is_file() and f.suffix.lower() in exts:
+                        found.append(f)
+        return found
+
+    click.echo(f"Watching {len(paths)} path(s) for project '{project}' (every {interval}s)...")
+    click.echo("Press Ctrl+C to stop.\n")
+
+    while True:
+        files = _scan()
+        for f in files:
+            key = str(f)
+            try:
+                mtime = f.stat().st_mtime
+            except Exception:
+                continue
+            if manifest.get(key) == mtime:
+                continue
+
+            click.echo(f"[{datetime.now().strftime('%H:%M:%S')}] Extracting {f.name}...", nl=False)
+            cmd = [sys.executable, "-m", "engram.cli", "--config", str(ctx.obj["config_path"] or ""),
+                   "extract", project, str(f)]
+            if verify:
+                cmd.append("--verify")
+            # Remove empty config arg if not set
+            if not ctx.obj["config_path"]:
+                cmd = [c for c in cmd if c != ""]
+
+            try:
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True, text=True,
+                    cwd=str(Path(__file__).resolve().parent.parent),
+                )
+                if result.returncode == 0:
+                    manifest[key] = mtime
+                    _save_manifest()
+                    # Grab node count from output
+                    summary = result.stdout.strip().splitlines()[-1] if result.stdout.strip() else "done"
+                    click.echo(f" {summary}")
+                else:
+                    click.echo(f" FAILED\n{result.stderr.strip()}", err=True)
+            except Exception as e:
+                click.echo(f" ERROR: {e}", err=True)
+
+        _time.sleep(interval)
+
+
+@cli.command("auto-import")
+@click.argument("project")
+@click.argument("directory", type=click.Path(exists=True))
+@click.option("--verify", is_flag=True, help="Run --verify pass on each file")
+@click.option("--extensions", default="md,txt,rst", show_default=True,
+              help="Comma-separated file extensions to import")
+@click.option("--force", is_flag=True, help="Re-import files even if already in manifest")
+@click.option("--dry-run", is_flag=True, help="List files that would be imported without importing")
+@click.pass_context
+def auto_import_cmd(ctx, project, directory, verify, extensions, force, dry_run):
+    """Bulk-import all docs in a directory, skipping already-extracted files.
+
+    Maintains a manifest of (path, mtime) pairs so re-running only imports
+    new or modified files. Use --force to re-import everything.
+
+    \b
+    Example:
+        engram auto-import Engram ~/Apps/ContextBroker --verify
+        engram auto-import myproject ./docs --dry-run
+        engram auto-import myproject ./docs --force --verify
+    """
+    import time as _time
+
+    config = _load_cfg(ctx.obj["config_path"])
+    db_path = get_db_path(config, project)
+
+    if not db_path.parent.exists():
+        click.echo(f"Error: Project '{project}' not found. Run 'engram init {project}' first.", err=True)
+        sys.exit(1)
+
+    exts = {("." + e.lstrip(".").lower()) for e in extensions.split(",")}
+    manifest_path = db_path.parent / "watch_manifest.json"
+    manifest: dict = {}
+    if manifest_path.exists():
+        try:
+            manifest = json.loads(manifest_path.read_text())
+        except Exception:
+            pass
+
+    root = Path(directory).expanduser().resolve()
+    all_files = [f for f in root.rglob("*") if f.is_file() and f.suffix.lower() in exts]
+    all_files.sort(key=lambda f: f.stat().st_mtime)
+
+    to_import = []
+    skipped = 0
+    for f in all_files:
+        key = str(f)
+        try:
+            mtime = f.stat().st_mtime
+        except Exception:
+            continue
+        if not force and manifest.get(key) == mtime:
+            skipped += 1
+        else:
+            to_import.append((f, mtime))
+
+    if dry_run:
+        click.echo(f"Would import {len(to_import)} file(s), skip {skipped} unchanged:")
+        for f, _ in to_import:
+            click.echo(f"  {f}")
+        return
+
+    if not to_import:
+        click.echo(f"Nothing to import — {skipped} file(s) already up to date.")
+        return
+
+    click.echo(f"Importing {len(to_import)} file(s) into '{project}' (skipping {skipped} unchanged)...\n")
+
+    total_imported = 0
+    t_start = _time.monotonic()
+
+    for i, (f, mtime) in enumerate(to_import, 1):
+        click.echo(f"[{i}/{len(to_import)}] {f.name}...", nl=False)
+        cmd = [sys.executable, "-m", "engram.cli", "extract", project, str(f)]
+        if verify:
+            cmd.append("--verify")
+        if ctx.obj["config_path"]:
+            cmd = [sys.executable, "-m", "engram.cli", "--config", ctx.obj["config_path"],
+                   "extract", project, str(f)] + (["--verify"] if verify else [])
+
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True, text=True,
+                cwd=str(Path(__file__).resolve().parent.parent),
+            )
+            if result.returncode == 0:
+                manifest[str(f)] = mtime
+                try:
+                    manifest_path.write_text(json.dumps(manifest))
+                except Exception:
+                    pass
+                summary = result.stdout.strip().splitlines()[-1] if result.stdout.strip() else "done"
+                click.echo(f" {summary}")
+                total_imported += 1
+            else:
+                click.echo(f" FAILED\n{result.stderr.strip()[:200]}", err=True)
+        except Exception as e:
+            click.echo(f" ERROR: {e}", err=True)
+
+    elapsed = _time.monotonic() - t_start
+    click.echo(f"\nDone: {total_imported}/{len(to_import)} files imported in {elapsed:.0f}s.")

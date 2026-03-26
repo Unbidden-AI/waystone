@@ -1,4 +1,10 @@
-"""Extraction prompt template for Context Broker."""
+"""Extraction prompt templates for Engram.
+
+Prompts are parameterized by DomainProfile so the same extraction logic works
+across different domains (software_dev, episodic_personal, etc.).
+"""
+
+from __future__ import annotations
 
 EXTRACTION_PROMPT = """You are a context extraction engine. Analyze the following conversation transcript and extract every meaningful fact, decision, constraint, and implementation detail into a structured graph.
 
@@ -75,22 +81,9 @@ EXTRACTION RULES:
     - 0.6-0.8: decided but not yet implemented
     - 0.9-1.0: implemented or verified
 
-11. Node types:
-    - "decision": a choice between alternatives that was made
-    - "constraint": a limitation, requirement, or non-negotiable
-    - "implementation": a concrete technical detail that was established
-    - "question": an open question not yet resolved
-    - "resolved": the answer to a previously open question
-    - "preference": a stated preference for future work, not yet decided
-    - "lesson_learned": a failed approach, rejected alternative, or anti-pattern discovered
-    - "transition": an evolution — captures BOTH the original state AND the new state AND why it changed, in a single self-contained node. Use for additive evolution, partial changes, and any "originally X, later Y" trajectory that isn't a clean replacement. Fact text MUST use "from X to Y" or "originally X, now Y" language. Tags must cover BOTH the old and new terms. Example: "Cold storage switched from S3 to GCS (ML team already on GCP; cross-cloud egress costs too high)" — tags: ["s3", "gcs", "cold storage", "cloud storage", "egress", "gcp"].
-   - IMPORTANT: When a "decision" or "transition" node supersedes a prior approach, its tags MUST include the old term so the decision is retrievable from both the old and new directions. Example: a decision to switch from JSON to Avro must have tags: ["json", "avro", "event format", ...].
+{node_types_section}
 
-12. Edge relations:
-    - "depends_on": target is required for source to work
-    - "flows_to": data or control flows from source to target
-    - "relates_to": loosely related — use this for decision→rationale links
-    - "supersedes": source replaces or overrides target
+{edge_relations_section}
 
 13. Secondary/addendum facts MUST get their own nodes. When a fact is introduced as a secondary
     detail — with "also", "in addition", "as well", "additionally", "where possible", "as needed",
@@ -110,9 +103,34 @@ TRANSCRIPT:
 {transcript}"""
 
 
-def build_extraction_prompt(transcript_text: str) -> str:
-    """Format the extraction prompt with the given transcript."""
-    return EXTRACTION_PROMPT.replace("{transcript}", transcript_text)
+def _format_node_types_section(profile: "DomainProfile") -> str:
+    """Format rule 11 (node types) for the extraction prompt."""
+    lines = ["11. Node types:"]
+    for type_name, description in profile.node_types.items():
+        lines.append(f'    - "{type_name}": {description}')
+    if profile.node_types_note:
+        lines.append(f"   - IMPORTANT: {profile.node_types_note}")
+    return "\n".join(lines)
+
+
+def _format_edge_relations_section(profile: "DomainProfile") -> str:
+    """Format rule 12 (edge relations) for the extraction prompt."""
+    lines = ["12. Edge relations:"]
+    for rel, description in profile.edge_relations.items():
+        lines.append(f'    - "{rel}": {description}')
+    return "\n".join(lines)
+
+
+def build_extraction_prompt(transcript_text: str, domain_profile=None) -> str:
+    """Format the extraction prompt with the given transcript and domain profile."""
+    from .domain_profiles import SOFTWARE_DEV
+    profile = domain_profile or SOFTWARE_DEV
+    return (
+        EXTRACTION_PROMPT
+        .replace("{node_types_section}", _format_node_types_section(profile))
+        .replace("{edge_relations_section}", _format_edge_relations_section(profile))
+        .replace("{transcript}", transcript_text)
+    )
 
 
 INCREMENTAL_EXTRACTION_PROMPT = """You are a context extraction engine. Analyze the following conversation turn and extract NEW facts, decisions, constraints, and implementation details that are NOT already captured in the existing context.
@@ -168,16 +186,23 @@ INCREMENTAL EXTRACTION RULES:
    - Split compound facts into separate nodes when they have different retrieval keywords.
    - source_message: 0-based index of the message within THIS TURN.
    - Confidence: 0.3-0.5 discussed, 0.6-0.8 decided, 0.9-1.0 implemented/verified.
-   - Node types: decision, constraint, implementation, question, resolved, preference, lesson_learned, transition.
-   - Edge relations: depends_on, flows_to, relates_to, supersedes.
    - Do NOT extract facts that describe the operation of the extraction/retrieval system itself (e.g. "a test query was run", "retrieval returned X nodes", "synthesis was executed"). Benchmark results and architectural decisions about this system ARE valid.
+
+7. RELATIONSHIP SCAN: After drafting all other nodes, explicitly ask yourself: did anything CHANGE between two named people in this turn? Check specifically for: newly engaged or married, divorced or separated, reuniting after a long absence (months or years apart), one person becoming a caregiver or emotional anchor for another, a major conflict or falling out, a reconciliation, a friendship noticeably deepening or cooling. For EACH "yes" — create a relationship_update node if one does not already exist in EXISTING CONTEXT. Do NOT default to "event" or "fact" for these milestones. IMPORTANT: static descriptions (e.g. "X is Y's sister", "X and Y are coworkers") are NOT relationship changes — leave those as facts. Only create relationship_update when something shifted.
+
+{node_types_section}
+
+{edge_relations_section}
 
 TURN:
 {turn_text}"""
 
 
-def build_incremental_prompt(turn_text: str, existing_nodes: list[dict]) -> str:
-    """Format the incremental extraction prompt with existing context nodes."""
+def build_incremental_prompt(turn_text: str, existing_nodes: list[dict], domain_profile=None) -> str:
+    """Format the incremental extraction prompt with existing context nodes and domain profile."""
+    from .domain_profiles import SOFTWARE_DEV
+    profile = domain_profile or SOFTWARE_DEV
+
     if existing_nodes:
         lines = []
         for node in existing_nodes:
@@ -192,6 +217,8 @@ def build_incremental_prompt(turn_text: str, existing_nodes: list[dict]) -> str:
 
     return (
         INCREMENTAL_EXTRACTION_PROMPT
+        .replace("{node_types_section}", _format_node_types_section(profile))
+        .replace("{edge_relations_section}", _format_edge_relations_section(profile))
         .replace("{existing_context}", existing_context)
         .replace("{turn_text}", turn_text)
     )
@@ -351,63 +378,65 @@ def build_verification_prompt(
     return prompt
 
 
-# JSON Schema for OpenAI structured outputs (response_format: json_schema).
-# Enables strict schema enforcement at the API level — prevents hallucinated keys,
-# missing required fields, and wrong value types without any prompt changes.
-# Enable via `llm.structured_outputs: true` in config.yaml or model config.
-EXTRACTION_JSON_SCHEMA = {
-    "name": "extraction_result",
-    "strict": True,
-    "schema": {
-        "type": "object",
-        "properties": {
-            "nodes": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "id": {"type": "string"},
-                        "fact": {"type": "string"},
-                        "type": {
-                            "type": "string",
-                            "enum": [
-                                "decision", "constraint", "implementation",
-                                "question", "resolved", "preference", "lesson_learned", "transition",
-                            ],
+def build_extraction_json_schema(domain_profile=None) -> dict:
+    """Build the OpenAI structured-outputs JSON schema for extraction results.
+
+    Parameterized by domain profile so the enum values match the configured
+    node types and edge relations. Enable via `llm.structured_outputs: true`.
+    """
+    from .domain_profiles import SOFTWARE_DEV
+    profile = domain_profile or SOFTWARE_DEV
+    node_type_enum = list(profile.node_types.keys())
+    edge_relation_enum = list(profile.edge_relations.keys())
+    return {
+        "name": "extraction_result",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "properties": {
+                "nodes": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {"type": "string"},
+                            "fact": {"type": "string"},
+                            "type": {"type": "string", "enum": node_type_enum},
+                            "confidence": {"type": "number"},
+                            "source_message": {"type": ["integer", "null"]},
+                            "supersedes": {"type": "array", "items": {"type": "string"}},
+                            "tags": {"type": "array", "items": {"type": "string"}},
                         },
-                        "confidence": {"type": "number"},
-                        "source_message": {"type": ["integer", "null"]},
-                        "supersedes": {"type": "array", "items": {"type": "string"}},
-                        "tags": {"type": "array", "items": {"type": "string"}},
+                        "required": [
+                            "id", "fact", "type", "confidence",
+                            "source_message", "supersedes", "tags",
+                        ],
+                        "additionalProperties": False,
                     },
-                    "required": [
-                        "id", "fact", "type", "confidence",
-                        "source_message", "supersedes", "tags",
-                    ],
-                    "additionalProperties": False,
+                },
+                "edges": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "from": {"type": "string"},
+                            "to": {"type": "string"},
+                            "relation": {"type": "string", "enum": edge_relation_enum},
+                        },
+                        "required": ["from", "to", "relation"],
+                        "additionalProperties": False,
+                    },
                 },
             },
-            "edges": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "from": {"type": "string"},
-                        "to": {"type": "string"},
-                        "relation": {
-                            "type": "string",
-                            "enum": ["depends_on", "flows_to", "relates_to", "supersedes"],
-                        },
-                    },
-                    "required": ["from", "to", "relation"],
-                    "additionalProperties": False,
-                },
-            },
+            "required": ["nodes", "edges"],
+            "additionalProperties": False,
         },
-        "required": ["nodes", "edges"],
-        "additionalProperties": False,
-    },
-}
+    }
+
+
+# Backward-compatible constant for callers that haven't migrated to the function.
+# Uses the software_dev profile (original behavior).
+EXTRACTION_JSON_SCHEMA = build_extraction_json_schema()
 
 
 TARGETED_PASS_PROMPTS = {

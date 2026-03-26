@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 from .types import ToolCall, ToolResult
 
 if TYPE_CHECKING:
-    from context_broker.store import GraphStore
+    from engram.store import GraphStore
 
 log = logging.getLogger(__name__)
 
@@ -281,6 +281,55 @@ async def _run_ctx_update_node(args: dict[str, Any], cfg: dict, store: "GraphSto
     return f"[ctx_update_node: node {node_id!r} not found]"
 
 
+async def _run_ctx_graph_stats(args: dict[str, Any], cfg: dict, store: "GraphStore") -> str:
+    """Return a summary of the current graph database state."""
+    stats = store.get_stats()
+
+    superseded_count = store.conn.execute(
+        "SELECT COUNT(DISTINCT to_id) FROM edges WHERE relation = 'supersedes'"
+    ).fetchone()[0]
+
+    recent_rows = store.conn.execute(
+        "SELECT fact, type, created_at FROM nodes ORDER BY created_at DESC LIMIT 5"
+    ).fetchall()
+
+    source_count = store.conn.execute(
+        "SELECT COUNT(DISTINCT source_transcript) FROM nodes "
+        "WHERE source_transcript IS NOT NULL AND source_transcript != '__synthesis__'"
+    ).fetchone()[0]
+
+    lines = [
+        f"Nodes: {stats['node_count']}  |  Edges: {stats['edge_count']}  |  Sources: {source_count}",
+        f"Superseded (prunable): {superseded_count}",
+        "",
+        "Node types:",
+    ]
+    for ntype, cnt in sorted(stats["type_counts"].items(), key=lambda x: -x[1]):
+        lines.append(f"  {ntype}: {cnt}")
+
+    if recent_rows:
+        lines.append("")
+        lines.append("Most recently added nodes:")
+        for row in recent_rows:
+            fact_preview = row["fact"][:80] + ("…" if len(row["fact"]) > 80 else "")
+            lines.append(f"  [{row['type']}] {fact_preview}  ({row['created_at'][:19]})")
+
+    return "\n".join(lines)
+
+
+async def _run_ctx_list_sources(args: dict[str, Any], cfg: dict, store: "GraphStore") -> str:
+    """List distinct source transcripts/files that have been extracted into the graph."""
+    rows = store.conn.execute(
+        "SELECT DISTINCT source_transcript, COUNT(*) as cnt "
+        "FROM nodes WHERE source_transcript IS NOT NULL AND source_transcript != '__synthesis__' "
+        "GROUP BY source_transcript ORDER BY source_transcript"
+    ).fetchall()
+    if not rows:
+        return "No sources found in the graph."
+    lines = [f"{row[0]}  ({row[1]} nodes)" for row in rows]
+    return "\n".join(lines)
+
+
 async def _run_ctx_synthesize(args: dict[str, Any], cfg: dict, store: "GraphStore") -> str:
     """Create a synthesis node summarizing multiple existing nodes."""
     summary_fact = args.get("summary_fact")
@@ -330,6 +379,8 @@ _STORE_HANDLERS = {
     "ctx_delete_node": _run_ctx_delete_node,
     "ctx_update_node": _run_ctx_update_node,
     "ctx_synthesize": _run_ctx_synthesize,
+    "ctx_list_sources": _run_ctx_list_sources,
+    "ctx_graph_stats": _run_ctx_graph_stats,
 }
 
 

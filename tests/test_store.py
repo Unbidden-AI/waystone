@@ -3,7 +3,7 @@
 
 import pytest
 
-from context_broker.store import GraphStore
+from engram.store import GraphStore
 
 
 @pytest.fixture

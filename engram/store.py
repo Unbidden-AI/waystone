@@ -91,6 +91,29 @@ class GraphStore:
             CREATE INDEX IF NOT EXISTS idx_edges_from ON edges(from_id);
             CREATE INDEX IF NOT EXISTS idx_edges_to ON edges(to_id);
         """)
+        # feedback table — added after initial release, migration-safe
+        self.conn.execute("""
+            CREATE TABLE IF NOT EXISTS feedback (
+                node_id    TEXT PRIMARY KEY,
+                rating     INTEGER NOT NULL CHECK (rating IN (-1, 1)),
+                comment    TEXT    NOT NULL DEFAULT '',
+                created_at TEXT    NOT NULL
+            )
+        """)
+        # extraction_failures table — added for error tracking, migration-safe
+        self.conn.execute("""
+            CREATE TABLE IF NOT EXISTS extraction_failures (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at TEXT NOT NULL,
+                source_transcript TEXT,
+                model TEXT,
+                error_type TEXT,
+                raw_response TEXT,
+                error_message TEXT
+            )
+        """)
+        self.conn.commit()
+
         # Migration: add fact_hash column if it doesn't exist yet
         try:
             self.conn.execute("ALTER TABLE nodes ADD COLUMN fact_hash TEXT")
@@ -486,6 +509,143 @@ class GraphStore:
         data["transcript_path"] = transcript_path
         data["transcript_watermark"] = line_count
         self._save_buf_data(data)
+
+    # ------------------------------------------------------------------
+    # Feedback / labeling
+    # ------------------------------------------------------------------
+
+    def add_feedback(self, node_id: str, rating: int, comment: str = "") -> bool:
+        """Record a thumbs-up (1) or thumbs-down (-1) rating for a node.
+
+        Overwrites any existing rating. Returns False if the node doesn't exist.
+        """
+        if rating not in (1, -1):
+            raise ValueError("rating must be 1 (up) or -1 (down)")
+        if not self.get_node(node_id):
+            return False
+        now = datetime.now(timezone.utc).isoformat()
+        self.conn.execute(
+            """INSERT INTO feedback (node_id, rating, comment, created_at)
+               VALUES (?, ?, ?, ?)
+               ON CONFLICT(node_id) DO UPDATE SET rating=excluded.rating,
+                   comment=excluded.comment, created_at=excluded.created_at""",
+            (node_id, rating, comment, now),
+        )
+        self.conn.commit()
+        return True
+
+    def get_feedback(self, node_id: str) -> dict | None:
+        """Return the feedback row for a node, or None if unrated."""
+        row = self.conn.execute(
+            "SELECT * FROM feedback WHERE node_id = ?", (node_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+    def get_unrated_nodes(self, limit: int = 50) -> list[dict]:
+        """Return nodes that have no feedback rating yet, newest first."""
+        rows = self.conn.execute(
+            """SELECT n.* FROM nodes n
+               LEFT JOIN feedback f ON n.id = f.node_id
+               WHERE f.node_id IS NULL
+               ORDER BY n.created_at DESC
+               LIMIT ?""",
+            (limit,),
+        ).fetchall()
+        return [self._row_to_node(r) for r in rows]
+
+    def get_rated_nodes(self, rating: int | None = None) -> list[dict]:
+        """Return all rated nodes, optionally filtered by rating (1 or -1)."""
+        if rating is not None and rating not in (1, -1):
+            raise ValueError("rating must be 1, -1, or None")
+        if rating is None:
+            rows = self.conn.execute(
+                """SELECT n.*, f.rating, f.comment, f.created_at as rated_at
+                   FROM nodes n JOIN feedback f ON n.id = f.node_id
+                   ORDER BY f.created_at DESC"""
+            ).fetchall()
+        else:
+            rows = self.conn.execute(
+                """SELECT n.*, f.rating, f.comment, f.created_at as rated_at
+                   FROM nodes n JOIN feedback f ON n.id = f.node_id
+                   WHERE f.rating = ?
+                   ORDER BY f.created_at DESC""",
+                (rating,),
+            ).fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["tags"] = json.loads(d["tags"])
+            d["supersedes"] = json.loads(d["supersedes"])
+            d.pop("fact_hash", None)
+            result.append(d)
+        return result
+
+    def get_feedback_stats(self) -> dict:
+        """Return counts: total nodes, rated, thumbs_up, thumbs_down."""
+        total = self.conn.execute("SELECT COUNT(*) FROM nodes").fetchone()[0]
+        rated = self.conn.execute("SELECT COUNT(*) FROM feedback").fetchone()[0]
+        up = self.conn.execute(
+            "SELECT COUNT(*) FROM feedback WHERE rating = 1"
+        ).fetchone()[0]
+        down = self.conn.execute(
+            "SELECT COUNT(*) FROM feedback WHERE rating = -1"
+        ).fetchone()[0]
+        return {"total": total, "rated": rated, "unrated": total - rated, "thumbs_up": up, "thumbs_down": down}
+
+    # ------------------------------------------------------------------
+    # Extraction failure logging
+    # ------------------------------------------------------------------
+
+    def log_extraction_failure(
+        self,
+        error_type: str,
+        error_message: str,
+        raw_response: str = "",
+        source_transcript: str = "",
+        model: str = "",
+    ) -> None:
+        """Log an extraction failure to the database.
+
+        Args:
+            error_type: Category of failure ('json_parse', 'schema', 'api', 'timeout', 'chunk')
+            error_message: Human-readable error description
+            raw_response: LLM response (truncated to 2000 chars if longer)
+            source_transcript: Name/path of the source transcript
+            model: Model name/ID used for extraction
+        """
+        truncated_response = raw_response[:2000] if raw_response else ""
+        now = datetime.now(timezone.utc).isoformat()
+        self.conn.execute(
+            """INSERT INTO extraction_failures
+               (created_at, source_transcript, model, error_type, raw_response, error_message)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (now, source_transcript, model, error_type, truncated_response, error_message),
+        )
+        self.conn.commit()
+        log.warning(
+            "Logged extraction failure: error_type=%s source=%s model=%s",
+            error_type, source_transcript, model
+        )
+
+    def get_extraction_failures(self, limit: int = 50) -> list[dict]:
+        """Retrieve recent extraction failures.
+
+        Args:
+            limit: Maximum number of failures to return (default: 50)
+
+        Returns:
+            List of dicts with keys: id, created_at, source_transcript, model,
+            error_type, raw_response, error_message
+        """
+        rows = self.conn.execute(
+            """SELECT id, created_at, source_transcript, model, error_type,
+                      raw_response, error_message
+               FROM extraction_failures
+               ORDER BY created_at DESC
+               LIMIT ?""",
+            (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
 
     def close(self):
         """Close the database connection."""

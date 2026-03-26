@@ -1,29 +1,25 @@
 #!/usr/bin/env python3
-"""Claude Code Stop hook for Context Broker — transcript recording.
+"""Claude Code Stop hook for Context Broker — transcript recording + maintenance.
 
-After each conversation stop, reads the session JSONL transcript and writes a
-clean markdown copy to ~/.context-broker/transcripts/<project>/.
+After each conversation stop:
+  1. Saves a clean markdown transcript to ~/.context-broker/transcripts/<project>/.
+  2. Spawns background extraction of the saved transcript (full-quality, with --verify).
+  3. If enough new nodes have been added since the last reconcile, spawns background
+     `engram reconcile` to find supersedes relationships.
 
-The saved transcripts can be used later with:
-  ctx extract <project> ~/.context-broker/transcripts/<project>/<file>.md
+Thresholds (tunable via ~/.context-broker/config.yaml under 'maintenance:'):
+  reconcile_threshold: 75   # new nodes since last reconcile before triggering
+  reconcile_min_total: 100  # minimum total nodes before reconcile makes sense
 
-Or for incremental per-turn extraction:
-  ctx extract-replay <project> ~/.context-broker/transcripts/<project>/<file>.md
+The saved transcripts can also be re-extracted manually with:
+  engram extract <project> ~/.context-broker/transcripts/<project>/<file>.md
 
 Install:
   python hooks/install.py
-
-Manual settings.json entry:
-  {
-    "hooks": {
-      "Stop": [
-        {"hooks": [{"type": "command", "command": "python /path/to/hooks/context_broker_stop.py"}]}
-      ]
-    }
-  }
 """
 
 import json
+import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -32,6 +28,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 TRANSCRIPTS_DIR = Path.home() / ".context-broker" / "transcripts"
+
+# Defaults — overridable via config.yaml under 'maintenance:'
+DEFAULT_RECONCILE_THRESHOLD = 75   # new nodes since last reconcile
+DEFAULT_RECONCILE_MIN_TOTAL = 100  # minimum graph size before reconcile
 
 
 def main():
@@ -52,7 +52,8 @@ def main():
         sys.exit(0)
 
     try:
-        from context_broker.config import get_db_path, load_config
+        from engram.config import get_db_path, load_config
+        from engram.store import GraphStore
 
         config = load_config()
         project = _detect_project(cwd)
@@ -77,14 +78,88 @@ def main():
         latest_link.symlink_to(out_path.name)
 
         # Clear session state — LLM extraction will have processed it by next session
-        session_state_path = get_db_path(config, project).parent / "session_state.md"
+        db_path = get_db_path(config, project)
+        session_state_path = db_path.parent / "session_state.md"
         if session_state_path.exists():
             session_state_path.unlink()
+
+        # --- Background extraction of this transcript ---
+        _spawn_background_extraction(project, str(out_path))
+
+        # --- Threshold-triggered reconcile ---
+        store = GraphStore(db_path)
+        stats = store.get_stats()
+        store.close()
+        _maybe_spawn_reconcile(project, stats["node_count"], db_path.parent, config)
 
     except Exception:
         pass  # Never block the session
 
     sys.exit(0)
+
+
+def _engram_cmd() -> list[str]:
+    """Return the best available command prefix to invoke the engram CLI."""
+    import shutil
+    cli = shutil.which("engram")
+    if cli:
+        return [cli]
+    return [sys.executable, "-m", "engram.cli"]
+
+
+def _spawn_background_extraction(project: str, transcript_path: str) -> None:
+    """Spawn `engram extract <project> <transcript> --verify` as a detached process."""
+    try:
+        subprocess.Popen(
+            _engram_cmd() + ["extract", project, transcript_path, "--verify"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except Exception:
+        pass
+
+
+def _maybe_spawn_reconcile(project: str, current_nodes: int, project_dir: Path, config: dict) -> None:
+    """Spawn `engram reconcile` if enough new nodes have accumulated since last reconcile."""
+    maint_cfg = config.get("maintenance", {})
+    threshold = int(maint_cfg.get("reconcile_threshold", DEFAULT_RECONCILE_THRESHOLD))
+    min_total = int(maint_cfg.get("reconcile_min_total", DEFAULT_RECONCILE_MIN_TOTAL))
+
+    if current_nodes < min_total:
+        return
+
+    state_path = project_dir / "maintenance.json"
+    state: dict = {}
+    if state_path.exists():
+        try:
+            state = json.loads(state_path.read_text())
+        except Exception:
+            pass
+
+    last_reconcile_nodes = int(state.get("last_reconcile_nodes", 0))
+    delta = current_nodes - last_reconcile_nodes
+
+    if delta < threshold:
+        return
+
+    # Update state before spawning (don't double-trigger if hook runs twice)
+    state["last_reconcile_nodes"] = current_nodes
+    state["last_reconcile_at"] = datetime.now().isoformat()
+    try:
+        state_path.write_text(json.dumps(state))
+    except Exception:
+        pass
+
+    try:
+        subprocess.Popen(
+            _engram_cmd() + ["reconcile", project],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except Exception:
+        pass
 
 
 def _jsonl_to_markdown(jsonl_path: Path) -> str:

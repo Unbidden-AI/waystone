@@ -40,10 +40,10 @@ import yaml
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
-from context_broker.config import get_db_path, get_project_dir, load_config
-from context_broker.extractor import extract
-from context_broker.retriever import estimate_tokens, extract_keywords, retrieve_with_stats
-from context_broker.store import GraphStore
+from engram.config import get_db_path, get_project_dir, load_config
+from engram.extractor import extract
+from engram.retriever import estimate_tokens, extract_keywords, retrieve_with_stats
+from engram.store import GraphStore
 
 BENCHMARKS_DIR = Path(__file__).parent
 TRANSCRIPTS_DIR = BENCHMARKS_DIR / "transcripts"

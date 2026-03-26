@@ -1,0 +1,2673 @@
+[
+  {
+    "sample_id": "synth-001",
+    "conversation": {
+      "speaker_a": "Kenji",
+      "speaker_b": "Amara",
+      "session_1_date_time": "6:47 pm on 14 June, 2025",
+      "session_1": [
+        {
+          "speaker": "Kenji",
+          "dia_id": "D1:0",
+          "text": "Hey, you almost home? Just wrapped up in lab, trying to decide if I wanna face the T at rush hour or grab coffee first."
+        },
+        {
+          "speaker": "Amara",
+          "dia_id": "D1:1",
+          "text": "Haha, same. Just finished my last call for the day. Stuck in traffic near Central Sq but moving slowly. Probs 20 min out."
+        },
+        {
+          "speaker": "Kenji",
+          "dia_id": "D1:2",
+          "text": "Nice. I'm gonna swing by Tatte for a quick caffeine hit then brave the Red Line. Should be back around 6ish?"
+        },
+        {
+          "speaker": "Amara",
+          "dia_id": "D1:3",
+          "text": "Sounds good! I can start thinking about dinner then. My brain is fried from client meetings, anything sound good to you?"
+        },
+        {
+          "speaker": "Kenji",
+          "dia_id": "D1:4",
+          "text": "Oh man, rough day for you? Yeah, definitely need something easy. Maybe that pasta dish we made last week? Or takeout from Pavement?"
+        },
+        {
+          "speaker": "Amara",
+          "dia_id": "D1:5",
+          "text": "The pasta sounds way better tbh. I've got some veggies we can throw in. Just landed a new referral for next Tues, so def no energy for complicated cooking."
+        },
+        {
+          "speaker": "Kenji",
+          "dia_id": "D1:6",
+          "text": "Awesome, pasta it is! So you're free on Tuesday evenings then? How's your schedule looking for the weekend, btw? Anything fun planned in Cambridge?"
+        },
+        {
+          "speaker": "Amara",
+          "dia_id": "D1:7",
+          "text": "Nah, Tues is usually chill, that's why I took the new case. This weekend is wide open so far. Might just chill, maybe hit up Harvard Book Store."
+        },
+        {
+          "speaker": "Kenji",
+          "dia_id": "D1:8",
+          "text": "Jealous. I'm pretty much chained to my bench all Saturday, trying to get these samples ready for sequencing. Biochemistry never sleeps, Amara."
+        },
+        {
+          "speaker": "Amara",
+          "dia_id": "D1:9",
+          "text": "Lol, poor Kenji. Sounds thrilling! Don't forget to eat actual food and not just whatever concoction you're mixing in the lab."
+        },
+        {
+          "speaker": "Kenji",
+          "dia_id": "D1:10",
+          "text": "Hey! My coffee is a scientific concoction, thank you very much. And I *will* have pizza delivery as a reward. You're welcome to join."
+        },
+        {
+          "speaker": "Amara",
+          "dia_id": "D1:11",
+          "text": "Hahaha, deal! Looking forward to that pasta tonight and hearing more about your thrilling biochem life. See ya soon!"
+        }
+      ],
+      "session_2_date_time": "9:37 am on 25 July, 2025",
+      "session_2": [
+        {
+          "speaker": "Kenji",
+          "dia_id": "D2:0",
+          "text": "Just got my iced latte from Tatte. You make it home yet? What's the dinner brainstorm looking like?"
+        },
+        {
+          "speaker": "Amara",
+          "dia_id": "D2:1",
+          "text": "Yep, just walked in! My brain went straight to 'something easy and delicious.' Thinking maybe that pesto pasta dish we made last week?"
+        },
+        {
+          "speaker": "Kenji",
+          "dia_id": "D2:2",
+          "text": "Ooh, the one with the cherry tomatoes and ricotta? I'm SO down for that! My lab brain is totally fried, so easy sounds perfect."
+        },
+        {
+          "speaker": "Amara",
+          "dia_id": "D2:3",
+          "text": "Exactly! I have most of the stuff here. Just need to grab some fresh basil from Star Market. I can swing by in like 15 minutes?"
+        },
+        {
+          "speaker": "Kenji",
+          "dia_id": "D2:4",
+          "text": "Sounds good! I'm almost back to the apartment now, navigating the Red Line during rush hour is always a journey."
+        },
+        {
+          "speaker": "Amara",
+          "dia_id": "D2:5",
+          "text": "Lol tell me about it. Just saw a guy try to squeeze onto a packed car at Central with a full-size cello case. Bold strategy."
+        },
+        {
+          "speaker": "Kenji",
+          "dia_id": "D2:6",
+          "text": "Hahaha, classic Cambridge T move. Hope he made it. You'd think after 3 years here, I'd be used to it."
+        },
+        {
+          "speaker": "Amara",
+          "dia_id": "D2:7",
+          "text": "Never fully immune to the T's charms, are we? \ud83d\ude09 Don't worry, pasta power will restore your soul."
+        },
+        {
+          "speaker": "Kenji",
+          "dia_id": "D2:8",
+          "text": "Indeed. You think we have any of that sourdough left from Flour Bakery? Would be perfect for dipping."
+        },
+        {
+          "speaker": "Amara",
+          "dia_id": "D2:9",
+          "text": "Ooh, excellent call! Let me check... yep, still a decent chunk in the bread box! Perfect, I'll slice it when I get back."
+        },
+        {
+          "speaker": "Kenji",
+          "dia_id": "D2:10",
+          "text": "Sweet! I'm unlocking the door now. I'll get the water boiling for the pasta while you're out."
+        },
+        {
+          "speaker": "Amara",
+          "dia_id": "D2:11",
+          "text": "You're the best! Heading out the door now. Be back in a jiffy with the goods."
+        }
+      ],
+      "session_3_date_time": "8:01 am on 28 August, 2025",
+      "session_3": [
+        {
+          "speaker": "Kenji",
+          "dia_id": "D3:0",
+          "text": "[session 3 turn 1]"
+        },
+        {
+          "speaker": "Amara",
+          "dia_id": "D3:1",
+          "text": "[session 3 turn 2]"
+        },
+        {
+          "speaker": "Kenji",
+          "dia_id": "D3:2",
+          "text": "[session 3 turn 3]"
+        },
+        {
+          "speaker": "Amara",
+          "dia_id": "D3:3",
+          "text": "[session 3 turn 4]"
+        },
+        {
+          "speaker": "Kenji",
+          "dia_id": "D3:4",
+          "text": "[session 3 turn 5]"
+        },
+        {
+          "speaker": "Amara",
+          "dia_id": "D3:5",
+          "text": "[session 3 turn 6]"
+        },
+        {
+          "speaker": "Kenji",
+          "dia_id": "D3:6",
+          "text": "[session 3 turn 7]"
+        },
+        {
+          "speaker": "Amara",
+          "dia_id": "D3:7",
+          "text": "[session 3 turn 8]"
+        },
+        {
+          "speaker": "Kenji",
+          "dia_id": "D3:8",
+          "text": "[session 3 turn 9]"
+        },
+        {
+          "speaker": "Amara",
+          "dia_id": "D3:9",
+          "text": "[session 3 turn 10]"
+        },
+        {
+          "speaker": "Kenji",
+          "dia_id": "D3:10",
+          "text": "[session 3 turn 11]"
+        },
+        {
+          "speaker": "Amara",
+          "dia_id": "D3:11",
+          "text": "[session 3 turn 12]"
+        }
+      ],
+      "session_4_date_time": "11:14 am on 9 September, 2025",
+      "session_4": [
+        {
+          "speaker": "Kenji",
+          "dia_id": "D4:0",
+          "text": "[session 4 turn 1]"
+        },
+        {
+          "speaker": "Amara",
+          "dia_id": "D4:1",
+          "text": "[session 4 turn 2]"
+        },
+        {
+          "speaker": "Kenji",
+          "dia_id": "D4:2",
+          "text": "[session 4 turn 3]"
+        },
+        {
+          "speaker": "Amara",
+          "dia_id": "D4:3",
+          "text": "[session 4 turn 4]"
+        },
+        {
+          "speaker": "Kenji",
+          "dia_id": "D4:4",
+          "text": "[session 4 turn 5]"
+        },
+        {
+          "speaker": "Amara",
+          "dia_id": "D4:5",
+          "text": "[session 4 turn 6]"
+        },
+        {
+          "speaker": "Kenji",
+          "dia_id": "D4:6",
+          "text": "[session 4 turn 7]"
+        },
+        {
+          "speaker": "Amara",
+          "dia_id": "D4:7",
+          "text": "[session 4 turn 8]"
+        },
+        {
+          "speaker": "Kenji",
+          "dia_id": "D4:8",
+          "text": "[session 4 turn 9]"
+        },
+        {
+          "speaker": "Amara",
+          "dia_id": "D4:9",
+          "text": "[session 4 turn 10]"
+        },
+        {
+          "speaker": "Kenji",
+          "dia_id": "D4:10",
+          "text": "[session 4 turn 11]"
+        },
+        {
+          "speaker": "Amara",
+          "dia_id": "D4:11",
+          "text": "[session 4 turn 12]"
+        }
+      ],
+      "session_5_date_time": "5:01 pm on 18 October, 2025",
+      "session_5": [
+        {
+          "speaker": "Kenji",
+          "dia_id": "D5:0",
+          "text": "[session 5 turn 1]"
+        },
+        {
+          "speaker": "Amara",
+          "dia_id": "D5:1",
+          "text": "[session 5 turn 2]"
+        },
+        {
+          "speaker": "Kenji",
+          "dia_id": "D5:2",
+          "text": "[session 5 turn 3]"
+        },
+        {
+          "speaker": "Amara",
+          "dia_id": "D5:3",
+          "text": "[session 5 turn 4]"
+        },
+        {
+          "speaker": "Kenji",
+          "dia_id": "D5:4",
+          "text": "[session 5 turn 5]"
+        },
+        {
+          "speaker": "Amara",
+          "dia_id": "D5:5",
+          "text": "[session 5 turn 6]"
+        },
+        {
+          "speaker": "Kenji",
+          "dia_id": "D5:6",
+          "text": "[session 5 turn 7]"
+        },
+        {
+          "speaker": "Amara",
+          "dia_id": "D5:7",
+          "text": "[session 5 turn 8]"
+        },
+        {
+          "speaker": "Kenji",
+          "dia_id": "D5:8",
+          "text": "[session 5 turn 9]"
+        },
+        {
+          "speaker": "Amara",
+          "dia_id": "D5:9",
+          "text": "[session 5 turn 10]"
+        },
+        {
+          "speaker": "Kenji",
+          "dia_id": "D5:10",
+          "text": "[session 5 turn 11]"
+        },
+        {
+          "speaker": "Amara",
+          "dia_id": "D5:11",
+          "text": "[session 5 turn 12]"
+        }
+      ],
+      "session_6_date_time": "11:45 am on 29 November, 2025",
+      "session_6": [
+        {
+          "speaker": "Kenji",
+          "dia_id": "D6:0",
+          "text": "Hey, just leaving lab now. The Western Ave bridge traffic is gonna be killer tonight prob. See you in a bit?"
+        },
+        {
+          "speaker": "Amara",
+          "dia_id": "D6:1",
+          "text": "Ugh, tell me about it. Just wrapped up my last home visit near Central. Heading back to the apt now. Almost there."
+        },
+        {
+          "speaker": "Kenji",
+          "dia_id": "D6:2",
+          "text": "Cool. You thinking about dinner? I'm starving. My glucose experiment took way longer than expected today."
+        },
+        {
+          "speaker": "Amara",
+          "dia_id": "D6:3",
+          "text": "Yeah def! Was thinking about that new Korean place on Mass Ave. Or super easy: leftovers from that curry we made Sunday?"
+        },
+        {
+          "speaker": "Kenji",
+          "dia_id": "D6:4",
+          "text": "Hmm, Korean sounds good but I'm beat. Curry is prob the smart move. Less effort. We can save Korean for Friday night."
+        },
+        {
+          "speaker": "Amara",
+          "dia_id": "D6:5",
+          "text": "Deal. I'll just heat it up when I walk in the door. You want the big portion or the small one? I think there's two left."
+        },
+        {
+          "speaker": "Kenji",
+          "dia_id": "D6:6",
+          "text": "Big one for sure. Brain fuel needed after all those data points. Did you manage to get that package from downstairs?"
+        },
+        {
+          "speaker": "Amara",
+          "dia_id": "D6:7",
+          "text": "Oh! Almost forgot! Yes, the one from your mom was there. Put it on your desk. She knows you're always forgetting things lol."
+        },
+        {
+          "speaker": "Kenji",
+          "dia_id": "D6:8",
+          "text": "Haha, classic. Thanks for grabbing it! You're the best. Did you catch the Sox score from yesterday?"
+        },
+        {
+          "speaker": "Amara",
+          "dia_id": "D6:9",
+          "text": "Nope, not yet! Was too wiped last night. Don't tell me it was another heartbreaking loss after all that extra innings drama from Tuesday."
+        },
+        {
+          "speaker": "Kenji",
+          "dia_id": "D6:10",
+          "text": "Worse. They blew a 3-run lead in the 9th. Brutal. Well, guess we can just chill and watch something tonight then."
+        },
+        {
+          "speaker": "Amara",
+          "dia_id": "D6:11",
+          "text": "Sounds perfect. My brain can't handle any more crises today. See ya in a few."
+        }
+      ]
+    },
+    "qa": [
+      {
+        "question": "[cat 1 question placeholder]",
+        "answer": "placeholder",
+        "evidence": [],
+        "category": 1
+      },
+      {
+        "question": "What did Amara just finish before heading home in Session 1?",
+        "answer": "Her last call for the day.",
+        "evidence": [
+          "D1:1"
+        ],
+        "category": 2
+      },
+      {
+        "question": "Where was Amara stuck in traffic during Session 1?",
+        "answer": "Near Central Sq.",
+        "evidence": [
+          "D1:1"
+        ],
+        "category": 2
+      },
+      {
+        "question": "What item did Amara need to grab from Star Market for the pesto pasta in Session 2?",
+        "answer": "Fresh basil.",
+        "evidence": [
+          "D2:3"
+        ],
+        "category": 2
+      },
+      {
+        "question": "How long has Kenji been in Cambridge, according to Session 2?",
+        "answer": "3 years.",
+        "evidence": [
+          "D2:6"
+        ],
+        "category": 2
+      },
+      {
+        "question": "What did Kenji's mom send, and where did Amara put it in Session 6?",
+        "answer": "She sent a package, which Amara put on Kenji's desk.",
+        "evidence": [
+          "D6:7"
+        ],
+        "category": 2
+      },
+      {
+        "question": "What time did Amara's new referral client meeting on Tuesday start?",
+        "answer": "The specific start time for Amara's new client meeting on Tuesday is not mentioned.",
+        "evidence": [
+          "D1:5",
+          "D1:7"
+        ],
+        "category": 3
+      },
+      {
+        "question": "Did the person with the full-size cello case manage to squeeze onto the packed Red Line train at Central Square?",
+        "answer": "It is unknown whether the person with the cello case successfully boarded the train.",
+        "evidence": [
+          "D2:5",
+          "D2:6"
+        ],
+        "category": 3
+      },
+      {
+        "question": "What specific flavor or type of sourdough bread from Flour Bakery did Kenji ask about?",
+        "answer": "The specific type or flavor of sourdough bread from Flour Bakery is not mentioned, only that it was sourdough.",
+        "evidence": [
+          "D2:8",
+          "D2:9"
+        ],
+        "category": 3
+      },
+      {
+        "question": "What was inside the package Kenji's mom sent him?",
+        "answer": "The contents of the package from Kenji's mom are not mentioned in the conversation.",
+        "evidence": [
+          "D6:6",
+          "D6:7"
+        ],
+        "category": 3
+      },
+      {
+        "question": "Which team were the Red Sox playing when they blew a 3-run lead in the 9th inning?",
+        "answer": "The opposing team for the Red Sox game is not mentioned.",
+        "evidence": [
+          "D6:8",
+          "D6:10"
+        ],
+        "category": 3
+      },
+      {
+        "question": "[cat 4 question placeholder]",
+        "answer": "placeholder",
+        "evidence": [],
+        "category": 4
+      },
+      {
+        "question": "Tatte Bakery & Cafe, which Kenji mentions visiting, originated in which major U.S. city?",
+        "answer": "Tatte Bakery & Cafe originated in Boston, Massachusetts.",
+        "evidence": [],
+        "category": 5
+      },
+      {
+        "question": "The Red Line, a public transportation route mentioned multiple times, is part of the MBTA system. What does 'MBTA' stand for?",
+        "answer": "MBTA stands for Massachusetts Bay Transportation Authority.",
+        "evidence": [],
+        "category": 5
+      },
+      {
+        "question": "Kenji mentions preparing samples for 'sequencing.' In molecular biology, what is the primary purpose of DNA sequencing?",
+        "answer": "The primary purpose of DNA sequencing is to determine the precise order of nucleotides within a DNA molecule.",
+        "evidence": [],
+        "category": 5
+      },
+      {
+        "question": "Amara and Kenji discuss having sourdough from Flour Bakery. What unique ingredient is essential for giving sourdough bread its distinctive tangy flavor?",
+        "answer": "Sourdough bread gets its distinctive tangy flavor from a sourdough starter, a fermented mixture of flour and water containing wild yeast and lactic acid bacteria.",
+        "evidence": [],
+        "category": 5
+      },
+      {
+        "question": "The conversation mentions the 'Sox.' Which professional baseball league do the Boston Red Sox play in?",
+        "answer": "The Boston Red Sox play in Major League Baseball (MLB).",
+        "evidence": [],
+        "category": 5
+      }
+    ]
+  },
+  {
+    "sample_id": "synth-002",
+    "conversation": {
+      "speaker_a": "Rosa",
+      "speaker_b": "Luis",
+      "session_1_date_time": "11:28 am on 24 July, 2024",
+      "session_1": [
+        {
+          "speaker": "Rosa",
+          "dia_id": "D1:0",
+          "text": "Hey love, just leaving the restaurant now. Crazy busy lunch service today, we were slammed until 2pm."
+        },
+        {
+          "speaker": "Luis",
+          "dia_id": "D1:1",
+          "text": "Good to hear! I'm still at that Coral Gables showing. This couple is *really* interested in the house on Galiano."
+        },
+        {
+          "speaker": "Rosa",
+          "dia_id": "D1:2",
+          "text": "Oh nice! Hope it closes for you soon. What are you thinking for dinner tonight? I'm beat."
+        },
+        {
+          "speaker": "Luis",
+          "dia_id": "D1:3",
+          "text": "Yeah, me too. How about we just grab something easy? Or I can pick up that pollo asado from Los Pollos?"
+        },
+        {
+          "speaker": "Rosa",
+          "dia_id": "D1:4",
+          "text": "Ooh, Los Pollos sounds perfect. Grab a side of tostones too please! And maybe a small flan if they have it?"
+        },
+        {
+          "speaker": "Luis",
+          "dia_id": "D1:5",
+          "text": "Done. I'll call them now so it's ready for pickup. Should be home around 6:30."
+        },
+        {
+          "speaker": "Rosa",
+          "dia_id": "D1:6",
+          "text": "Sounds good. Mateo called earlier, just checking if we saw his email about the family vacation dates for July."
+        },
+        {
+          "speaker": "Luis",
+          "dia_id": "D1:7",
+          "text": "Ah, not yet. I'll take a look once I'm home. Probably right after I drop off these keys."
+        },
+        {
+          "speaker": "Rosa",
+          "dia_id": "D1:8",
+          "text": "K. Let's make sure we decide by the end of the week. You know how quickly those flights book up."
+        },
+        {
+          "speaker": "Luis",
+          "dia_id": "D1:9",
+          "text": "Will do, mi amor. Just left the showing. Traffic looks okay heading south on US-1."
+        },
+        {
+          "speaker": "Rosa",
+          "dia_id": "D1:10",
+          "text": "Great. See you soon then. Don't forget the flan! \ud83d\ude09"
+        },
+        {
+          "speaker": "Luis",
+          "dia_id": "D1:11",
+          "text": "Never! Be there in a bit."
+        }
+      ],
+      "session_2_date_time": "8:55 pm on 17 August, 2024",
+      "session_2": [
+        {
+          "speaker": "Rosa",
+          "dia_id": "D2:0",
+          "text": "Easy sounds perfect after today. How about that new Peruvian place on Bird? Or just pickup from El Porton?"
+        },
+        {
+          "speaker": "Luis",
+          "dia_id": "D2:1",
+          "text": "El Porton sounds good to me. I'm already over near Miracle Mile, so it's on my way. I can grab it."
+        },
+        {
+          "speaker": "Rosa",
+          "dia_id": "D2:2",
+          "text": "Perfect! Get a couple of those chicken empanadas for me too, if they have them. I'm leaving the restaurant now."
+        },
+        {
+          "speaker": "Luis",
+          "dia_id": "D2:3",
+          "text": "Will do! Yeah this Coral Gables showing actually went pretty well. The couple seemed to really like the master suite. Fingers crossed."
+        },
+        {
+          "speaker": "Rosa",
+          "dia_id": "D2:4",
+          "text": "Oh good! That's excellent news. Hopefully it's a solid offer for you soon. Mine was nuts today, we sold out of the lechon before 1pm!"
+        },
+        {
+          "speaker": "Luis",
+          "dia_id": "D2:5",
+          "text": "Wow, really? That's amazing, mami! You're gonna need to order more pig lol. Good problem to have though."
+        },
+        {
+          "speaker": "Rosa",
+          "dia_id": "D2:6",
+          "text": "Tell me about it. Thinking about adding an extra prep shift on Thursdays. This is busier than last summer already."
+        },
+        {
+          "speaker": "Luis",
+          "dia_id": "D2:7",
+          "text": "Yeah, I noticed you've been working even later. Don't overdo it, okay? We should definitely celebrate if this Gables deal closes next week."
+        },
+        {
+          "speaker": "Rosa",
+          "dia_id": "D2:8",
+          "text": "Always a good excuse for a celebration! \ud83d\ude09 Just glad to be heading home now. Traffic's already picking up on 8th street."
+        },
+        {
+          "speaker": "Luis",
+          "dia_id": "D2:9",
+          "text": "Ugh, don't remind me. I'm just leaving the showing now. Be home in about 20-25 with dinner."
+        },
+        {
+          "speaker": "Rosa",
+          "dia_id": "D2:10",
+          "text": "Sounds great! See you soon, love. Need anything from the store for breakfast tomorrow?"
+        },
+        {
+          "speaker": "Luis",
+          "dia_id": "D2:11",
+          "text": "Nah, I think we're good for tonight and tomorrow morning. See ya!"
+        }
+      ],
+      "session_3_date_time": "8:51 pm on 24 August, 2024",
+      "session_3": [
+        {
+          "speaker": "Rosa",
+          "dia_id": "D3:0",
+          "text": "...pretty what? Good I hope! You sound like you're in a hurry."
+        },
+        {
+          "speaker": "Luis",
+          "dia_id": "D3:1",
+          "text": "Yeah, pretty well! The clients loved the modern kitchen. Just signing paperwork now from the car before I head to El Porton."
+        },
+        {
+          "speaker": "Rosa",
+          "dia_id": "D3:2",
+          "text": "Nice! Another sale then, mi amor? That's great for a Tuesday. My day's been a little chaotic, we had a rush at lunch."
+        },
+        {
+          "speaker": "Luis",
+          "dia_id": "D3:3",
+          "text": "Hopefully! Fingers crossed. Aw man, busy day for both of us. At least dinner will be easy. Did you want a soda from El Porton or anything specific?"
+        },
+        {
+          "speaker": "Rosa",
+          "dia_id": "D3:4",
+          "text": "Just water for me, thanks! Oh, and don't forget those extra napkins. My hands are still messy from prepping the ceviche for tomorrow's specials."
+        },
+        {
+          "speaker": "Luis",
+          "dia_id": "D3:5",
+          "text": "Gotcha, water and napkins. So ceviche for tomorrow? Sounds delish. Almost there, prob 10 mins out. Traffic's not bad on US-1."
+        },
+        {
+          "speaker": "Rosa",
+          "dia_id": "D3:6",
+          "text": "Perfect! I'm just tidying up the kitchen here now. The kids are still at practice, so it'll just be us for a bit."
+        },
+        {
+          "speaker": "Luis",
+          "dia_id": "D3:7",
+          "text": "Sounds good. Hopefully David remembered his baseball glove this time lol. I'll be home before you know it with those empanadas."
+        },
+        {
+          "speaker": "Rosa",
+          "dia_id": "D3:8",
+          "text": "Haha, hopefully! Can you grab the mail when you come in? It's probably just bills, but still."
+        },
+        {
+          "speaker": "Luis",
+          "dia_id": "D3:9",
+          "text": "Will do! And I'll put my bag down and help you set the table for our Peruvian feast."
+        },
+        {
+          "speaker": "Rosa",
+          "dia_id": "D3:10",
+          "text": "You're the best! Just relax when you get here. I just want to hear about your showing."
+        },
+        {
+          "speaker": "Luis",
+          "dia_id": "D3:11",
+          "text": "Almost at the light on Le Jeune. See you in a few, mami!"
+        }
+      ],
+      "session_4_date_time": "7:27 pm on 10 September, 2024",
+      "session_4": [
+        {
+          "speaker": "Rosa",
+          "dia_id": "D4:0",
+          "text": "Hey mi amor, still stuck with clients? Hope you get a break soon. What time do you think you'll be done with all that?"
+        },
+        {
+          "speaker": "Luis",
+          "dia_id": "D4:1",
+          "text": "Just finished up a call with the buyers from the Coral Gables place. They're making an offer! Big win if it goes through. Heading back to the office now for paperwork."
+        },
+        {
+          "speaker": "Rosa",
+          "dia_id": "D4:2",
+          "text": "Oh wow, that's fantastic news, papi! Congrats! So good for a Tuesday. Should I just warm up leftovers for dinner or do you feel like getting something?"
+        },
+        {
+          "speaker": "Luis",
+          "dia_id": "D4:3",
+          "text": "Leftovers sound perfect, mi vida. Probably won't be home much before 7, maybe a bit later. This offer is gonna take a bit to draft."
+        },
+        {
+          "speaker": "Rosa",
+          "dia_id": "D4:4",
+          "text": "No worries at all. I'll just prep the black beans and rice from last night. We have plenty. My shift's almost done anyway. Chef Mario is handling the evening rush."
+        },
+        {
+          "speaker": "Luis",
+          "dia_id": "D4:5",
+          "text": "Good to hear. How was your day at \"The Catch\" anyway? Any crazy tourists today? Lol. I had to show a couple more places near Pinecrest this afternoon."
+        },
+        {
+          "speaker": "Rosa",
+          "dia_id": "D4:6",
+          "text": "Ha! No crazy tourists, thankfully. Just a super busy lunch. Ran out of the snapper special by 2pm! That's a good problem to have though."
+        },
+        {
+          "speaker": "Luis",
+          "dia_id": "D4:7",
+          "text": "Sounds like it! Glad things are good. Don't forget we need to call about that AC unit later. It's been making a weird noise."
+        },
+        {
+          "speaker": "Rosa",
+          "dia_id": "D4:8",
+          "text": "Oh right! I almost forgot. Maybe we can do it after dinner? I'll set a reminder."
+        },
+        {
+          "speaker": "Luis",
+          "dia_id": "D4:9",
+          "text": "Sounds good. Yeah, don't want it giving out on us with these Miami temps. Anyway, almost at the office. Talk soon."
+        },
+        {
+          "speaker": "Rosa",
+          "dia_id": "D4:10",
+          "text": "Okay, you focus on that offer! I'll see you later. Drive safe."
+        },
+        {
+          "speaker": "Luis",
+          "dia_id": "D4:11",
+          "text": "Will do, babe. Love you!"
+        }
+      ],
+      "session_5_date_time": "12:09 pm on 8 October, 2024",
+      "session_5": [
+        {
+          "speaker": "Rosa",
+          "dia_id": "D5:0",
+          "text": "Hey mi amor, so excited about those Coral Gables buyers! Everything solid? When's closing?"
+        },
+        {
+          "speaker": "Luis",
+          "dia_id": "D5:1",
+          "text": "Yeah, looks really good. Just sent over the final docs for their signatures. Hoping to close by end of next week, maybe the 28th."
+        },
+        {
+          "speaker": "Rosa",
+          "dia_id": "D5:2",
+          "text": "That's awesome! You earned that commission for sure. Just dealing with a new delivery driver here, totally lost lol."
+        },
+        {
+          "speaker": "Luis",
+          "dia_id": "D5:3",
+          "text": "Haha, typical. Hope they figure it out! I'm heading over to check out that new listing in Pinecrest later this afternoon."
+        },
+        {
+          "speaker": "Rosa",
+          "dia_id": "D5:4",
+          "text": "Pinecrest, nice! So you'll be out a bit longer then? Was thinking we could grab a quick bite tonight, not just leftovers."
+        },
+        {
+          "speaker": "Luis",
+          "dia_id": "D5:5",
+          "text": "Yeah, probably. Might be back around 7ish. A quick bite sounds good though, I'm kinda tired of my own cooking for a change. What were you thinking?"
+        },
+        {
+          "speaker": "Rosa",
+          "dia_id": "D5:6",
+          "text": "Me too! How about that new Cuban place, 'El Sabor de Abuela'? Just opened last month on 8th street."
+        },
+        {
+          "speaker": "Luis",
+          "dia_id": "D5:7",
+          "text": "Oh, I heard about that! Sounds perfect, mi vida. I'll make a reservation for 7:30 then. Just need to confirm a couple things first."
+        },
+        {
+          "speaker": "Rosa",
+          "dia_id": "D5:8",
+          "text": "Perfect! Let me know if you need me to call instead. I can probably leave the restaurant by 7, 7:15 latest."
+        },
+        {
+          "speaker": "Luis",
+          "dia_id": "D5:9",
+          "text": "Nah, I got it. Just gotta make sure this Pinecrest showing runs smoothly. See you tonight, gorgeous."
+        },
+        {
+          "speaker": "Rosa",
+          "dia_id": "D5:10",
+          "text": "Sounds good, papi. Don't work too hard! Looking forward to it."
+        },
+        {
+          "speaker": "Luis",
+          "dia_id": "D5:11",
+          "text": "You too, mi amor. Will call when I'm leaving Pinecrest. Ciao!"
+        }
+      ],
+      "session_6_date_time": "8:21 pm on 28 October, 2024",
+      "session_6": [
+        {
+          "speaker": "Rosa",
+          "dia_id": "D6:0",
+          "text": "Hey mi amor, did those Coral Gables docs close today? Still thinking about how hard you worked on that one!"
+        },
+        {
+          "speaker": "Luis",
+          "dia_id": "D6:1",
+          "text": "Almost! Buyers signed and wired funds. We should record first thing tmrw morning. Big W, babe!"
+        },
+        {
+          "speaker": "Rosa",
+          "dia_id": "D6:2",
+          "text": "OMG! That's fantastic news! You totally earned that commission. So happy for you! Lunch with Leo go well?"
+        },
+        {
+          "speaker": "Luis",
+          "dia_id": "D6:3",
+          "text": "Yeah, Leo was good. Just catching up. Said congrats on the closing too haha. How was the restaurant drama today? Any sign of the dishwasher?"
+        },
+        {
+          "speaker": "Rosa",
+          "dia_id": "D6:4",
+          "text": "No sign of him. Had to scramble for tonight. Called Maria from last year, she's coming in for the dinner shift. Lifesaver! Prep cook still out tho."
+        },
+        {
+          "speaker": "Luis",
+          "dia_id": "D6:5",
+          "text": "Ugh, what a headache. Glad Maria could help out. You must be wiped. Want me to pick up anything for dinner? Or order from somewhere easy?"
+        },
+        {
+          "speaker": "Rosa",
+          "dia_id": "D6:6",
+          "text": "I'm thinking something super simple tonight. Maybe just some takeout from that new place on Bird Rd? Or I can just make a quick pasta if you're too busy."
+        },
+        {
+          "speaker": "Luis",
+          "dia_id": "D6:7",
+          "text": "Nah, I'm done for the day. Text me what you want from Bird Rd and I'll grab it on my way home. So proud of you getting that deal done today btw."
+        },
+        {
+          "speaker": "Rosa",
+          "dia_id": "D6:8",
+          "text": "You're the best! Just two Cuban sandwiches, extra pickles for me, please. And maybe some croquetas if they have them. Thanks mi vida."
+        },
+        {
+          "speaker": "Luis",
+          "dia_id": "D6:9",
+          "text": "Got it. Cuban sandwiches and croquetas it is. Be home in about 45, traffic permitting. See you soon, love you."
+        },
+        {
+          "speaker": "Rosa",
+          "dia_id": "D6:10",
+          "text": "Perfect! Love you too. Don't forget to grab a bottle of that sparkling water we like!"
+        },
+        {
+          "speaker": "Luis",
+          "dia_id": "D6:11",
+          "text": "Will do! See ya."
+        }
+      ]
+    },
+    "qa": [
+      {
+        "question": "[cat 1 question placeholder]",
+        "answer": "placeholder",
+        "evidence": [],
+        "category": 1
+      },
+      {
+        "question": "What specific item did Rosa ask Luis to grab for her, besides the pollo asado and tostones, from Los Pollos in Session 1?",
+        "answer": "A small flan.",
+        "evidence": [
+          "D1:4"
+        ],
+        "category": 2
+      },
+      {
+        "question": "What specific item did Rosa sell out of at her restaurant before 1 pm in Session 2?",
+        "answer": "Lechon.",
+        "evidence": [
+          "D2:4"
+        ],
+        "category": 2
+      },
+      {
+        "question": "What did Rosa ask Luis to bring her from El Porton in Session 3, in addition to water?",
+        "answer": "Extra napkins.",
+        "evidence": [
+          "D3:4"
+        ],
+        "category": 2
+      },
+      {
+        "question": "What is the name of Rosa's restaurant mentioned in Session 4?",
+        "answer": "The Catch.",
+        "evidence": [
+          "D4:5"
+        ],
+        "category": 2
+      },
+      {
+        "question": "What is the name of the new Cuban restaurant Rosa suggests for dinner in Session 5?",
+        "answer": "El Sabor de Abuela.",
+        "evidence": [
+          "D5:6"
+        ],
+        "category": 2
+      },
+      {
+        "question": "Did Rosa and Luis confirm their family vacation dates for July by the end of Session 1?",
+        "answer": "No, Luis stated he hadn't looked at Mateo's email yet and they still needed to decide by the end of the week.",
+        "evidence": [
+          "D1:6",
+          "D1:7",
+          "D1:8"
+        ],
+        "category": 3
+      },
+      {
+        "question": "Was the Coral Gables deal officially closed by the end of Session 2?",
+        "answer": "No, Luis mentioned the couple seemed to like the master suite and he hoped the deal would close next week.",
+        "evidence": [
+          "D2:3",
+          "D2:7"
+        ],
+        "category": 3
+      },
+      {
+        "question": "Did Rosa and Luis eat at the \"new Peruvian place on Bird\" for their \"Peruvian feast\" in Session 3?",
+        "answer": "No, the \"Peruvian feast\" referred to the takeout from El Porton, which Luis picked up. The new Peruvian place was mentioned in Session 2 but not chosen for dinner in Session 3.",
+        "evidence": [
+          "D2:0",
+          "D3:1",
+          "D3:9"
+        ],
+        "category": 3
+      },
+      {
+        "question": "Was the AC unit problem resolved by the end of Session 4?",
+        "answer": "Not mentioned. They planned to call about it after dinner, and Rosa was going to set a reminder.",
+        "evidence": [
+          "D4:7",
+          "D4:8"
+        ],
+        "category": 3
+      },
+      {
+        "question": "Did Rosa end up making the reservation for 'El Sabor de Abuela' in Session 5?",
+        "answer": "No, Luis stated he would make the reservation for 'El Sabor de Abuela' and confirmed he had it handled after Rosa offered to call.",
+        "evidence": [
+          "D5:7",
+          "D5:8",
+          "D5:9"
+        ],
+        "category": 3
+      },
+      {
+        "question": "[cat 4 question placeholder]",
+        "answer": "placeholder",
+        "evidence": [],
+        "category": 4
+      },
+      {
+        "question": "Where is Coral Gables located?",
+        "answer": "Coral Gables is a city located in Miami-Dade County, Florida, United States.",
+        "evidence": [
+          "D1:1"
+        ],
+        "category": 5
+      },
+      {
+        "question": "What is pollo asado?",
+        "answer": "Pollo asado is a Spanish term for roasted chicken, typically marinated in citrus, herbs, and spices, popular in Latin American cuisine.",
+        "evidence": [
+          "D1:3"
+        ],
+        "category": 5
+      },
+      {
+        "question": "What is the primary ingredient in traditional ceviche?",
+        "answer": "The primary ingredient in traditional ceviche is raw fish or seafood, marinated and cured in citrus juices like lime or lemon.",
+        "evidence": [
+          "D3:4"
+        ],
+        "category": 5
+      },
+      {
+        "question": "What is U.S. Route 1 known for?",
+        "answer": "U.S. Route 1 is a major north-south United States Numbered Highway that runs along the East Coast, known for being one of the oldest and longest federal highways in the United States.",
+        "evidence": [
+          "D1:9"
+        ],
+        "category": 5
+      },
+      {
+        "question": "What is lech\u00f3n in the context of Cuban cuisine?",
+        "answer": "In Cuban cuisine, lech\u00f3n refers to a whole roasted suckling pig, a traditional dish often prepared for special occasions and holidays.",
+        "evidence": [
+          "D2:4"
+        ],
+        "category": 5
+      }
+    ]
+  },
+  {
+    "sample_id": "synth-003",
+    "conversation": {
+      "speaker_a": "Owen",
+      "speaker_b": "Naomi",
+      "session_1_date_time": "9:24 am on 14 June, 2025",
+      "session_1": [
+        {
+          "speaker": "Owen",
+          "dia_id": "D1:0",
+          "text": "Yo! Finally done with sprint review. My brain is soup."
+        },
+        {
+          "speaker": "Naomi",
+          "dia_id": "D1:1",
+          "text": "Lol I hear that. Long day with the fur babies?"
+        },
+        {
+          "speaker": "Owen",
+          "dia_id": "D1:2",
+          "text": "Dude, yes. Had a tricky bug in the new level build for Orion's Legacy. Took forever to pinpoint. Just wanna veg out."
+        },
+        {
+          "speaker": "Naomi",
+          "dia_id": "D1:3",
+          "text": "Ugh, sounds brutal. My day was a lot of puppy vaccinations and one VERY stubborn poodle mix named Buster. He did *not* want his nails trimmed."
+        },
+        {
+          "speaker": "Owen",
+          "dia_id": "D1:4",
+          "text": "Haha classic Buster! Bet you needed an extra assistant for that. Heading home to Bellevue now?"
+        },
+        {
+          "speaker": "Naomi",
+          "dia_id": "D1:5",
+          "text": "Yeah, just pulling into my driveway. Buster put up a good fight but we won. He got extra treats for being 'brave'. What's for dinner in Seattle tonight?"
+        },
+        {
+          "speaker": "Owen",
+          "dia_id": "D1:6",
+          "text": "Probably ordering pizza from Big Mario's. Too tired to cook. Thinking about diving into that new sci-fi book later."
+        },
+        {
+          "speaker": "Naomi",
+          "dia_id": "D1:7",
+          "text": "Oh nice! What book was it again? I'm just making some quick pasta. Got to hit QFC tomorrow morning for groceries."
+        },
+        {
+          "speaker": "Owen",
+          "dia_id": "D1:8",
+          "text": "\"Project Hail Mary\" by Andy Weir. It's awesome so far. Hey, we should grab dinner next week, maybe like Tuesday or Wednesday?"
+        },
+        {
+          "speaker": "Naomi",
+          "dia_id": "D1:9",
+          "text": "Ooh, I loved The Martian! Good choice. Yeah, dinner sounds great! Wednesday works better for me, I have a late surgery on Tuesday."
+        },
+        {
+          "speaker": "Owen",
+          "dia_id": "D1:10",
+          "text": "Wednesday works! We could try that new ramen place in Capitol Hill you were talking about last month? Or your usual spot in Bellevue?"
+        },
+        {
+          "speaker": "Naomi",
+          "dia_id": "D1:11",
+          "text": "Ramen sounds perfect! My treat. Let's aim for like 7pm? I'll text you Wednesday morning to confirm."
+        }
+      ],
+      "session_2_date_time": "1:54 pm on 27 June, 2025",
+      "session_2": [
+        {
+          "speaker": "Owen",
+          "dia_id": "D2:0",
+          "text": "[session 2 turn 1]"
+        },
+        {
+          "speaker": "Naomi",
+          "dia_id": "D2:1",
+          "text": "[session 2 turn 2]"
+        },
+        {
+          "speaker": "Owen",
+          "dia_id": "D2:2",
+          "text": "[session 2 turn 3]"
+        },
+        {
+          "speaker": "Naomi",
+          "dia_id": "D2:3",
+          "text": "[session 2 turn 4]"
+        },
+        {
+          "speaker": "Owen",
+          "dia_id": "D2:4",
+          "text": "[session 2 turn 5]"
+        },
+        {
+          "speaker": "Naomi",
+          "dia_id": "D2:5",
+          "text": "[session 2 turn 6]"
+        },
+        {
+          "speaker": "Owen",
+          "dia_id": "D2:6",
+          "text": "[session 2 turn 7]"
+        },
+        {
+          "speaker": "Naomi",
+          "dia_id": "D2:7",
+          "text": "[session 2 turn 8]"
+        },
+        {
+          "speaker": "Owen",
+          "dia_id": "D2:8",
+          "text": "[session 2 turn 9]"
+        },
+        {
+          "speaker": "Naomi",
+          "dia_id": "D2:9",
+          "text": "[session 2 turn 10]"
+        },
+        {
+          "speaker": "Owen",
+          "dia_id": "D2:10",
+          "text": "[session 2 turn 11]"
+        },
+        {
+          "speaker": "Naomi",
+          "dia_id": "D2:11",
+          "text": "[session 2 turn 12]"
+        }
+      ],
+      "session_3_date_time": "5:16 pm on 26 July, 2025",
+      "session_3": [
+        {
+          "speaker": "Owen",
+          "dia_id": "D3:0",
+          "text": "[session 3 turn 1]"
+        },
+        {
+          "speaker": "Naomi",
+          "dia_id": "D3:1",
+          "text": "[session 3 turn 2]"
+        },
+        {
+          "speaker": "Owen",
+          "dia_id": "D3:2",
+          "text": "[session 3 turn 3]"
+        },
+        {
+          "speaker": "Naomi",
+          "dia_id": "D3:3",
+          "text": "[session 3 turn 4]"
+        },
+        {
+          "speaker": "Owen",
+          "dia_id": "D3:4",
+          "text": "[session 3 turn 5]"
+        },
+        {
+          "speaker": "Naomi",
+          "dia_id": "D3:5",
+          "text": "[session 3 turn 6]"
+        },
+        {
+          "speaker": "Owen",
+          "dia_id": "D3:6",
+          "text": "[session 3 turn 7]"
+        },
+        {
+          "speaker": "Naomi",
+          "dia_id": "D3:7",
+          "text": "[session 3 turn 8]"
+        },
+        {
+          "speaker": "Owen",
+          "dia_id": "D3:8",
+          "text": "[session 3 turn 9]"
+        },
+        {
+          "speaker": "Naomi",
+          "dia_id": "D3:9",
+          "text": "[session 3 turn 10]"
+        },
+        {
+          "speaker": "Owen",
+          "dia_id": "D3:10",
+          "text": "[session 3 turn 11]"
+        },
+        {
+          "speaker": "Naomi",
+          "dia_id": "D3:11",
+          "text": "[session 3 turn 12]"
+        }
+      ],
+      "session_4_date_time": "7:29 pm on 4 August, 2025",
+      "session_4": [
+        {
+          "speaker": "Owen",
+          "dia_id": "D4:0",
+          "text": "[session 4 turn 1]"
+        },
+        {
+          "speaker": "Naomi",
+          "dia_id": "D4:1",
+          "text": "[session 4 turn 2]"
+        },
+        {
+          "speaker": "Owen",
+          "dia_id": "D4:2",
+          "text": "[session 4 turn 3]"
+        },
+        {
+          "speaker": "Naomi",
+          "dia_id": "D4:3",
+          "text": "[session 4 turn 4]"
+        },
+        {
+          "speaker": "Owen",
+          "dia_id": "D4:4",
+          "text": "[session 4 turn 5]"
+        },
+        {
+          "speaker": "Naomi",
+          "dia_id": "D4:5",
+          "text": "[session 4 turn 6]"
+        },
+        {
+          "speaker": "Owen",
+          "dia_id": "D4:6",
+          "text": "[session 4 turn 7]"
+        },
+        {
+          "speaker": "Naomi",
+          "dia_id": "D4:7",
+          "text": "[session 4 turn 8]"
+        },
+        {
+          "speaker": "Owen",
+          "dia_id": "D4:8",
+          "text": "[session 4 turn 9]"
+        },
+        {
+          "speaker": "Naomi",
+          "dia_id": "D4:9",
+          "text": "[session 4 turn 10]"
+        },
+        {
+          "speaker": "Owen",
+          "dia_id": "D4:10",
+          "text": "[session 4 turn 11]"
+        },
+        {
+          "speaker": "Naomi",
+          "dia_id": "D4:11",
+          "text": "[session 4 turn 12]"
+        }
+      ],
+      "session_5_date_time": "9:59 am on 14 September, 2025",
+      "session_5": [
+        {
+          "speaker": "Owen",
+          "dia_id": "D5:0",
+          "text": "Hey, you busy? Just wrapped up a brutal playtest session."
+        },
+        {
+          "speaker": "Naomi",
+          "dia_id": "D5:1",
+          "text": "Oh hey! Nah, just doing some paperwork, grabbing lunch soon. Brutal how? Still wrestling with that cursed Level 5 boss?"
+        },
+        {
+          "speaker": "Owen",
+          "dia_id": "D5:2",
+          "text": "Dude, don't even get me started. This is like the fifth time we've had to completely re-balance the entire combat system for Level 5. It just keeps breaking."
+        },
+        {
+          "speaker": "Naomi",
+          "dia_id": "D5:3",
+          "text": "Ugh, that sounds exhausting. My morning was pretty 'level 5' chaotic too, had a tabby try to pull a whole IV line out of his arm. Little escape artist."
+        },
+        {
+          "speaker": "Owen",
+          "dia_id": "D5:4",
+          "text": "Haha, classic. Yeah, we're actually debating just scrapping the current Level 5 mechanics entirely. Start fresh, maybe a different boss type."
+        },
+        {
+          "speaker": "Naomi",
+          "dia_id": "D5:5",
+          "text": "Wow, that's a huge decision. How's the team feeling about potentially losing all that dev time?"
+        },
+        {
+          "speaker": "Owen",
+          "dia_id": "D5:6",
+          "text": "Mixed bag. Some are relieved to just move on, others are pretty bummed. But honestly, it's gotta happen. We're bleeding time trying to fix it."
+        },
+        {
+          "speaker": "Naomi",
+          "dia_id": "D5:7",
+          "text": "Probably for the best then. Sometimes you just gotta cut your losses. My afternoon is packed with dog dental cleanings, wish I could scrap those lol."
+        },
+        {
+          "speaker": "Owen",
+          "dia_id": "D5:8",
+          "text": "Ew. Good luck with that. Wanna grab dinner Thursday? My treat, after this whole Level 5 drama finally gets settled. I'm thinking Thai."
+        },
+        {
+          "speaker": "Naomi",
+          "dia_id": "D5:9",
+          "text": "Ooh, Thai sounds amazing! Yeah, Thursday works perfectly, I'm free after 6. Maybe that new place in Bellevue near your old apartment?"
+        },
+        {
+          "speaker": "Owen",
+          "dia_id": "D5:10",
+          "text": "The one called 'Spice Alley'? Perfect, I'm down. So glad to be making a concrete decision about this *current* version of Level 5, at least."
+        },
+        {
+          "speaker": "Naomi",
+          "dia_id": "D5:11",
+          "text": "Good. You sounded so stressed about it last time we talked. Glad there's a light at the end of the tunnel for *this* session of the 'Level 5 Saga'."
+        }
+      ],
+      "session_6_date_time": "9:35 am on 15 October, 2025",
+      "session_6": [
+        {
+          "speaker": "Owen",
+          "dia_id": "D6:0",
+          "text": "[session 6 turn 1]"
+        },
+        {
+          "speaker": "Naomi",
+          "dia_id": "D6:1",
+          "text": "[session 6 turn 2]"
+        },
+        {
+          "speaker": "Owen",
+          "dia_id": "D6:2",
+          "text": "[session 6 turn 3]"
+        },
+        {
+          "speaker": "Naomi",
+          "dia_id": "D6:3",
+          "text": "[session 6 turn 4]"
+        },
+        {
+          "speaker": "Owen",
+          "dia_id": "D6:4",
+          "text": "[session 6 turn 5]"
+        },
+        {
+          "speaker": "Naomi",
+          "dia_id": "D6:5",
+          "text": "[session 6 turn 6]"
+        },
+        {
+          "speaker": "Owen",
+          "dia_id": "D6:6",
+          "text": "[session 6 turn 7]"
+        },
+        {
+          "speaker": "Naomi",
+          "dia_id": "D6:7",
+          "text": "[session 6 turn 8]"
+        },
+        {
+          "speaker": "Owen",
+          "dia_id": "D6:8",
+          "text": "[session 6 turn 9]"
+        },
+        {
+          "speaker": "Naomi",
+          "dia_id": "D6:9",
+          "text": "[session 6 turn 10]"
+        },
+        {
+          "speaker": "Owen",
+          "dia_id": "D6:10",
+          "text": "[session 6 turn 11]"
+        },
+        {
+          "speaker": "Naomi",
+          "dia_id": "D6:11",
+          "text": "[session 6 turn 12]"
+        }
+      ]
+    },
+    "qa": [
+      {
+        "question": "What date did Session 1 of the conversation take place?",
+        "answer": "June 14, 2025.",
+        "evidence": [
+          "D1:0"
+        ],
+        "category": 1
+      },
+      {
+        "question": "When did Owen and Naomi agree to have dinner together during their first conversation?",
+        "answer": "Wednesday of the following week.",
+        "evidence": [
+          "D1:9",
+          "D1:10"
+        ],
+        "category": 1
+      },
+      {
+        "question": "What time did Naomi suggest for the ramen dinner in Session 1?",
+        "answer": "7pm.",
+        "evidence": [
+          "D1:11"
+        ],
+        "category": 1
+      },
+      {
+        "question": "When did Owen propose to grab dinner in Session 5?",
+        "answer": "Thursday.",
+        "evidence": [
+          "D5:8"
+        ],
+        "category": 1
+      },
+      {
+        "question": "What date did Session 5 of the conversation occur?",
+        "answer": "September 14, 2025.",
+        "evidence": [
+          "D5:0"
+        ],
+        "category": 1
+      },
+      {
+        "question": "What is the name of the book Owen is reading?",
+        "answer": "He is reading \"Project Hail Mary\" by Andy Weir.",
+        "evidence": [
+          "D1:8"
+        ],
+        "category": 2
+      },
+      {
+        "question": "What kind of animal is Buster?",
+        "answer": "Buster is a very stubborn poodle mix.",
+        "evidence": [
+          "D1:3"
+        ],
+        "category": 2
+      },
+      {
+        "question": "Which grocery store does Naomi plan to visit the morning after Session 1?",
+        "answer": "Naomi plans to go to QFC.",
+        "evidence": [
+          "D1:7"
+        ],
+        "category": 2
+      },
+      {
+        "question": "What food are Owen and Naomi planning to have for their dinner on Thursday in Session 5?",
+        "answer": "They are planning to have Thai food.",
+        "evidence": [
+          "D5:8",
+          "D5:9"
+        ],
+        "category": 2
+      },
+      {
+        "question": "What specific game is Owen working on that has a problematic Level 5?",
+        "answer": "The game is called 'Orion's Legacy'.",
+        "evidence": [
+          "D1:2"
+        ],
+        "category": 2
+      },
+      {
+        "question": "What was the name of the tricky bug Owen encountered in Orion's Legacy?",
+        "answer": "The specific name or nature of the bug Owen encountered is not mentioned in the transcript.",
+        "evidence": [
+          "D1:2"
+        ],
+        "category": 3
+      },
+      {
+        "question": "What exact date did Owen and Naomi plan to have dinner next week?",
+        "answer": "The exact date for their dinner was not mentioned, only that it would be on a Wednesday.",
+        "evidence": [
+          "D1:8",
+          "D1:9",
+          "D1:10"
+        ],
+        "category": 3
+      },
+      {
+        "question": "What kind of pets did Owen mention owning?",
+        "answer": "Owen did not mention owning any pets.",
+        "evidence": [
+          "D1:0",
+          "D1:2",
+          "D1:4",
+          "D1:6",
+          "D1:8",
+          "D1:10",
+          "D5:0",
+          "D5:2",
+          "D5:4",
+          "D5:6",
+          "D5:8",
+          "D5:10"
+        ],
+        "category": 3
+      },
+      {
+        "question": "What was the name of the new ramen place in Capitol Hill that Owen and Naomi planned to visit?",
+        "answer": "The specific name of the new ramen place was not mentioned, only its general location in Capitol Hill.",
+        "evidence": [
+          "D1:10"
+        ],
+        "category": 3
+      },
+      {
+        "question": "Did Owen's team ultimately scrap the current Level 5 mechanics, and if so, what new boss type did they implement?",
+        "answer": "It is unknown if Owen's team ultimately scrapped the Level 5 mechanics or what they replaced it with, as the conversation ends with the decision to scrap the current version, not its actual implementation or replacement.",
+        "evidence": [
+          "D5:4",
+          "D5:6",
+          "D5:10",
+          "D5:11"
+        ],
+        "category": 3
+      },
+      {
+        "question": "[cat 4 question placeholder]",
+        "answer": "placeholder",
+        "evidence": [],
+        "category": 4
+      },
+      {
+        "question": "What other popular science fiction novel is Andy Weir known for, besides 'Project Hail Mary'?",
+        "answer": "Andy Weir is also widely recognized for his novel 'The Martian', which was adapted into a successful film.",
+        "evidence": [
+          "D1:8",
+          "D1:9"
+        ],
+        "category": 5
+      },
+      {
+        "question": "Which large supermarket chain is QFC a subsidiary of?",
+        "answer": "QFC (Quality Food Centers) is a subsidiary of Kroger, one of the largest grocery retailers in the United States.",
+        "evidence": [
+          "D1:7"
+        ],
+        "category": 5
+      },
+      {
+        "question": "What country is ramen noodles originally from?",
+        "answer": "Ramen is a Japanese noodle dish, although its origins can be traced back to Chinese noodle dishes.",
+        "evidence": [
+          "D1:10",
+          "D1:11"
+        ],
+        "category": 5
+      },
+      {
+        "question": "What famous landmark or attraction is located in the Capitol Hill neighborhood of Seattle, Washington?",
+        "answer": "The Capitol Hill neighborhood in Seattle is home to several notable attractions, including Volunteer Park and the Asian Art Museum.",
+        "evidence": [
+          "D1:10"
+        ],
+        "category": 5
+      },
+      {
+        "question": "In the context of agile software development, what is the primary purpose of a sprint review meeting?",
+        "answer": "The primary purpose of a sprint review meeting is to inspect the increment and adapt the backlog if needed, providing an opportunity for the development team to demonstrate their work to stakeholders and gather feedback.",
+        "evidence": [
+          "D1:0"
+        ],
+        "category": 5
+      }
+    ]
+  },
+  {
+    "sample_id": "synth-004",
+    "conversation": {
+      "speaker_a": "Helena",
+      "speaker_b": "Ben",
+      "session_1_date_time": "9:40 pm on 30 November, 2024",
+      "session_1": [
+        {
+          "speaker": "Helena",
+          "dia_id": "D1:0",
+          "text": "Hey, how was your day? I just wrapped up the Adams file, finally."
+        },
+        {
+          "speaker": "Ben",
+          "dia_id": "D1:1",
+          "text": "Pretty good! Just finished testing a new sourdough recipe for the blog, so the kitchen smells amazing. You home soon?"
+        },
+        {
+          "speaker": "Helena",
+          "dia_id": "D1:2",
+          "text": "Ugh, sounds heavenly. I'm stuck mediating a truly exhausting property dispute, probably another 45 mins here. My brain is soup."
+        },
+        {
+          "speaker": "Ben",
+          "dia_id": "D1:3",
+          "text": "Rough! Take your time. I'll get dinner started. Thinking that lemon herb chicken we like with some roasted veggies? Simple, but good."
+        },
+        {
+          "speaker": "Helena",
+          "dia_id": "D1:4",
+          "text": "Oh, Ben, you're a lifesaver. Yes please, that sounds perfect. How's the draft for your review of 'The Hungry Fox' coming along?"
+        },
+        {
+          "speaker": "Ben",
+          "dia_id": "D1:5",
+          "text": "Almost done. Just need to edit a few more photos. Planning to schedule it for Friday morning. Their ramen was surprisingly good, btw."
+        },
+        {
+          "speaker": "Helena",
+          "dia_id": "D1:6",
+          "text": "Nice! I'll definitely check it out. Hey, remind me to call Aunt Carol this weekend. It's her actual birthday on Sunday."
+        },
+        {
+          "speaker": "Ben",
+          "dia_id": "D1:7",
+          "text": "Will do. And don't forget we have our reservation at Sepia on Saturday night for our anniversary dinner, right?"
+        },
+        {
+          "speaker": "Helena",
+          "dia_id": "D1:8",
+          "text": "How could I forget?! So excited for that. Can't believe it's been 12 years already. Where does the time even go?"
+        },
+        {
+          "speaker": "Ben",
+          "dia_id": "D1:9",
+          "text": "Seriously. Feels like yesterday we were just sharing a greasy pizza after a show on Randolph Street. Time flies when you're having fun, I guess."
+        },
+        {
+          "speaker": "Helena",
+          "dia_id": "D1:10",
+          "text": "Haha, truer words. Anyway, I'm finally packing up now. Be home in about 25. Need anything specific from Mariano's?"
+        },
+        {
+          "speaker": "Ben",
+          "dia_id": "D1:11",
+          "text": "Nah, I think we're good. Just you. See ya soon, love. Drive safe."
+        }
+      ],
+      "session_2_date_time": "5:12 pm on 30 December, 2024",
+      "session_2": [
+        {
+          "speaker": "Helena",
+          "dia_id": "D2:0",
+          "text": "Finally escaped the Miller mediation! What a marathon. Smells amazing from here btw. \ud83d\ude4f"
+        },
+        {
+          "speaker": "Ben",
+          "dia_id": "D2:1",
+          "text": "Glad you're free! Salmon's almost done, asparagus too. Just need to plate. Rough day at the office?"
+        },
+        {
+          "speaker": "Helena",
+          "dia_id": "D2:2",
+          "text": "Beyond rough. Two days of back-and-forth on parental allocation for the youngest Miller kids. My head is throbbing. On the brown line now, probably 15 mins out from Loop."
+        },
+        {
+          "speaker": "Ben",
+          "dia_id": "D2:3",
+          "text": "Ugh, the Millers. Hope they got somewhere productive. Good, dinner will be ready when you walk in. Grab a glass of something when you get here, you earned it."
+        },
+        {
+          "speaker": "Helena",
+          "dia_id": "D2:4",
+          "text": "Definitely need wine. And silence. Thinking about just chilling tonight. No plans for the weekend right? Maybe hit up the Lincoln Park farmers market on Saturday?"
+        },
+        {
+          "speaker": "Ben",
+          "dia_id": "D2:5",
+          "text": "Sounds perfect. And yeah, nothing firm. Was thinking of doing a quick blog post tomorrow morning about that new sourdough. Maybe test the focaccia recipe for Sunday."
+        },
+        {
+          "speaker": "Helena",
+          "dia_id": "D2:6",
+          "text": "Oh, the sourdough that made the whole place smell like a bakery? Please do! Love that one. We'll need to pick up some good cheese for Sunday too if you're making focaccia."
+        },
+        {
+          "speaker": "Ben",
+          "dia_id": "D2:7",
+          "text": "That's the one! Thinking of calling it 'The Logan Square Levain' on the blog. Got some amazing feedback from my last post on the chili oil. Plus, gotta share those tips."
+        },
+        {
+          "speaker": "Helena",
+          "dia_id": "D2:8",
+          "text": "Haha, nice. Sounds catchy. Remember that time you tried to make chili oil from scratch and almost burned down our old apartment on Division?"
+        },
+        {
+          "speaker": "Ben",
+          "dia_id": "D2:9",
+          "text": "Hey! That was ONE time and I was new to the wok. \ud83e\udd23 Never happened again! Dinner's just about ready btw. See you soon?"
+        },
+        {
+          "speaker": "Helena",
+          "dia_id": "D2:10",
+          "text": "Almost home! Just passing Armitage. Be there in 5 tops. Can't wait. So hungry!"
+        },
+        {
+          "speaker": "Ben",
+          "dia_id": "D2:11",
+          "text": "Perfect. See you in a few. Got your favorite playlist on."
+        }
+      ],
+      "session_3_date_time": "8:42 am on 10 January, 2025",
+      "session_3": [
+        {
+          "speaker": "Helena",
+          "dia_id": "D3:0",
+          "text": "Productive-ish, for a Miller mediation. We actually got the parenting plan hammered out. Just pulling out of the parking garage now."
+        },
+        {
+          "speaker": "Ben",
+          "dia_id": "D3:1",
+          "text": "Nice! That's definitely a win, given those two. Drive safe. Want a glass of that pinot we opened last night ready when you walk in?"
+        },
+        {
+          "speaker": "Helena",
+          "dia_id": "D3:2",
+          "text": "Oh, yes please! That sounds absolutely heavenly. Just gotta swing by CVS for some toothpaste, then straight home. Prob 20 mins."
+        },
+        {
+          "speaker": "Ben",
+          "dia_id": "D3:3",
+          "text": "Gotcha. Dinner's plating soon. Salmon looks perfect, managed to not overcook the asparagus this time haha. Huge achievement."
+        },
+        {
+          "speaker": "Helena",
+          "dia_id": "D3:4",
+          "text": "Haha good job! Any mail today? Or packages? I'm hoping that new kitchen gadget for your 'Gadget Guru' blog series came in."
+        },
+        {
+          "speaker": "Ben",
+          "dia_id": "D3:5",
+          "text": "Nope, no packages today, unfortunately. Just a couple bills. I did get a call from Liam though about the farmer's market next Saturday, wants to feature my beet hummus."
+        },
+        {
+          "speaker": "Helena",
+          "dia_id": "D3:6",
+          "text": "Ooh, that's cool! Which farmer's market? Lincoln Park or Green City?"
+        },
+        {
+          "speaker": "Ben",
+          "dia_id": "D3:7",
+          "text": "Green City. He said he has a slot for a quick demo around 10:30am. Could be good for the 'Eat Your Veggies' series too."
+        },
+        {
+          "speaker": "Helena",
+          "dia_id": "D3:8",
+          "text": "Totally! That series is doing so well. Just parked outside CVS now. Be home in 5!"
+        },
+        {
+          "speaker": "Ben",
+          "dia_id": "D3:9",
+          "text": "Perfect timing. I'll pour that wine. Almost done with your plate."
+        },
+        {
+          "speaker": "Helena",
+          "dia_id": "D3:10",
+          "text": "Yay! Can't wait. And to finally sit down. So glad to be done with the Millers for the week."
+        },
+        {
+          "speaker": "Ben",
+          "dia_id": "D3:11",
+          "text": "Me too. Just glad you're home. See you in a sec!"
+        }
+      ],
+      "session_4_date_time": "8:18 pm on 31 January, 2025",
+      "session_4": [
+        {
+          "speaker": "Helena",
+          "dia_id": "D4:0",
+          "text": "Just pulled into the garage. Smells amazing in here already! So ready to be home."
+        },
+        {
+          "speaker": "Ben",
+          "dia_id": "D4:1",
+          "text": "Welcome home! Plates are ready, just waiting for you to shed the lawyer persona \ud83d\ude09 How was the drive through the city?"
+        },
+        {
+          "speaker": "Helena",
+          "dia_id": "D4:2",
+          "text": "Not bad actually! Even for a Friday. So glad to be out of these heels. That Miller mediation almost broke me today."
+        },
+        {
+          "speaker": "Ben",
+          "dia_id": "D4:3",
+          "text": "Haha, knew it. But you said it was productive-ish, right? Did they actually agree on anything this time?"
+        },
+        {
+          "speaker": "Helena",
+          "dia_id": "D4:4",
+          "text": "Shockingly, yes. At least on the main custody schedule. Had to practically chain them to the table though. So draining."
+        },
+        {
+          "speaker": "Ben",
+          "dia_id": "D4:5",
+          "text": "Wow, congrats on that win then. You def earned this salmon. After dinner, maybe we just crash on the couch and put on that new series?"
+        },
+        {
+          "speaker": "Helena",
+          "dia_id": "D4:6",
+          "text": "Yes, please! Sounds perfect. No more legal jargon for me tonight. Need to prep for that client meeting Monday morning though."
+        },
+        {
+          "speaker": "Ben",
+          "dia_id": "D4:7",
+          "text": "Gotcha. Don't forget we've got that farmer's market run planned for Saturday morning. Need to stock up for next week's recipes."
+        },
+        {
+          "speaker": "Helena",
+          "dia_id": "D4:8",
+          "text": "Oh right! And remember we said we'd hit up Logan Square for those artisanal cheeses you wanted too?"
+        },
+        {
+          "speaker": "Ben",
+          "dia_id": "D4:9",
+          "text": "Yep! Definitely. I've got a new post brewing for the blog on local Chicago producers, so good excuse to gather some content."
+        },
+        {
+          "speaker": "Helena",
+          "dia_id": "D4:10",
+          "text": "Oh fun! What's the theme this time? More of your experimental sourdough that keeps taking over the fridge?"
+        },
+        {
+          "speaker": "Ben",
+          "dia_id": "D4:11",
+          "text": "Haha, not sourdough, surprisingly. Thinking something with the fresh seasonal produce we'll find. Maybe a late summer salad spotlight."
+        }
+      ],
+      "session_5_date_time": "9:14 pm on 12 February, 2025",
+      "session_5": [
+        {
+          "speaker": "Helena",
+          "dia_id": "D5:0",
+          "text": "[session 5 turn 1]"
+        },
+        {
+          "speaker": "Ben",
+          "dia_id": "D5:1",
+          "text": "[session 5 turn 2]"
+        },
+        {
+          "speaker": "Helena",
+          "dia_id": "D5:2",
+          "text": "[session 5 turn 3]"
+        },
+        {
+          "speaker": "Ben",
+          "dia_id": "D5:3",
+          "text": "[session 5 turn 4]"
+        },
+        {
+          "speaker": "Helena",
+          "dia_id": "D5:4",
+          "text": "[session 5 turn 5]"
+        },
+        {
+          "speaker": "Ben",
+          "dia_id": "D5:5",
+          "text": "[session 5 turn 6]"
+        },
+        {
+          "speaker": "Helena",
+          "dia_id": "D5:6",
+          "text": "[session 5 turn 7]"
+        },
+        {
+          "speaker": "Ben",
+          "dia_id": "D5:7",
+          "text": "[session 5 turn 8]"
+        },
+        {
+          "speaker": "Helena",
+          "dia_id": "D5:8",
+          "text": "[session 5 turn 9]"
+        },
+        {
+          "speaker": "Ben",
+          "dia_id": "D5:9",
+          "text": "[session 5 turn 10]"
+        },
+        {
+          "speaker": "Helena",
+          "dia_id": "D5:10",
+          "text": "[session 5 turn 11]"
+        },
+        {
+          "speaker": "Ben",
+          "dia_id": "D5:11",
+          "text": "[session 5 turn 12]"
+        }
+      ],
+      "session_6_date_time": "2:17 pm on 25 February, 2025",
+      "session_6": [
+        {
+          "speaker": "Helena",
+          "dia_id": "D6:0",
+          "text": "[session 6 turn 1]"
+        },
+        {
+          "speaker": "Ben",
+          "dia_id": "D6:1",
+          "text": "[session 6 turn 2]"
+        },
+        {
+          "speaker": "Helena",
+          "dia_id": "D6:2",
+          "text": "[session 6 turn 3]"
+        },
+        {
+          "speaker": "Ben",
+          "dia_id": "D6:3",
+          "text": "[session 6 turn 4]"
+        },
+        {
+          "speaker": "Helena",
+          "dia_id": "D6:4",
+          "text": "[session 6 turn 5]"
+        },
+        {
+          "speaker": "Ben",
+          "dia_id": "D6:5",
+          "text": "[session 6 turn 6]"
+        },
+        {
+          "speaker": "Helena",
+          "dia_id": "D6:6",
+          "text": "[session 6 turn 7]"
+        },
+        {
+          "speaker": "Ben",
+          "dia_id": "D6:7",
+          "text": "[session 6 turn 8]"
+        },
+        {
+          "speaker": "Helena",
+          "dia_id": "D6:8",
+          "text": "[session 6 turn 9]"
+        },
+        {
+          "speaker": "Ben",
+          "dia_id": "D6:9",
+          "text": "[session 6 turn 10]"
+        },
+        {
+          "speaker": "Helena",
+          "dia_id": "D6:10",
+          "text": "[session 6 turn 11]"
+        },
+        {
+          "speaker": "Ben",
+          "dia_id": "D6:11",
+          "text": "[session 6 turn 12]"
+        }
+      ]
+    },
+    "qa": [
+      {
+        "question": "[cat 1 question placeholder]",
+        "answer": "placeholder",
+        "evidence": [],
+        "category": 1
+      },
+      {
+        "question": "What is the name of the file Helena finally wrapped up at the beginning of Session 1?",
+        "answer": "The Adams file.",
+        "evidence": [
+          "D1:0"
+        ],
+        "category": 2
+      },
+      {
+        "question": "For how many years have Ben and Helena been together, as mentioned during their discussion about their anniversary dinner?",
+        "answer": "12 years.",
+        "evidence": [
+          "D1:8"
+        ],
+        "category": 2
+      },
+      {
+        "question": "What did Ben name his new sourdough recipe post for his blog?",
+        "answer": "'The Logan Square Levain'.",
+        "evidence": [
+          "D2:7"
+        ],
+        "category": 2
+      },
+      {
+        "question": "Which farmer's market did Liam call Ben about, wanting to feature his beet hummus?",
+        "answer": "Green City farmer's market.",
+        "evidence": [
+          "D3:6",
+          "D3:7"
+        ],
+        "category": 2
+      },
+      {
+        "question": "What was the main agreement the Millers reached during their mediation in Session 4?",
+        "answer": "The main custody schedule.",
+        "evidence": [
+          "D4:4"
+        ],
+        "category": 2
+      },
+      {
+        "question": "What specific roasted vegetables did Ben plan to make with the lemon herb chicken in Session 1?",
+        "answer": "The specific type of roasted vegetables was not mentioned.",
+        "evidence": [
+          "D1:3"
+        ],
+        "category": 3
+      },
+      {
+        "question": "What specific event are Helena and Ben celebrating for their 12-year anniversary?",
+        "answer": "The transcript does not specify what event their anniversary commemorates.",
+        "evidence": [
+          "D1:7",
+          "D1:8"
+        ],
+        "category": 3
+      },
+      {
+        "question": "What specific tips did Ben plan to share in his blog post about chili oil?",
+        "answer": "The specific tips Ben would share were not mentioned.",
+        "evidence": [
+          "D2:7"
+        ],
+        "category": 3
+      },
+      {
+        "question": "What type of new kitchen gadget was Helena hoping Ben's package would contain in Session 3?",
+        "answer": "The specific type of kitchen gadget was not mentioned.",
+        "evidence": [
+          "D3:4",
+          "D3:5"
+        ],
+        "category": 3
+      },
+      {
+        "question": "What new series did Ben suggest they watch after dinner in Session 4?",
+        "answer": "The name of the new series was not mentioned.",
+        "evidence": [
+          "D4:5"
+        ],
+        "category": 3
+      },
+      {
+        "question": "[cat 4 question placeholder]",
+        "answer": "placeholder",
+        "evidence": [],
+        "category": 4
+      },
+      {
+        "question": "What is the primary leavening agent used in sourdough bread?",
+        "answer": "Sourdough bread uses a fermented mixture of flour and water containing wild yeast and lactobacilli bacteria as its primary leavening agent, known as a sourdough starter.",
+        "evidence": [
+          "D1:1",
+          "D2:5",
+          "D2:6",
+          "D2:7",
+          "D4:10"
+        ],
+        "category": 5
+      },
+      {
+        "question": "What is the main goal of mediation in a legal dispute?",
+        "answer": "The main goal of mediation in a legal dispute is to help the parties involved reach a mutually acceptable agreement and resolve their conflict with the assistance of a neutral third party, the mediator.",
+        "evidence": [
+          "D1:2",
+          "D2:0",
+          "D2:3",
+          "D3:0",
+          "D4:2",
+          "D4:4"
+        ],
+        "category": 5
+      },
+      {
+        "question": "What are the four main components of a traditional bowl of ramen?",
+        "answer": "The four main components of a traditional bowl of ramen are broth, noodles, tare (seasoning), and various toppings.",
+        "evidence": [
+          "D1:5"
+        ],
+        "category": 5
+      },
+      {
+        "question": "What are some common benefits of purchasing produce from a local farmer's market?",
+        "answer": "Benefits include fresher produce, supporting local economies, reducing food miles, and often finding seasonal and unique varieties not available in supermarkets.",
+        "evidence": [
+          "D2:4",
+          "D3:5",
+          "D3:6",
+          "D3:7",
+          "D4:7"
+        ],
+        "category": 5
+      },
+      {
+        "question": "Which country is most famously associated with the production of high-quality Pinot Noir wine?",
+        "answer": "France, specifically the Burgundy region, is most famously associated with the production of high-quality Pinot Noir wine.",
+        "evidence": [
+          "D3:1",
+          "D3:9"
+        ],
+        "category": 5
+      }
+    ]
+  },
+  {
+    "sample_id": "synth-005",
+    "conversation": {
+      "speaker_a": "David",
+      "speaker_b": "Sandra",
+      "session_1_date_time": "6:53 pm on 19 June, 2024",
+      "session_1": [
+        {
+          "speaker": "David",
+          "dia_id": "D1:0",
+          "text": "Hey S! How was your Monday? Crazy at school already?"
+        },
+        {
+          "speaker": "Sandra",
+          "dia_id": "D1:1",
+          "text": "lol hey D! Not too bad actually. The kindergarteners were angels. For once! \ud83d\ude02 You? Big bridge problems today?"
+        },
+        {
+          "speaker": "David",
+          "dia_id": "D1:2",
+          "text": "Haha, lucky you. Nah, just slogging through permit docs for the new SE Portland interchange. So much paperwork."
+        },
+        {
+          "speaker": "Sandra",
+          "dia_id": "D1:3",
+          "text": "Ugh, sounds thrilling. You heading to that Blazers game on Wednesday night?"
+        },
+        {
+          "speaker": "David",
+          "dia_id": "D1:4",
+          "text": "Nah, decided against it. Too tired after work, plus traffic getting downtown is a nightmare. Maybe next week."
+        },
+        {
+          "speaker": "Sandra",
+          "dia_id": "D1:5",
+          "text": "Good call. I'm thinking of trying that new bakery on Division for breakfast this weekend. You in?"
+        },
+        {
+          "speaker": "David",
+          "dia_id": "D1:6",
+          "text": "Ooh, the one next to the old movie theater? The one Mom mentioned?"
+        },
+        {
+          "speaker": "Sandra",
+          "dia_id": "D1:7",
+          "text": "Yep! \"Flour & Fire.\" Supposed to have amazing croissants. Saturday morning around 9?"
+        },
+        {
+          "speaker": "David",
+          "dia_id": "D1:8",
+          "text": "Hmm, Saturday might be tight. Got that volunteer build for Habitat for Humanity. What about Sunday instead?"
+        },
+        {
+          "speaker": "Sandra",
+          "dia_id": "D1:9",
+          "text": "Sunday works! I've got that PTA meeting in the afternoon, but morning is free."
+        },
+        {
+          "speaker": "David",
+          "dia_id": "D1:10",
+          "text": "Perfect. So Sunday, 9 AM at Flour & Fire? I'll text Mom too, see if she wants to join."
+        },
+        {
+          "speaker": "Sandra",
+          "dia_id": "D1:11",
+          "text": "Sounds like a plan! I'll make a note. Talk soon!"
+        }
+      ],
+      "session_2_date_time": "10:23 am on 19 July, 2024",
+      "session_2": [
+        {
+          "speaker": "David",
+          "dia_id": "D2:0",
+          "text": "Hey S! Yeah, thinking about it. Haven't bought tix yet though. You going?"
+        },
+        {
+          "speaker": "Sandra",
+          "dia_id": "D2:1",
+          "text": "Nah, not this one. Got a parent-teacher conference tonight, ugh. Plus, need to prep for the district meeting on Thurs."
+        },
+        {
+          "speaker": "David",
+          "dia_id": "D2:2",
+          "text": "Ah, bummer. District meetings are always fun, right? lol. My project's actually looking good to submit the big report next week."
+        },
+        {
+          "speaker": "Sandra",
+          "dia_id": "D2:3",
+          "text": "Oh, good for you! That's a relief. Meanwhile, I just spent an hour trying to explain why you can't bring a pet ferret to show-and-tell."
+        },
+        {
+          "speaker": "David",
+          "dia_id": "D2:4",
+          "text": "lol A ferret? Seriously? What do parents even think sometimes? Sounds like a wild Tuesday for you."
+        },
+        {
+          "speaker": "Sandra",
+          "dia_id": "D2:5",
+          "text": "Tell me about it. Kid was so proud too. Had to be firm but gentle. Anyway, speaking of things that are 'wild,' did you ever get that new patio furniture for the deck?"
+        },
+        {
+          "speaker": "David",
+          "dia_id": "D2:6",
+          "text": "Almost! Ordered it last week, should be here Friday. Hoping for some decent weather this weekend to set it up. Maybe even grill out."
+        },
+        {
+          "speaker": "Sandra",
+          "dia_id": "D2:7",
+          "text": "Oh nice! Fingers crossed for the weather. I'm thinking of checking out that new food cart pod near Revolution Hall on Saturday. Heard it's pretty good."
+        },
+        {
+          "speaker": "David",
+          "dia_id": "D2:8",
+          "text": "Ooh, I heard about that. Let me know how it is! Might drag Mike over there sometime if you give it a thumbs up."
+        },
+        {
+          "speaker": "Sandra",
+          "dia_id": "D2:9",
+          "text": "Will do! Yeah, planning to grab a few things for school there too. Always looking for new snack ideas lol. Anyway, better run, got another call."
+        },
+        {
+          "speaker": "David",
+          "dia_id": "D2:10",
+          "text": "Ok, talk soon then! Good luck with the call and the district meeting!"
+        },
+        {
+          "speaker": "Sandra",
+          "dia_id": "D2:11",
+          "text": "Thanks, you too! Catch ya later D."
+        }
+      ],
+      "session_3_date_time": "11:42 am on 17 August, 2024",
+      "session_3": [
+        {
+          "speaker": "David",
+          "dia_id": "D3:0",
+          "text": "[session 3 turn 1]"
+        },
+        {
+          "speaker": "Sandra",
+          "dia_id": "D3:1",
+          "text": "[session 3 turn 2]"
+        },
+        {
+          "speaker": "David",
+          "dia_id": "D3:2",
+          "text": "[session 3 turn 3]"
+        },
+        {
+          "speaker": "Sandra",
+          "dia_id": "D3:3",
+          "text": "[session 3 turn 4]"
+        },
+        {
+          "speaker": "David",
+          "dia_id": "D3:4",
+          "text": "[session 3 turn 5]"
+        },
+        {
+          "speaker": "Sandra",
+          "dia_id": "D3:5",
+          "text": "[session 3 turn 6]"
+        },
+        {
+          "speaker": "David",
+          "dia_id": "D3:6",
+          "text": "[session 3 turn 7]"
+        },
+        {
+          "speaker": "Sandra",
+          "dia_id": "D3:7",
+          "text": "[session 3 turn 8]"
+        },
+        {
+          "speaker": "David",
+          "dia_id": "D3:8",
+          "text": "[session 3 turn 9]"
+        },
+        {
+          "speaker": "Sandra",
+          "dia_id": "D3:9",
+          "text": "[session 3 turn 10]"
+        },
+        {
+          "speaker": "David",
+          "dia_id": "D3:10",
+          "text": "[session 3 turn 11]"
+        },
+        {
+          "speaker": "Sandra",
+          "dia_id": "D3:11",
+          "text": "[session 3 turn 12]"
+        }
+      ],
+      "session_4_date_time": "7:59 pm on 10 September, 2024",
+      "session_4": [
+        {
+          "speaker": "David",
+          "dia_id": "D4:0",
+          "text": "[session 4 turn 1]"
+        },
+        {
+          "speaker": "Sandra",
+          "dia_id": "D4:1",
+          "text": "[session 4 turn 2]"
+        },
+        {
+          "speaker": "David",
+          "dia_id": "D4:2",
+          "text": "[session 4 turn 3]"
+        },
+        {
+          "speaker": "Sandra",
+          "dia_id": "D4:3",
+          "text": "[session 4 turn 4]"
+        },
+        {
+          "speaker": "David",
+          "dia_id": "D4:4",
+          "text": "[session 4 turn 5]"
+        },
+        {
+          "speaker": "Sandra",
+          "dia_id": "D4:5",
+          "text": "[session 4 turn 6]"
+        },
+        {
+          "speaker": "David",
+          "dia_id": "D4:6",
+          "text": "[session 4 turn 7]"
+        },
+        {
+          "speaker": "Sandra",
+          "dia_id": "D4:7",
+          "text": "[session 4 turn 8]"
+        },
+        {
+          "speaker": "David",
+          "dia_id": "D4:8",
+          "text": "[session 4 turn 9]"
+        },
+        {
+          "speaker": "Sandra",
+          "dia_id": "D4:9",
+          "text": "[session 4 turn 10]"
+        },
+        {
+          "speaker": "David",
+          "dia_id": "D4:10",
+          "text": "[session 4 turn 11]"
+        },
+        {
+          "speaker": "Sandra",
+          "dia_id": "D4:11",
+          "text": "[session 4 turn 12]"
+        }
+      ],
+      "session_5_date_time": "5:40 pm on 21 September, 2024",
+      "session_5": [
+        {
+          "speaker": "David",
+          "dia_id": "D5:0",
+          "text": "[session 5 turn 1]"
+        },
+        {
+          "speaker": "Sandra",
+          "dia_id": "D5:1",
+          "text": "[session 5 turn 2]"
+        },
+        {
+          "speaker": "David",
+          "dia_id": "D5:2",
+          "text": "[session 5 turn 3]"
+        },
+        {
+          "speaker": "Sandra",
+          "dia_id": "D5:3",
+          "text": "[session 5 turn 4]"
+        },
+        {
+          "speaker": "David",
+          "dia_id": "D5:4",
+          "text": "[session 5 turn 5]"
+        },
+        {
+          "speaker": "Sandra",
+          "dia_id": "D5:5",
+          "text": "[session 5 turn 6]"
+        },
+        {
+          "speaker": "David",
+          "dia_id": "D5:6",
+          "text": "[session 5 turn 7]"
+        },
+        {
+          "speaker": "Sandra",
+          "dia_id": "D5:7",
+          "text": "[session 5 turn 8]"
+        },
+        {
+          "speaker": "David",
+          "dia_id": "D5:8",
+          "text": "[session 5 turn 9]"
+        },
+        {
+          "speaker": "Sandra",
+          "dia_id": "D5:9",
+          "text": "[session 5 turn 10]"
+        },
+        {
+          "speaker": "David",
+          "dia_id": "D5:10",
+          "text": "[session 5 turn 11]"
+        },
+        {
+          "speaker": "Sandra",
+          "dia_id": "D5:11",
+          "text": "[session 5 turn 12]"
+        }
+      ],
+      "session_6_date_time": "4:46 pm on 8 October, 2024",
+      "session_6": [
+        {
+          "speaker": "David",
+          "dia_id": "D6:0",
+          "text": "Hey, how was your Monday? This rain is something else today. My site visit got soaked."
+        },
+        {
+          "speaker": "Sandra",
+          "dia_id": "D6:1",
+          "text": "Ugh, tell me about it. We had outdoor recess for like 10 minutes then had to pull them all back in. Chaos. How was your site visit, anything interesting?"
+        },
+        {
+          "speaker": "David",
+          "dia_id": "D6:2",
+          "text": "Standard stuff. Just inspecting the new bridge decking downtown. They're making good progress, actually ahead of schedule by about a week. Which is rare, haha."
+        },
+        {
+          "speaker": "Sandra",
+          "dia_id": "D6:3",
+          "text": "That's good news! You must be relieved. Remember how stressed you were about that last month? Did you hear back about that grant application for the school's new garden beds?"
+        },
+        {
+          "speaker": "David",
+          "dia_id": "D6:4",
+          "text": "Oh yeah, very relieved. Less chasing people around. And no, not yet! Still waiting on the district for the garden grant. Fingers crossed though, it would be awesome for the kids."
+        },
+        {
+          "speaker": "Sandra",
+          "dia_id": "D6:5",
+          "text": "Totally. Speaking of, Liam just told me his class is doing a project on bridges next week. I told him he has a built-in expert uncle if he needs help \ud83d\ude09"
+        },
+        {
+          "speaker": "David",
+          "dia_id": "D6:6",
+          "text": "Haha, sounds fun! Tell him to send me his questions. I can totally help him design a popsicle stick bridge or something. My schedule looks pretty clear Thursday evening after 6pm, if he wants to FaceTime."
+        },
+        {
+          "speaker": "Sandra",
+          "dia_id": "D6:7",
+          "text": "Aw, that's sweet of you, I'll pass it on. He'd probably love that. He's really into building things right now. Just finished a huge Lego castle."
+        },
+        {
+          "speaker": "David",
+          "dia_id": "D6:8",
+          "text": "Nice! Sounds like he's following in my footsteps a bit. Just less concrete and more plastic bricks."
+        },
+        {
+          "speaker": "Sandra",
+          "dia_id": "D6:9",
+          "text": "\ud83d\ude02 Definitely. Anyway, I gotta run. Parent-teacher conferences tonight from 4-7pm. Wish me luck for minimal drama."
+        },
+        {
+          "speaker": "David",
+          "dia_id": "D6:10",
+          "text": "Oh yikes, good luck with that! Hope they're all quick and positive. We should probably set up our call for next week soon. Maybe Tuesday evening around 7 like usual?"
+        },
+        {
+          "speaker": "Sandra",
+          "dia_id": "D6:11",
+          "text": "Yeah, sounds good. I'll put it in my calendar. Talk soon! xo"
+        }
+      ]
+    },
+    "qa": [
+      {
+        "question": "When did David and Sandra plan to meet at Flour & Fire bakery?",
+        "answer": "Sunday, June 23, 2024, at 9 AM.",
+        "evidence": [
+          "D1:9",
+          "D1:10"
+        ],
+        "category": 1
+      },
+      {
+        "question": "When was Sandra's parent-teacher conference mentioned in Session 2?",
+        "answer": "On the night of July 19, 2024.",
+        "evidence": [
+          "D2:1"
+        ],
+        "category": 1
+      },
+      {
+        "question": "When did David expect his new patio furniture to arrive?",
+        "answer": "On Friday, July 19, 2024.",
+        "evidence": [
+          "D2:6"
+        ],
+        "category": 1
+      },
+      {
+        "question": "When did Sandra mention she had parent-teacher conferences scheduled from 4-7pm?",
+        "answer": "On the evening of October 8, 2024.",
+        "evidence": [
+          "D6:9"
+        ],
+        "category": 1
+      },
+      {
+        "question": "When did David suggest he could help Liam with his bridge project?",
+        "answer": "Thursday evening after 6pm, which would be October 10, 2024.",
+        "evidence": [
+          "D6:6"
+        ],
+        "category": 1
+      },
+      {
+        "question": "What is the name of the new bakery Sandra suggests for breakfast?",
+        "answer": "The bakery is called \"Flour & Fire.\"",
+        "evidence": [
+          "D1:7"
+        ],
+        "category": 2
+      },
+      {
+        "question": "What volunteer activity is David committed to on Saturday morning in Session 1?",
+        "answer": "David has a volunteer build for Habitat for Humanity.",
+        "evidence": [
+          "D1:8"
+        ],
+        "category": 2
+      },
+      {
+        "question": "What exotic animal did Sandra have to explain couldn't be brought to show-and-tell in Session 2?",
+        "answer": "Sandra had to explain why a pet ferret couldn't be brought to show-and-tell.",
+        "evidence": [
+          "D2:3"
+        ],
+        "category": 2
+      },
+      {
+        "question": "What is David inspecting during his site visit in Session 6?",
+        "answer": "David is inspecting the new bridge decking downtown.",
+        "evidence": [
+          "D6:2"
+        ],
+        "category": 2
+      },
+      {
+        "question": "When are Sandra's parent-teacher conferences scheduled for in Session 6?",
+        "answer": "Her parent-teacher conferences are tonight from 4-7 pm.",
+        "evidence": [
+          "D6:9"
+        ],
+        "category": 2
+      },
+      {
+        "question": "[cat 3 question placeholder]",
+        "answer": "placeholder",
+        "evidence": [],
+        "category": 3
+      },
+      {
+        "question": "[cat 4 question placeholder]",
+        "answer": "placeholder",
+        "evidence": [],
+        "category": 4
+      },
+      {
+        "question": "What professional sports league do the Portland Trail Blazers play in?",
+        "answer": "The Portland Trail Blazers are a professional basketball team based in Portland, Oregon, and compete in the National Basketball Association (NBA).",
+        "evidence": [
+          "D1:3"
+        ],
+        "category": 5
+      },
+      {
+        "question": "What is the primary mission of Habitat for Humanity?",
+        "answer": "Habitat for Humanity is an international non-profit organization that builds and renovates simple, decent, and affordable housing in partnership with families in need.",
+        "evidence": [
+          "D1:8"
+        ],
+        "category": 5
+      },
+      {
+        "question": "What type of animal is a ferret, and what is its typical diet?",
+        "answer": "A ferret is a domesticated mammal belonging to the weasel family (Mustelidae). They are obligate carnivores, meaning their natural diet consists entirely of meat.",
+        "evidence": [
+          "D2:3"
+        ],
+        "category": 5
+      },
+      {
+        "question": "In which city is Revolution Hall located, and what was its original purpose?",
+        "answer": "Revolution Hall is a music venue and performing arts center located in Portland, Oregon. It was originally Washington High School, built in 1923.",
+        "evidence": [
+          "D2:7"
+        ],
+        "category": 5
+      },
+      {
+        "question": "What are some of the basic components required for a bridge to be structurally sound?",
+        "answer": "A bridge typically requires a superstructure (the part that supports the load, like the deck), a substructure (piers, abutments, and foundations that support the superstructure), and a foundation to transfer the bridge's load to the ground.",
+        "evidence": [
+          "D6:2",
+          "D6:6"
+        ],
+        "category": 5
+      }
+    ]
+  }
+]

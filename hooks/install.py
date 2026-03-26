@@ -17,9 +17,9 @@ After installing:
        echo 'myproject' > /path/to/your/project/.context-broker
   2. Start a Claude Code session — transcripts are recorded automatically.
   3. Extract a recorded transcript:
-       ctx extract myproject ~/.context-broker/transcripts/myproject/latest.md
+       engram extract myproject ~/.context-broker/transcripts/myproject/latest.md
   4. View what was injected last:
-       ctx last-context
+       engram last-context
 """
 
 import json
@@ -31,8 +31,8 @@ from pathlib import Path
 SETTINGS_PATH = Path.home() / ".claude" / "settings.json"
 HOOK_DIR = Path(__file__).resolve().parent
 
-SUBMIT_HOOK_CMD = f"python {HOOK_DIR / 'context_broker_submit.py'}"
-STOP_HOOK_CMD = f"python {HOOK_DIR / 'context_broker_stop.py'}"
+SUBMIT_HOOK_CMD = f"python {HOOK_DIR / 'engram_submit.py'}"
+STOP_HOOK_CMD = f"python {HOOK_DIR / 'engram_stop.py'}"
 STATUSLINE_CMD = f"python {HOOK_DIR / 'statusline.py'}"
 
 
@@ -66,7 +66,7 @@ def main():
         for entry in submit_entries
         for h in entry.get("hooks", [])
     ]
-    if any("context_broker_submit" in c for c in existing_cmds):
+    if any("engram_submit" in c for c in existing_cmds):
         print("\nUserPromptSubmit hook: already installed (skipping)")
     else:
         submit_entries.append({
@@ -84,7 +84,7 @@ def main():
         for entry in stop_entries
         for h in entry.get("hooks", [])
     ]
-    if any("context_broker_stop" in c for c in existing_stop_cmds):
+    if any("engram_stop" in c for c in existing_stop_cmds):
         print("\nStop hook: already installed (skipping)")
     else:
         stop_entries.append({
@@ -98,7 +98,7 @@ def main():
     if "statusLine" in settings:
         existing = settings["statusLine"]
         existing_cmd = existing.get("command", "") if isinstance(existing, dict) else ""
-        if "statusline" in existing_cmd.lower() and "context_broker" in existing_cmd.lower():
+        if "statusline" in existing_cmd.lower() and "engram" in existing_cmd.lower():
             print("\nStatus line: already configured (skipping)")
         else:
             print(f"\nStatus line: already set to another command:")
@@ -124,9 +124,9 @@ def main():
     print("       echo 'myproject' > /path/to/project/.context-broker")
     print("  2. Start a Claude Code session — transcripts are recorded automatically.")
     print("  3. Extract a recorded transcript:")
-    print("       ctx extract myproject ~/.context-broker/transcripts/myproject/latest.md")
+    print("       engram extract myproject ~/.context-broker/transcripts/myproject/latest.md")
     print("  4. Future sessions will auto-inject context. View what was injected:")
-    print("       ctx last-context")
+    print("       engram last-context")
 
 
 if __name__ == "__main__":

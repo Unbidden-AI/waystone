@@ -27,10 +27,10 @@ jobs:
       - name: Lint
         run: |
           pip install ruff
-          ruff check context_broker/ tests/
+          ruff check engram/ tests/
 
       - name: Run tests
         run: pytest tests/ -v --tb=short
 
       - name: Smoke test CLI
-        run: ctx --help
+        run: engram --help

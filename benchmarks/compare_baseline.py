@@ -38,10 +38,10 @@ import yaml
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
-from context_broker.config import get_db_path, get_project_dir, load_config
-from context_broker.extractor import extract, extract_targeted, verify_extraction
-from context_broker.retriever import retrieve_with_stats
-from context_broker.store import GraphStore
+from engram.config import get_db_path, get_project_dir, load_config
+from engram.extractor import extract, extract_targeted, verify_extraction
+from engram.retriever import retrieve_with_stats
+from engram.store import GraphStore
 from orchestrator.llm_adapter import call_llm, estimate_tokens
 from orchestrator.types import Message
 

@@ -171,6 +171,39 @@ _TOOL_SCHEMAS: dict[str, dict] = {
             },
         },
     },
+    "ctx_graph_stats": {
+        "type": "function",
+        "function": {
+            "name": "ctx_graph_stats",
+            "description": (
+                "Return a summary of the current project knowledge graph: total node and edge counts, "
+                "breakdown by node type, number of superseded nodes, number of distinct source files, "
+                "and the 5 most recently added nodes. Use when asked about graph status, database size, "
+                "or what's in the knowledge base."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        },
+    },
+    "ctx_list_sources": {
+        "type": "function",
+        "function": {
+            "name": "ctx_list_sources",
+            "description": (
+                "List all source files and transcripts that have been extracted into the "
+                "project knowledge graph, along with the number of nodes from each source. "
+                "Use when asked which files, documents, or sessions have been extracted."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        },
+    },
     "ctx_synthesize": {
         "type": "function",
         "function": {

@@ -6,7 +6,7 @@ import json
 import logging
 from typing import AsyncIterator
 
-from context_broker.store import GraphStore
+from engram.store import GraphStore
 
 from .context_manager import ContextManager
 from .llm_adapter import build_tool_schemas, call_llm, stream_llm

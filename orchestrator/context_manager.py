@@ -7,9 +7,9 @@ import logging
 import time
 from typing import TYPE_CHECKING
 
-from context_broker.extractor import extract
-from context_broker.retriever import retrieve_with_stats
-from context_broker.store import GraphStore
+from engram.extractor import extract
+from engram.retriever import retrieve_with_stats
+from engram.store import GraphStore
 
 from .llm_adapter import estimate_tokens
 from .types import CompactionResult, CompactionTrigger, Message

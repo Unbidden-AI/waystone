@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from context_broker.store import GraphStore
+from engram.store import GraphStore
 from orchestrator.conversation import Conversation
 from orchestrator.types import Message, ToolCall
 
@@ -209,7 +209,7 @@ async def test_compaction_triggers_on_token_budget(minimal_cfg, real_store):
     conversation = Conversation(cfg=cfg, store=real_store, project_name="test_project")
 
     with patch("orchestrator.llm_adapter.litellm.acompletion") as mock_acompletion, \
-         patch("context_broker.extractor.extract") as mock_extract:
+         patch("engram.extractor.extract") as mock_extract:
 
         # Mock extract to return a simple result
         mock_extract.return_value = {

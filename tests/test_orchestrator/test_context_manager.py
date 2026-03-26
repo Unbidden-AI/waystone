@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
-from context_broker.store import GraphStore
+from engram.store import GraphStore
 from orchestrator.context_manager import ContextManager
 from orchestrator.types import CompactionResult, CompactionTrigger, Message
 

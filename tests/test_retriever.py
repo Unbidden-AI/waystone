@@ -2,7 +2,7 @@
 
 import pytest
 
-from context_broker.retriever import (
+from engram.retriever import (
     apply_recency_decay,
     apply_token_budget,
     assemble_markdown,
@@ -13,7 +13,7 @@ from context_broker.retriever import (
     retrieve_with_stats,
     score_by_relevance,
 )
-from context_broker.store import GraphStore
+from engram.store import GraphStore
 
 
 @pytest.fixture

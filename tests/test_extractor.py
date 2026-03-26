@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from context_broker.extractor import (
+from engram.extractor import (
     assign_ids,
     assign_ids_incremental,
     extract_chunked,
@@ -329,7 +329,7 @@ class TestExtractChunked:
         config = {}
         mock_result = self._fake_extract_result("s")
 
-        with patch("context_broker.extractor.extract", new=AsyncMock(return_value=mock_result)) as mock_ext:
+        with patch("engram.extractor.extract", new=AsyncMock(return_value=mock_result)) as mock_ext:
             result = await extract_chunked(text, config, chunk_size=10_000)
 
         mock_ext.assert_called_once_with(text, config)
@@ -350,7 +350,7 @@ class TestExtractChunked:
             tag = "a" if "A" in chunk_text else "b"
             return self._fake_extract_result(tag)
 
-        with patch("context_broker.extractor.extract", new=fake_extract):
+        with patch("engram.extractor.extract", new=fake_extract):
             result = await extract_chunked(text, config, chunk_size=50)
 
         assert len(call_args) == 2
@@ -363,8 +363,8 @@ class TestExtractChunked:
         extract_result = self._fake_extract_result("x")
         verify_result = self._fake_extract_result("v")
 
-        with patch("context_broker.extractor.extract", new=AsyncMock(return_value=extract_result)), \
-             patch("context_broker.extractor.verify_extraction", new=AsyncMock(return_value=verify_result)) as mock_verify:
+        with patch("engram.extractor.extract", new=AsyncMock(return_value=extract_result)), \
+             patch("engram.extractor.verify_extraction", new=AsyncMock(return_value=verify_result)) as mock_verify:
             result = await extract_chunked(text, config, chunk_size=10_000, verify=True)
 
         mock_verify.assert_called_once()
@@ -380,7 +380,7 @@ class TestExtractChunked:
         async def always_fail(chunk_text, cfg):
             raise ValueError("LLM error")
 
-        with patch("context_broker.extractor.extract", new=always_fail):
+        with patch("engram.extractor.extract", new=always_fail):
             with pytest.raises(RuntimeError, match="All .* extraction chunks failed"):
                 await extract_chunked(text, config, chunk_size=50)
 
@@ -399,7 +399,7 @@ class TestExtractChunked:
                 raise ValueError("first chunk failed")
             return self._fake_extract_result("b")
 
-        with patch("context_broker.extractor.extract", new=sometimes_fail):
+        with patch("engram.extractor.extract", new=sometimes_fail):
             result = await extract_chunked(text, config, chunk_size=50)
 
         assert call_count == 2

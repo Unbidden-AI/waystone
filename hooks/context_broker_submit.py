@@ -7,8 +7,8 @@ submission is never delayed. Then queries the existing graph for context
 relevant to the current prompt and injects it via additionalContext.
 
 Extraction is skipped if ~/.context-broker/paused exists. Use:
-  ctx pause    # disable extraction
-  ctx resume   # re-enable extraction
+  engram pause    # disable extraction
+  engram resume   # re-enable extraction
 
 Project detection:
   Looks for a .context-broker file in the cwd (or any parent directory up
@@ -203,10 +203,10 @@ def main():
     STATE_DIR.mkdir(parents=True, exist_ok=True)
 
     try:
-        from context_broker.config import get_db_path, load_config
-        from context_broker.extractor import ExtractionBuffer
-        from context_broker.retriever import retrieve_with_stats
-        from context_broker.store import GraphStore
+        from engram.config import get_db_path, load_config
+        from engram.extractor import ExtractionBuffer
+        from engram.retriever import retrieve_with_stats
+        from engram.store import GraphStore
 
         config = load_config()
         project = _detect_project(cwd)

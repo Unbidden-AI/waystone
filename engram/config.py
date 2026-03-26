@@ -1,4 +1,4 @@
-"""Configuration loading for Context Broker."""
+"""Configuration loading for Engram."""
 
 from __future__ import annotations
 
@@ -28,7 +28,20 @@ DEFAULTS = {
         "token_budget": 0,  # 0 = unlimited; e.g. 500 to cap output
         "relevance_scoring": True,  # rank entry nodes by tag overlap count
     },
-    "projects_dir": "~/.context-broker/projects",
+    "domain": {
+        "name": "software_dev",
+    },
+    "orchestrator": {
+        "system_prompt": {
+            "static": """\
+You are the Engram Orchestrator — an assistant for the Engram project (a DAG-based \
+context intelligence layer for LLM workflows that extracts facts from transcripts into \
+a knowledge graph and retrieves relevant subgraphs per turn). Do not describe your \
+underlying model or training. The **Project Knowledge** section below is retrieved live \
+from the graph; use it to answer questions about this project accurately.""",
+        },
+    },
+    "projects_dir": "~/.engram/projects",
     "incremental": {
         "context_k": 30,       # max context nodes to include per turn
         "context_hops": 2,     # BFS hops when gathering context nodes
@@ -41,6 +54,7 @@ DEFAULTS = {
 
 CONFIG_SEARCH_PATHS = [
     Path("config.yaml"),
+    Path.home() / ".engram" / "config.yaml",
     Path.home() / ".context-broker" / "config.yaml",
 ]
 
@@ -62,6 +76,17 @@ def load_config(path: str | Path | None = None) -> dict:
                 file_cfg = yaml.safe_load(f) or {}
             result = _merge(result, file_cfg)
     return result
+
+
+def get_domain_profile(config: dict):
+    """Return the DomainProfile for the configured domain.
+
+    Reads config["domain"]["name"] (default "software_dev") and returns the
+    corresponding built-in DomainProfile.
+    """
+    from .domain_profiles import get_profile
+    name = config.get("domain", {}).get("name", "software_dev")
+    return get_profile(name)
 
 
 def get_project_dir(config: dict, project_name: str) -> Path:
@@ -100,7 +125,7 @@ def get_api_key(config: dict) -> str | None:
 
 
 def make_remote_client(config: dict):
-    """Build a RemoteContextBroker from config."""
+    """Build a RemoteEngram from config."""
     from .remote_client import RemoteContextBroker  # local import to avoid circular dep
 
     return RemoteContextBroker(

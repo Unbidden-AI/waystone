@@ -1,4 +1,4 @@
-"""LLM-based extraction service for Context Broker."""
+"""LLM-based extraction service for Engram."""
 
 import asyncio
 import json
@@ -10,7 +10,7 @@ import uuid
 import httpx
 
 from .prompts import (
-    EXTRACTION_JSON_SCHEMA,
+    build_extraction_json_schema,
     TARGETED_PASS_PROMPTS,
     build_extraction_prompt,
     build_incremental_prompt,
@@ -78,7 +78,7 @@ class ExtractionBuffer:
         return sum(len(t.split()) for t in self._turns)
 
 
-async def _call_llm(prompt: str, config: dict) -> str:
+async def _call_llm(prompt: str, config: dict, domain_profile=None) -> str:
     """Make an LLM API call and return the raw response content."""
     llm_cfg = config["llm"]
     headers = {}
@@ -128,7 +128,7 @@ async def _call_llm(prompt: str, config: dict) -> str:
     if llm_cfg.get("structured_outputs"):
         request_body["response_format"] = {
             "type": "json_schema",
-            "json_schema": EXTRACTION_JSON_SCHEMA,
+            "json_schema": build_extraction_json_schema(domain_profile),
         }
 
     _RETRYABLE_STATUS = {429, 500, 502, 503, 504}
@@ -179,7 +179,7 @@ async def _call_llm(prompt: str, config: dict) -> str:
             f"The model hit the token limit before completing the JSON. "
             f"Try: (1) increase max_tokens in config.yaml, "
             f"(2) use --chunk-size to split the input, or "
-            f"(3) use 'ctx extract-replay' for turn-by-turn extraction."
+            f"(3) use 'engram extract-replay' for turn-by-turn extraction."
         )
     return content
 
@@ -215,19 +215,37 @@ async def _llm_stream(url: str, headers: dict, request_body: dict, timeout: floa
     return "".join(content_parts), finish_reason
 
 
-async def extract(transcript_text: str, config: dict) -> dict:
+async def extract(transcript_text: str, config: dict, store=None, source_transcript: str = "") -> dict:
     """Extract structured facts from a transcript using an LLM.
 
     Calls an OpenAI-compatible chat/completions endpoint and parses
     the JSON response into nodes and edges with proper IDs.
+
+    Args:
+        transcript_text: The transcript content to extract from
+        config: LLM configuration dict
+        store: Optional GraphStore instance for logging failures
+        source_transcript: Optional transcript name/path for failure logging
 
     Returns:
         dict with "nodes" (list[dict]) and "edges" (list[dict])
     """
     log.info("Extracting from %d chars of transcript", len(transcript_text))
     prompt = build_extraction_prompt(transcript_text)
-    content = await _call_llm(prompt, config)
-    extraction = parse_llm_response(content)
+    try:
+        content = await _call_llm(prompt, config)
+        extraction = parse_llm_response(content)
+    except Exception as exc:
+        error_msg = str(exc)
+        if store:
+            store.log_extraction_failure(
+                error_type="json_parse" if "Could not parse JSON" in error_msg else "api",
+                error_message=error_msg,
+                raw_response=content if "content" in locals() else "",
+                source_transcript=source_transcript,
+                model=config.get("llm", {}).get("model", ""),
+            )
+        raise
     result = assign_ids(extraction)
     log.info("Extracted %d nodes, %d edges", len(result["nodes"]), len(result["edges"]))
     return result
@@ -238,22 +256,41 @@ async def verify_extraction(
     extracted_nodes: list[dict],
     config: dict,
     candidate_sentences: list[str] | None = None,
+    store=None,
+    source_transcript: str = "",
 ) -> dict:
     """Run a second verification pass to find facts missed by the first extraction.
 
     Focuses specifically on: secondary/addendum details, buried numeric values,
     transition statements, and rationale with time estimates.
 
-    candidate_sentences: optional list of specific sentences (from Tier 1 heuristic
-    extraction) to check coverage for before the generic hunt categories.
+    Args:
+        transcript_text: The transcript content
+        extracted_nodes: Already-extracted nodes from the main pass
+        config: LLM configuration dict
+        candidate_sentences: optional list of specific sentences to check
+        store: Optional GraphStore instance for logging failures
+        source_transcript: Optional transcript name/path for failure logging
 
     Returns:
         dict with "nodes" (list[dict]) and "edges" (list[dict]) for NEW nodes only.
         Use assign_ids_incremental to resolve IDs before merging.
     """
     prompt = build_verification_prompt(transcript_text, extracted_nodes, candidate_sentences)
-    content = await _call_llm(prompt, config)
-    extraction = parse_llm_response(content)
+    try:
+        content = await _call_llm(prompt, config)
+        extraction = parse_llm_response(content)
+    except Exception as exc:
+        error_msg = str(exc)
+        if store:
+            store.log_extraction_failure(
+                error_type="json_parse" if "Could not parse JSON" in error_msg else "api",
+                error_message=error_msg,
+                raw_response=content if "content" in locals() else "",
+                source_transcript=source_transcript,
+                model=config.get("llm", {}).get("model", ""),
+            )
+        raise
     existing_ids = {n["id"] for n in extracted_nodes}
     return assign_ids_incremental(extraction, existing_ids)
 
@@ -310,20 +347,44 @@ async def synthesize_extraction(existing_nodes: list[dict], config: dict) -> dic
     return assign_ids_incremental(extraction, existing_ids)
 
 
-async def extract_turn(turn_text: str, existing_nodes: list[dict], config: dict) -> dict:
+async def extract_turn(
+    turn_text: str,
+    existing_nodes: list[dict],
+    config: dict,
+    domain_profile=None,
+) -> dict:
     """Extract structured facts from a single conversation turn with existing context.
 
     Uses incremental extraction so the LLM can reference existing node IDs in
     supersedes/edges and avoids re-extracting already-captured facts.
 
+    Args:
+        turn_text: The conversation turn text to extract from.
+        existing_nodes: Already-extracted nodes for context (not re-extracted).
+        config: Engram config dict.
+        domain_profile: DomainProfile to use. If None, uses config's domain setting
+                        or falls back to software_dev.
+
     Returns:
         dict with "nodes" (list[dict]) and "edges" (list[dict])
     """
-    prompt = build_incremental_prompt(turn_text, existing_nodes)
-    content = await _call_llm(prompt, config)
+    if domain_profile is None:
+        from engram.config import get_domain_profile
+        domain_profile = get_domain_profile(config)
+    prompt = build_incremental_prompt(turn_text, existing_nodes, domain_profile)
+    content = await _call_llm(prompt, config, domain_profile)
     extraction = parse_llm_response(content)
     existing_ids = {n["id"] for n in existing_nodes}
-    return assign_ids_incremental(extraction, existing_ids)
+    result = assign_ids_incremental(extraction, existing_ids)
+    # Filter nodes to only those with types declared in the active domain profile
+    valid_types = set(domain_profile.node_types.keys())
+    result["nodes"] = [n for n in result.get("nodes", []) if n.get("type") in valid_types]
+    valid_node_ids = {n["id"] for n in result["nodes"]}
+    result["edges"] = [
+        e for e in result.get("edges", [])
+        if e.get("source") in valid_node_ids or e.get("target") in valid_node_ids
+    ]
+    return result
 
 
 def parse_llm_response(content: str) -> dict:
@@ -436,19 +497,28 @@ def _edge_to(edge: dict) -> str | None:
 
 def _validate_extraction(result: dict) -> dict:
     if "nodes" not in result:
-        raise ValueError("LLM response missing 'nodes' key")
+        result["nodes"] = []
     if "edges" not in result:
         result["edges"] = []
     return result
 
 
-def validate_nodes(nodes: list[dict]) -> tuple[list[dict], list[str]]:
+def validate_nodes(
+    nodes: list[dict],
+    valid_types: set[str] | None = None,
+) -> tuple[list[dict], list[str]]:
     """Validate extracted nodes, returning (valid_nodes, warnings).
 
     Filters out nodes with missing required fields. Collects warnings for
     nodes with quality issues (too few tags, unknown type, out-of-range confidence)
     without dropping them.
+
+    Args:
+        nodes: Raw nodes from LLM extraction.
+        valid_types: Set of valid type strings for this domain. If None, falls
+                     back to the module-level VALID_TYPES constant (software_dev).
     """
+    effective_valid_types = valid_types if valid_types is not None else VALID_TYPES
     valid = []
     warnings = []
 
@@ -460,7 +530,7 @@ def validate_nodes(nodes: list[dict]) -> tuple[list[dict], list[str]]:
             continue
 
         # Soft quality checks — warn but keep
-        if node.get("type") not in VALID_TYPES:
+        if node.get("type") not in effective_valid_types:
             warnings.append(f"node {nid}: unknown type '{node['type']}'")
 
         confidence = node.get("confidence", 0.5)
@@ -681,6 +751,8 @@ async def extract_chunked(
     chunk_size: int,
     *,
     verify: bool = False,
+    store=None,
+    source_transcript: str = "",
 ) -> dict:
     """Extract from a large transcript by splitting into chunks and merging results.
 
@@ -689,14 +761,30 @@ async def extract_chunked(
     collisions. Edges can only connect nodes within the same chunk (the LLM
     only sees one chunk at a time).
 
+    Args:
+        text: The transcript text
+        config: LLM configuration dict
+        chunk_size: Maximum characters per chunk
+        verify: Whether to run verification pass on each chunk
+        store: Optional GraphStore instance for logging failures
+        source_transcript: Optional transcript name/path for failure logging
+
     Returns:
         dict with "nodes" (list[dict]) and "edges" (list[dict])
     """
     chunks = split_into_chunks(text, chunk_size)
+
+    # Build kwargs conditionally for backward compatibility
+    extract_kwargs = {}
+    if store is not None:
+        extract_kwargs["store"] = store
+    if source_transcript:
+        extract_kwargs["source_transcript"] = source_transcript
+
     if len(chunks) == 1:
-        result = await extract(chunks[0], config)
+        result = await extract(chunks[0], config, **extract_kwargs)
         if verify:
-            vr = await verify_extraction(chunks[0], result["nodes"], config)
+            vr = await verify_extraction(chunks[0], result["nodes"], config, **extract_kwargs)
             result = {
                 "nodes": result["nodes"] + vr["nodes"],
                 "edges": result["edges"] + vr["edges"],
@@ -705,19 +793,27 @@ async def extract_chunked(
 
     log.info("extract_chunked: splitting %d chars into %d chunks of ≤%d", len(text), len(chunks), chunk_size)
 
-    async def _one_chunk(chunk_text: str) -> tuple[list, list]:
-        r = await extract(chunk_text, config)
+    async def _one_chunk(chunk_text: str, chunk_idx: int) -> tuple[list, list]:
+        r = await extract(chunk_text, config, **extract_kwargs)
         nodes, edges = r["nodes"], r["edges"]
         if verify:
             try:
-                vr = await verify_extraction(chunk_text, nodes, config)
+                vr = await verify_extraction(chunk_text, nodes, config, **extract_kwargs)
                 nodes = nodes + vr["nodes"]
                 edges = edges + vr["edges"]
             except Exception as exc:
+                if store:
+                    store.log_extraction_failure(
+                        error_type="chunk",
+                        error_message=f"Verification failed for chunk {chunk_idx + 1}/{len(chunks)}: {str(exc)}",
+                        raw_response="",
+                        source_transcript=source_transcript,
+                        model=config.get("llm", {}).get("model", ""),
+                    )
                 log.warning("verify_extraction failed for chunk (continuing): %s", exc)
         return nodes, edges
 
-    results = await asyncio.gather(*[_one_chunk(c) for c in chunks], return_exceptions=True)
+    results = await asyncio.gather(*[_one_chunk(c, i) for i, c in enumerate(chunks)], return_exceptions=True)
 
     all_nodes: list[dict] = []
     all_edges: list[dict] = []
@@ -725,6 +821,14 @@ async def extract_chunked(
     for i, r in enumerate(results):
         if isinstance(r, BaseException):
             log.error("Chunk %d/%d failed: %s", i + 1, len(chunks), r)
+            if store:
+                store.log_extraction_failure(
+                    error_type="chunk",
+                    error_message=f"Chunk {i + 1}/{len(chunks)} extraction failed: {str(r)}",
+                    raw_response="",
+                    source_transcript=source_transcript,
+                    model=config.get("llm", {}).get("model", ""),
+                )
             failed += 1
         else:
             nodes, edges = r

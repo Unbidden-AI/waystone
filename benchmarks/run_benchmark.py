@@ -27,16 +27,16 @@ import yaml
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
-from context_broker.config import get_db_path, get_project_dir, load_config
-from context_broker.extractor import ExtractionBuffer, extract, extract_targeted, extract_turn, split_transcript_into_turns, verify_extraction
-from context_broker.cli import _split_at_paragraphs
-from context_broker.retriever import (
+from engram.config import get_db_path, get_project_dir, load_config
+from engram.extractor import ExtractionBuffer, extract, extract_targeted, extract_turn, split_transcript_into_turns, verify_extraction
+from engram.cli import _split_at_paragraphs
+from engram.retriever import (
     bfs_collect,
     extract_keywords,
     retrieve_with_stats,
     score_by_relevance,
 )
-from context_broker.store import GraphStore
+from engram.store import GraphStore
 
 BENCHMARKS_DIR = Path(__file__).parent
 TRANSCRIPTS_DIR = BENCHMARKS_DIR / "transcripts"

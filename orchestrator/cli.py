@@ -9,8 +9,8 @@ from pathlib import Path
 
 import click
 
-from context_broker.config import get_db_path, load_config
-from context_broker.store import GraphStore
+from engram.config import get_db_path, load_config
+from engram.store import GraphStore
 
 from .conversation import Conversation
 
@@ -125,15 +125,15 @@ def main(project: str, config_path: str | None, stream: bool, verbose: bool) -> 
     """Start an interactive orchestrator session for PROJECT.
 
     PROJECT is the name of a Context Broker project (same namespace used by
-    ``ctx init`` / ``ctx extract``).  The orchestrator loads the project's
+    ``engram init`` / ``engram extract``).  The orchestrator loads the project's
     graph store and starts a REPL that keeps a sliding history window,
     retrieves relevant graph context on every turn, and compacts old messages
     back into the graph automatically.
 
     \b
     Example:
-        ctx orchestrate my_project
-        ctx orchestrate my_project --config ./config.yaml -v
+        engram orchestrate my_project
+        engram orchestrate my_project --config ./config.yaml -v
     """
     _setup_logging(verbose)
 
@@ -143,7 +143,7 @@ def main(project: str, config_path: str | None, stream: bool, verbose: bool) -> 
     if not db_path.exists():
         click.echo(
             f"Project {project!r} not found at {db_path}. "
-            "Run `ctx init <project>` first.",
+            "Run `engram init <project>` first.",
             err=True,
         )
         sys.exit(1)

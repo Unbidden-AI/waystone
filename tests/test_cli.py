@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from click.testing import CliRunner
 
-from context_broker.cli import cli
-from context_broker.store import GraphStore
+from engram.cli import cli
+from engram.store import GraphStore
 
 
 @pytest.fixture
@@ -265,7 +265,7 @@ class TestImportClaudeSessions:
             "edges": [],
         }
 
-        with patch("context_broker.cli.extract", new=AsyncMock(return_value=mock_result)):
+        with patch("engram.cli.extract", new=AsyncMock(return_value=mock_result)):
             result = r.invoke(cli, [
                 "--config", config,
                 "import-claude-sessions", "test-project", str(session_file),
@@ -275,7 +275,7 @@ class TestImportClaudeSessions:
         assert "1 nodes" in result.output
 
         db_path = project_tmp / "projects" / "test-project" / "context.db"
-        from context_broker.store import GraphStore
+        from engram.store import GraphStore
         store = GraphStore(db_path)
         node = store.get_node("n_import001")
         store.close()
@@ -286,7 +286,7 @@ class TestJsonlToMarkdown:
     def test_plain_string_content(self, tmp_path):
         import json
 
-        from context_broker.cli import _jsonl_to_markdown
+        from engram.cli import _jsonl_to_markdown
 
         f = tmp_path / "session.jsonl"
         f.write_text(
@@ -300,7 +300,7 @@ class TestJsonlToMarkdown:
     def test_content_block_list(self, tmp_path):
         import json
 
-        from context_broker.cli import _jsonl_to_markdown
+        from engram.cli import _jsonl_to_markdown
 
         f = tmp_path / "session.jsonl"
         f.write_text(
@@ -315,7 +315,7 @@ class TestJsonlToMarkdown:
     def test_skips_invalid_json_lines(self, tmp_path):
         import json
 
-        from context_broker.cli import _jsonl_to_markdown
+        from engram.cli import _jsonl_to_markdown
 
         f = tmp_path / "session.jsonl"
         f.write_text(
@@ -326,7 +326,7 @@ class TestJsonlToMarkdown:
         assert "Valid line" in md
 
     def test_empty_file(self, tmp_path):
-        from context_broker.cli import _jsonl_to_markdown
+        from engram.cli import _jsonl_to_markdown
         f = tmp_path / "empty.jsonl"
         f.write_text("")
         assert _jsonl_to_markdown(f) == ""

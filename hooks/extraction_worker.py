@@ -51,10 +51,10 @@ def main():
     })
 
     try:
-        from context_broker.config import load_config
-        from context_broker.extractor import extract_turn, verify_extraction
-        from context_broker.retriever import bfs_collect, extract_keywords, score_by_relevance
-        from context_broker.store import GraphStore
+        from engram.config import load_config
+        from engram.extractor import extract_turn, verify_extraction
+        from engram.retriever import bfs_collect, extract_keywords, score_by_relevance
+        from engram.store import GraphStore
 
         config = load_config()
         db_path = Path(args.db_path)
