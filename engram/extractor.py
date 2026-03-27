@@ -290,8 +290,46 @@ async def extract(transcript_text: str, config: dict, store=None, source_transcr
             )
         raise
     result = assign_ids(extraction)
-    log.info("Extracted %d nodes, %d edges", len(result["nodes"]), len(result["edges"]))
-    return result
+    nodes = result["nodes"]
+    edges = result["edges"]
+
+    # Adaptive stacking: check if node density is below model-specific floor
+    # If so, run a second extraction pass and merge results
+    DENSITY_FLOORS = {
+        "gemini-2.5-flash-lite": 0.004,
+        "gemini-2.5-flash": 0.006,
+        "claude-3-5-sonnet": 0.005,
+        "gpt-4o-mini": 0.005,
+    }
+    model_name = config.get("llm", {}).get("model", "")
+    floor = DENSITY_FLOORS.get(model_name, 0.004)
+    density = len(nodes) / max(len(transcript_text), 1)
+
+    if density < floor:
+        log.info(
+            "[adaptive] density %.6f < floor %.6f — running second extraction pass",
+            density, floor
+        )
+        try:
+            extra_extraction = await extract(transcript_text, config, store, source_transcript)
+            extra_nodes = extra_extraction["nodes"]
+            extra_edges = extra_extraction["edges"]
+
+            # Merge: skip duplicates by checking if a node's fact already exists
+            existing_facts = {n["fact"] for n in nodes}
+            new_nodes = [n for n in extra_nodes if n["fact"] not in existing_facts]
+
+            nodes.extend(new_nodes)
+            edges.extend(extra_edges)
+            log.info(
+                "[adaptive] merged %d extra nodes, total density now %.6f",
+                len(new_nodes), len(nodes) / max(len(transcript_text), 1)
+            )
+        except Exception as e:
+            log.warning("[adaptive] second pass failed (continuing with first pass): %s", e)
+
+    log.info("Extracted %d nodes, %d edges", len(nodes), len(edges))
+    return {"nodes": nodes, "edges": edges}
 
 
 async def verify_extraction(
@@ -301,6 +339,7 @@ async def verify_extraction(
     candidate_sentences: list[str] | None = None,
     store=None,
     source_transcript: str = "",
+    max_context_nodes: int = 50,
 ) -> dict:
     """Run a second verification pass to find facts missed by the first extraction.
 
@@ -314,12 +353,19 @@ async def verify_extraction(
         candidate_sentences: optional list of specific sentences to check
         store: Optional GraphStore instance for logging failures
         source_transcript: Optional transcript name/path for failure logging
+        max_context_nodes: Cap on nodes included in the verify prompt (sorted by
+            confidence descending). Prevents prompt truncation on models with
+            smaller output limits (e.g. gemini-2.5-flash-lite). Default 50.
 
     Returns:
         dict with "nodes" (list[dict]) and "edges" (list[dict]) for NEW nodes only.
         Use assign_ids_incremental to resolve IDs before merging.
     """
-    prompt = build_verification_prompt(transcript_text, extracted_nodes, candidate_sentences)
+    # Cap nodes sent to the prompt to avoid output truncation on smaller models.
+    # Keep highest-confidence nodes so the LLM knows the primary facts are covered.
+    context_nodes = sorted(extracted_nodes, key=lambda n: n.get("confidence", 0.5), reverse=True)
+    context_nodes = context_nodes[:max_context_nodes]
+    prompt = build_verification_prompt(transcript_text, context_nodes, candidate_sentences)
     try:
         content = await _call_llm(prompt, config)
         extraction = parse_llm_response(content)
