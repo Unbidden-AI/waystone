@@ -134,6 +134,61 @@ EPISODIC_PERSONAL = DomainProfile(
         "node with updates: [<old_node_id>] rather than overwriting. "
         "Tag every node with the relevant person's name so queries about that person retrieve all their facts."
     ),
+    layer1_rules=(
+        "1. Extract FACTS, not filler (greetings, small talk, social niceties, filler phrases like "
+        '"yeah", "right", "I see", "wow" — unless they carry genuine emotional signal).\n\n'
+        "2. Each fact must be self-contained — readable without surrounding context. Include the "
+        "person's name, what the fact is about, and any key detail (date, place, relationship) "
+        "directly in the fact text.\n\n"
+        "3. Capture BOTH the event or fact AND the speaker's reaction or perspective as separate "
+        'nodes linked by "references":\n'
+        '   - Event node: "Jordan started a new job at a marketing agency in Austin in March"\n'
+        '   - Reaction node: "Jordan feels excited but nervous about the new role — it\'s her first '
+        'time managing a team"\n'
+        "   Only create a reaction node if the speaker explicitly states a feeling, opinion, or "
+        "concern. Do NOT invent reactions.\n\n"
+        "4. Capture CHANGE OVER TIME when a person's situation has changed. If a fact is an UPDATE "
+        "to a prior state:\n"
+        '   - Create a node for the PRIOR STATE: "Alex used to live in Boston before 2023"\n'
+        '   - Create a node for the CURRENT STATE: "Alex moved to Seattle in early 2023 for work"\n'
+        "   - Set supersedes: [\"prior_node_id\"] on the current state node\n"
+        '   Look for signal words: "used to", "before", "moved", "switched", "left", "now", '
+        '"changed", "broke up", "got a new".\n\n'
+        "5. Extract SPECIFIC VALUES exhaustively — never omit concrete details:\n"
+        "   - Every named person (full name or nickname as stated), their age if mentioned, their "
+        "relationship to the speaker (best friend, cousin, roommate, coworker)\n"
+        "   - Every named place (city, neighborhood, venue, country) mentioned in connection with "
+        "an event or person\n"
+        "   - Every date, timeframe, or duration ('last summer', 'three weeks ago', 'in 2019', "
+        "'for six months', 'next March') — include verbatim in the fact text\n"
+        "   - Every stated quantity or threshold ('two kids', 'five years together', '$40k salary', "
+        "'moved four times', 'hasn't spoken in months')\n\n"
+        "6. Capture EMOTIONAL CONTEXT and STATED FEELINGS as their own nodes when they are "
+        "explicit and meaningful:\n"
+        '   - "Sam is devastated about the divorce — hadn\'t seen it coming"\n'
+        '   - "The speaker feels guilty for missing the reunion"\n'
+        '   - "Jordan is proud of finishing the marathon despite the injury"\n'
+        "   These are high-signal personal facts. Do NOT extract vague or implied emotions — only "
+        "what the speaker directly states.\n\n"
+        "7. Tag nodes with every term a future query might use to find them:\n"
+        "   - MANDATORY: include the full name (and nickname if used) of every person the node "
+        "involves — this is how person-scoped queries work\n"
+        '   - Include the event type, place name, and relationship label: ["wedding", "marriage", '
+        '"sarah", "barcelona", "sister", "2022"]\n'
+        "   - Include both specific and generic terms: if the fact is about a promotion, include "
+        '["promotion", "job", "career", "work", "raise"] even if only one appears in the text\n\n'
+        "8. Split compound facts into separate nodes when they involve different events, different "
+        "people, or would be retrieved by different queries:\n"
+        '   - Don\'t: one node for "Sarah got married in June, moved to Rome, and is now pregnant"\n'
+        '   - Do: one node for the marriage, one for the move to Rome, one for the pregnancy\n'
+        "   Each event has its own timeline, emotional weight, and retrieval path.\n\n"
+        '9. "source_message" is the 0-based index of the message where the fact appears.\n\n'
+        "10. Confidence:\n"
+        "    - 0.3-0.5: mentioned in passing or indirectly implied — speaker didn't state it clearly\n"
+        "    - 0.6-0.8: stated directly but not confirmed (plans, second-hand reports, uncertain "
+        "timelines)\n"
+        "    - 0.9-1.0: stated as a confirmed fact or direct personal experience"
+    ),
     extraction_focus=(
         "PERSONAL CONVERSATION EXTRACTION FOCUS — apply these rules on every turn:\n\n"
         "PEOPLE: Create a person node for every named individual on their FIRST mention, even if the "
