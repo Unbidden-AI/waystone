@@ -10,15 +10,16 @@ llm:
 defaults:
   top_k: 30
 
-# Strategy overrides for Flash-Lite: disable semantic for default/filtered/tight
-# to test impact of semantic search contamination on retrieval quality.
-# See Issue #6: semantic search currently hurts Flash-Lite by -12pp (89% → 77%)
+# Per-strategy config support via Issue #6 flag infrastructure.
+# Semantic enabled for all strategies — A/B results are contradictory across runs
+# (Issue #5 found -12pp with semantic ON; Issue #6 Part 1 found -3pp with semantic OFF).
+# Leaving semantic: true as default until calibration runner can settle this empirically.
 strategies:
   baseline:
     semantic: true
   default:
-    semantic: false
+    semantic: true
   filtered:
-    semantic: false
+    semantic: true
   tight:
-    semantic: false
+    semantic: true
