@@ -167,12 +167,21 @@ def _run_config(
             store = None
             ingestion_result = None
         else:
-            store, ingestion_result = ingest_conversation(
-                conv=conv,
-                db_dir=tmp_dir,
-                verbose=verbose,
-                domain=config.domain,
-            )
+            from pathlib import Path as _Path
+            from engram.store import GraphStore as _GraphStore
+            checkpoint_path = str(_Path(tmp_dir) / f"{conv.sample_id}.db")
+            if _Path(checkpoint_path).exists():
+                if verbose:
+                    print(f"  [{config.name}] {conv.sample_id}: checkpoint found, skipping extraction")
+                store = _GraphStore(checkpoint_path)
+                ingestion_result = None
+            else:
+                store, ingestion_result = ingest_conversation(
+                    conv=conv,
+                    db_dir=tmp_dir,
+                    verbose=verbose,
+                    domain=config.domain,
+                )
             if ingestion_result:
                 all_ingestion_results.append({
                     "sample_id": ingestion_result.sample_id,
