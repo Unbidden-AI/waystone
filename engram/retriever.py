@@ -162,7 +162,7 @@ def retrieve_with_stats(
 
     # Adaptive seed expansion: if average seed score is low, expand the seed set
     # This helps queries where keywords don't match well but related context exists
-    SEED_CONFIDENCE_FLOOR = 0.4
+    SEED_CONFIDENCE_FLOOR = 0.8
     if entry_nodes and strats["relevance_scoring"]:
         avg_relevance = sum(n.get("_relevance", 0) for n in entry_nodes) / len(entry_nodes)
         log.debug("Seed set average relevance: %.3f (floor: %.3f)", avg_relevance, SEED_CONFIDENCE_FLOOR)
