@@ -32,6 +32,7 @@ STOP_WORDS = {
 
 # Default strategy settings (all reductions off)
 DEFAULT_STRATEGIES = {
+    "semantic": True,
     "superseded_pruning": False,
     "confidence_threshold": 0.0,
     "recency_decay": False,
@@ -81,6 +82,7 @@ def retrieve_with_stats(
         hops: BFS traversal depth
         top_k: Max nodes to return
         strategies: Dict of strategy toggles. Keys:
+            - semantic (bool): Include semantic embedding-based augmentation (default: True)
             - superseded_pruning (bool): Drop superseded nodes
             - confidence_threshold (float): Min confidence to include (0.0 = off)
             - recency_decay (bool): Apply time-based decay to scores
@@ -114,8 +116,9 @@ def retrieve_with_stats(
 
     # Semantic augmentation: always union semantic results when available, not just as fallback.
     # This catches nodes whose vocabulary differs from extraction-time tags.
+    # Can be disabled per-strategy via semantic flag.
     from engram import embedder
-    if embedder.is_available() and store._vec_available:
+    if strats["semantic"] and embedder.is_available() and store._vec_available:
         query_blob = embedder.embed_text(task_description)
         sem_ids = store.search_by_embedding(query_blob, top_k=top_k)
         if sem_ids:

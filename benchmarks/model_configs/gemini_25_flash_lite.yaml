@@ -9,3 +9,16 @@ llm:
 
 defaults:
   top_k: 30
+
+# Strategy overrides for Flash-Lite: disable semantic for default/filtered/tight
+# to test impact of semantic search contamination on retrieval quality.
+# See Issue #6: semantic search currently hurts Flash-Lite by -12pp (89% → 77%)
+strategies:
+  baseline:
+    semantic: true
+  default:
+    semantic: false
+  filtered:
+    semantic: false
+  tight:
+    semantic: false

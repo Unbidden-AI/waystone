@@ -48,6 +48,7 @@ RESULTS_DIR = BENCHMARKS_DIR / "results"
 
 STRATEGY_PRESETS = {
     "baseline": {
+        "semantic": True,
         "superseded_pruning": False,
         "confidence_threshold": 0.0,
         "recency_decay": False,
@@ -55,6 +56,7 @@ STRATEGY_PRESETS = {
         "relevance_scoring": False,
     },
     "default": {
+        "semantic": True,
         "superseded_pruning": True,
         "confidence_threshold": 0.0,
         "recency_decay": False,
@@ -62,6 +64,7 @@ STRATEGY_PRESETS = {
         "relevance_scoring": True,
     },
     "filtered": {
+        "semantic": True,
         "superseded_pruning": True,
         "confidence_threshold": 0.6,
         "recency_decay": False,
@@ -69,6 +72,7 @@ STRATEGY_PRESETS = {
         "relevance_scoring": True,
     },
     "tight": {
+        "semantic": True,
         "superseded_pruning": True,
         "confidence_threshold": 0.6,
         "recency_decay": False,
@@ -490,11 +494,22 @@ def run_queries(config: dict, project_name: str, questions: list, presets: dict)
     """Run all eval questions against all strategy presets. Returns nested results.
 
     No LLM calls here — retrieval is pure local SQLite + Python.
+
+    Merges config-level strategy overrides with presets:
+    - config["strategies"][preset_name] overrides values in STRATEGY_PRESETS[preset_name]
     """
     db_path = get_db_path(config, project_name)
     all_results = {}
 
+    # Read per-strategy config overrides (e.g., semantic: false for Flash-Lite)
+    config_strategies = config.get("strategies", {})
+
     for preset_name, strategies in presets.items():
+        # Merge config overrides: config wins over preset
+        merged_strategies = {**strategies}
+        if preset_name in config_strategies:
+            merged_strategies.update(config_strategies[preset_name])
+
         print(f"\n  [{preset_name}]")
         preset_rows = []
 
@@ -507,7 +522,7 @@ def run_queries(config: dict, project_name: str, questions: list, presets: dict)
                 q["question"],
                 hops=config.get("defaults", {}).get("hops", 3),
                 top_k=config.get("defaults", {}).get("top_k", 10),
-                strategies=strategies,
+                strategies=merged_strategies,
             )
             elapsed = time.time() - t0
 
