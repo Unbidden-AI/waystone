@@ -6,35 +6,7 @@ across different domains (software_dev, episodic_personal, etc.).
 
 from __future__ import annotations
 
-EXTRACTION_PROMPT = """You are a context extraction engine. Analyze the following conversation transcript and extract every meaningful fact, decision, constraint, and implementation detail into a structured graph.
-
-Return ONLY a valid JSON object — no markdown fences, no commentary, no preamble. Start your response with { and end with }.
-
-Schema:
-{
-  "nodes": [
-    {
-      "id": "n1",
-      "fact": "Clear, concise statement of the fact",
-      "type": "implementation",
-      "confidence": 0.95,
-      "source_message": 12,
-      "supersedes": [],
-      "tags": ["keyword1", "keyword2"]
-    }
-  ],
-  "edges": [
-    {
-      "from": "n1",
-      "to": "n2",
-      "relation": "depends_on"
-    }
-  ]
-}
-
-EXTRACTION RULES:
-
-1. Extract FACTS, not filler (greetings, confirmations, thinking-out-loud).
+_DEFAULT_LAYER1_RULES = """1. Extract FACTS, not filler (greetings, confirmations, thinking-out-loud).
 
 2. Each fact must be self-contained — readable without surrounding context.
 
@@ -79,7 +51,38 @@ EXTRACTION RULES:
 10. Confidence:
     - 0.3-0.5: mentioned or discussed, not decided
     - 0.6-0.8: decided but not yet implemented
-    - 0.9-1.0: implemented or verified
+    - 0.9-1.0: implemented or verified"""
+
+
+EXTRACTION_PROMPT = """You are a context extraction engine. Analyze the following conversation transcript and extract every meaningful fact, decision, constraint, and implementation detail into a structured graph.
+
+Return ONLY a valid JSON object — no markdown fences, no commentary, no preamble. Start your response with { and end with }.
+
+Schema:
+{
+  "nodes": [
+    {
+      "id": "n1",
+      "fact": "Clear, concise statement of the fact",
+      "type": "implementation",
+      "confidence": 0.95,
+      "source_message": 12,
+      "supersedes": [],
+      "tags": ["keyword1", "keyword2"]
+    }
+  ],
+  "edges": [
+    {
+      "from": "n1",
+      "to": "n2",
+      "relation": "depends_on"
+    }
+  ]
+}
+
+EXTRACTION RULES:
+
+{layer1_rules_section}
 
 {node_types_section}
 
@@ -121,6 +124,11 @@ def _format_edge_relations_section(profile: "DomainProfile") -> str:
     return "\n".join(lines)
 
 
+def _format_layer1_rules_section(profile: "DomainProfile") -> str:
+    """Return domain-specific Layer 1 rules, falling back to the default dev rules."""
+    return profile.layer1_rules if profile.layer1_rules else _DEFAULT_LAYER1_RULES
+
+
 def _format_extraction_focus_section(profile: "DomainProfile") -> str:
     """Format the domain-specific extraction focus (Layer 3). Returns empty string if not set."""
     if not profile.extraction_focus:
@@ -143,6 +151,7 @@ def build_extraction_prompt(
     profile = domain_profile or SOFTWARE_DEV
     base = (
         EXTRACTION_PROMPT
+        .replace("{layer1_rules_section}", _format_layer1_rules_section(profile))
         .replace("{node_types_section}", _format_node_types_section(profile))
         .replace("{edge_relations_section}", _format_edge_relations_section(profile))
         .replace("{extraction_focus_section}", _format_extraction_focus_section(profile))

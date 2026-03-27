@@ -31,6 +31,7 @@ class DomainProfile:
     edge_relations: dict[str, str]   # relation -> description for prompt
     node_types_note: str = ""        # extra note appended after node type list (optional)
     extraction_focus: str = ""       # domain-specific extraction guidance (Layer 3); empty = no-op
+    layer1_rules: str = ""           # domain-specific Layer 1 rules (replaces default rules 1-10); empty = use default
 
 
 SOFTWARE_DEV = DomainProfile(
