@@ -697,13 +697,72 @@ RULES:
 
 TRANSCRIPT:
 {transcript}""",
+
+    "decisions_constraints_tradeoffs": """You are a context extraction engine hunting specifically for three interrelated concept types: DECISIONS (choices between alternatives), CONSTRAINTS (hard requirements and non-negotiables), and TRADEOFFS (explicit comparisons of options with rationale).
+
+Return ONLY a valid JSON object — no markdown fences, no commentary, no preamble. Start your response with { and end with }.
+
+Schema:
+{
+  "nodes": [
+    {
+      "id": "n1",
+      "fact": "Clear, concise statement of the decision, constraint, or tradeoff",
+      "type": "decision",
+      "confidence": 0.85,
+      "source_message": 0,
+      "supersedes": [],
+      "tags": ["keyword1", "keyword2"]
+    }
+  ],
+  "edges": [
+    {
+      "from": "n1",
+      "to": "n_existingid",
+      "relation": "relates_to"
+    }
+  ]
+}
+
+EXISTING CONTEXT (already extracted — do NOT re-extract these):
+{existing_context}
+
+HUNT ONLY for these patterns — emit a node for EVERY instance found:
+
+**DECISIONS:**
+1. EXPLICIT CHOICES: "we chose X", "we went with X", "we decided on X", "X was selected"
+2. TRADEOFF DECISIONS: "X over Y because", "X instead of Y", "X rather than Y"
+3. REJECTED ALTERNATIVES: For any decision, if the transcript mentions what was considered and rejected, embed it directly in the decision fact.
+4. IMPLICIT DECISIONS: Approaches described without explicit alternatives mentioned, but where the choice was non-obvious or contested.
+
+**CONSTRAINTS:**
+1. HARD REQUIREMENTS: "must", "required", "mandatory", "cannot", "must not"
+2. EXTERNAL CONSTRAINTS: Compliance requirements (GDPR, SOC2, HIPAA), SLAs, contractual obligations
+3. TECHNICAL CONSTRAINTS: "must be stateless", "must be idempotent", "must not use X"
+4. PERFORMANCE CONSTRAINTS: Latency SLOs, throughput minimums, availability targets
+
+**TRADEOFFS (synthesis layer):**
+1. COST-VS-COMPLEXITY: "chose simpler approach even though it costs more", "paid performance penalty for maintainability"
+2. SPEED-VS-QUALITY: Decisions about MVP vs. polish, technical debt trade-ins
+3. GENERALITY-VS-SPECIALIZATION: Broad vs. narrow design choices and why
+
+RULES:
+- Use type: "decision" for choices between alternatives. Use type: "constraint" for hard requirements.
+- For tradeoffs, use type: "decision" and embed the comparative analysis directly in the fact text.
+- Each fact must be self-contained: what was decided/required + why + what was rejected or traded off (if known).
+- Tag richly (6-12 tags): the chosen option, the rejected alternative(s), the problem domain, synonyms.
+- Use short IDs like n1, n2, n3. Reference existing nodes with their exact IDs in edges.
+- If nothing new is found, return {"nodes": [], "edges": []}.
+
+TRANSCRIPT:
+{transcript}""",
 }
 
 
 def build_targeted_prompt(category: str, transcript_text: str, existing_nodes: list[dict]) -> str:
     """Build a targeted extraction prompt for a specific category.
 
-    Categories: 'lessons', 'decisions', 'questions', 'constraints'
+    Categories: 'lessons', 'decisions', 'questions', 'constraints', 'decisions_constraints_tradeoffs', 'numerics'
     """
     if category not in TARGETED_PASS_PROMPTS:
         raise ValueError(f"Unknown targeted pass category '{category}'. Valid: {list(TARGETED_PASS_PROMPTS)}")

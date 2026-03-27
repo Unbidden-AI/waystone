@@ -392,12 +392,13 @@ async def extract_targeted(
 ) -> dict:
     """Run a targeted extraction pass focused on a specific category.
 
-    Categories: 'lessons', 'decisions', 'questions', 'constraints'
+    Categories: 'lessons', 'decisions', 'questions', 'constraints', 'decisions_constraints_tradeoffs', 'numerics'
 
-    Each category uses a focused ~150-token prompt that hunts for one type of
-    information only. This avoids the recall regression caused by adding new
-    categories to the main extraction prompt (where the model wastes attention
-    hunting for content that may not exist in the transcript).
+    Each category uses a focused prompt that hunts for one type of
+    information only (or a thematic group like decisions+constraints+tradeoffs).
+    This avoids the recall regression caused by adding new categories to the
+    main extraction prompt (where the model wastes attention hunting for content
+    that may not exist in the transcript).
 
     Returns:
         dict with "nodes" (list[dict]) and "edges" (list[dict]) for NEW nodes only.

@@ -734,6 +734,11 @@ def main():
         help="Run a targeted pass hunting for numeric values, measurements, and quantified facts",
     )
     parser.add_argument(
+        "--decisions-constraints-tradeoffs",
+        action="store_true",
+        help="Run a focused pass hunting for decisions, constraints, and tradeoffs in a single integrated prompt",
+    )
+    parser.add_argument(
         "--stack-runs",
         type=int,
         default=1,
@@ -774,7 +779,7 @@ def main():
     _targeted_categories = [
         c for c, flag in [("lessons", args.lessons), ("decisions", args.decisions),
                           ("questions", args.questions), ("constraints", args.constraints),
-                          ("numerics", args.numerics)]
+                          ("numerics", args.numerics), ("decisions_constraints_tradeoffs", args.decisions_constraints_tradeoffs)]
         if flag
     ]
     if _targeted_categories:
