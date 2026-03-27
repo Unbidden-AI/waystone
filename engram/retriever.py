@@ -160,6 +160,21 @@ def retrieve_with_stats(
     # High-overlap nodes first (already relevance-sorted), fill remaining with low-overlap
     entry_nodes = (high_overlap + low_overlap)[:max_seeds]
 
+    # Adaptive seed expansion: if average seed score is low, expand the seed set
+    # This helps queries where keywords don't match well but related context exists
+    SEED_CONFIDENCE_FLOOR = 0.4
+    if entry_nodes and strats["relevance_scoring"]:
+        avg_relevance = sum(n.get("_relevance", 0) for n in entry_nodes) / len(entry_nodes)
+        log.debug("Seed set average relevance: %.3f (floor: %.3f)", avg_relevance, SEED_CONFIDENCE_FLOOR)
+        if avg_relevance < SEED_CONFIDENCE_FLOOR:
+            expanded_k = min(len(entry_nodes) * 2, len(high_overlap + low_overlap))
+            original_size = len(entry_nodes)
+            entry_nodes = (high_overlap + low_overlap)[:expanded_k]
+            log.debug(
+                "Adaptive expansion: avg relevance %.3f < floor %.3f, expanding from %d to %d seeds",
+                avg_relevance, SEED_CONFIDENCE_FLOOR, original_size, len(entry_nodes)
+            )
+
     # BFS from entry nodes
     collected_nodes = bfs_collect(store, entry_nodes, hops)
     nodes_before = len(collected_nodes)
