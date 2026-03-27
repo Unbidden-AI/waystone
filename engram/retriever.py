@@ -21,6 +21,13 @@ STOP_WORDS = {
     "when", "where", "which", "who", "why", "all", "each", "every",
     "both", "few", "more", "most", "some", "any", "i", "me", "my", "we",
     "our", "you", "your", "he", "she", "they", "them", "their",
+    # Common query verbs and prepositions that pass through tokenization
+    # but are not meaningful retrieval keywords — they match unrelated tags
+    # (e.g. "over" hits "failover", "chosen" hits nothing useful).
+    "use", "used", "using", "used", "set", "get", "got", "let", "put",
+    "over", "under", "between", "through", "against", "within", "along",
+    "chosen", "decided", "called", "based", "made", "used", "given",
+    "via", "per", "vs", "versus",
 }
 
 # Default strategy settings (all reductions off)
@@ -140,10 +147,11 @@ def retrieve_with_stats(
     low_overlap_ids = {n["id"] for n in high_overlap}
     low_overlap = [n for n in entry_nodes if n["id"] not in low_overlap_ids]
 
-    # Source restriction: when ≥3 high-overlap seeds all share the same source_transcript,
+    # Source restriction: when ≥5 high-overlap seeds all share the same source_transcript,
     # restrict low-overlap seeds to that same source. This prevents cross-project BFS flooding
     # in multi-project stores where generic keywords match nodes from the wrong project.
-    if len(high_overlap) >= 3:
+    # Threshold is 5 (not 3) to reduce false triggers from noise keywords hitting unrelated nodes.
+    if len(high_overlap) >= 5:
         src_counts = Counter(n.get("source_transcript", "") for n in high_overlap)
         dominant_src, dominant_count = src_counts.most_common(1)[0]
         if dominant_src and dominant_count == len(high_overlap):
@@ -218,11 +226,22 @@ def score_by_relevance(nodes: list[dict], keywords: list[str]) -> list[dict]:
     """Rank nodes by number of matching tags (not just binary match).
 
     Nodes with more keyword overlap are placed first, which makes them
-    BFS seed priorities.
+    BFS seed priorities. Applies type-based boost to prioritize decisions,
+    constraints, and trade-offs.
     """
+    TYPE_BOOST = {
+        "decision": 1.5,
+        "constraint": 1.4,
+        "trade_off": 1.3,
+        "lesson_learned": 1.2,
+    }
+
     keyword_set = set(keywords)
     for node in nodes:
-        node["_relevance"] = _count_keyword_tag_hits(node.get("tags", []), keyword_set)
+        relevance = _count_keyword_tag_hits(node.get("tags", []), keyword_set)
+        node_type = node.get("type", "").lower()
+        boost = TYPE_BOOST.get(node_type, 1.0)
+        node["_relevance"] = relevance * boost
     nodes.sort(key=lambda n: n["_relevance"], reverse=True)
     return nodes
 
