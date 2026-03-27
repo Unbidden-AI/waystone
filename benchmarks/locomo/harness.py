@@ -270,6 +270,7 @@ def _retrieve_context(
         "recency_decay": config.recency_decay,
         "confidence_threshold": config.confidence_threshold or 0.0,
         "token_budget": config.token_budget or 0,
+        "semantic": config.semantic,
     }
 
     try:

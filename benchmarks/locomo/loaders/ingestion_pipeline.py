@@ -74,12 +74,6 @@ def ingest_conversation(
     ctx_k = 30
     ctx_hops = 2
 
-    all_turns: list[tuple[str, str]] = []  # (turn_text, session_id)
-    for session in conv.sessions:
-        for turn in session.turns:
-            line = f"{turn.speaker}: {turn.text}"
-            all_turns.append((line, session.session_id))
-
     def _flush(flush_text: str, session_id: str) -> None:
         nonlocal total_nodes
         keywords = extract_keywords(flush_text)
@@ -105,18 +99,41 @@ def ingest_conversation(
             if verbose:
                 print(f"  [warn] extract_turn failed for {session_id}: {e}")
 
-    for i, (turn_text, session_id) in enumerate(all_turns):
-        should_flush = buffer.add(turn_text)
-        if should_flush:
-            _flush(buffer.flush(), session_id)
+    total_turn_count = sum(len(s.turns) for s in conv.sessions)
+    turn_idx = 0
+    current_session_id: str | None = None
+    buffer_nonempty = False
+    for session in conv.sessions:
+        # Issue #11: flush at session boundary to keep buffer windows session-pure
+        if buffer_nonempty and current_session_id != session.session_id:
+            _flush(buffer.flush(), current_session_id or session.session_id)
+            buffer_nonempty = False
 
-        if verbose and (i + 1) % 50 == 0:
-            print(f"  [ingest] {i+1}/{len(all_turns)} turns, {total_nodes} nodes so far")
+        current_session_id = session.session_id
+
+        # Issue #10: inject session boundary marker so LLM sees temporal context
+        if session.datetime_str:
+            buffer.add(f"[Session: {session.session_id} | Date: {session.datetime_str}]")
+            buffer_nonempty = True
+
+        for turn in session.turns:
+            line = f"{turn.speaker}: {turn.text}"
+            should_flush = buffer.add(line)
+            buffer_nonempty = True
+            if should_flush:
+                _flush(buffer.flush(), session.session_id)
+                buffer_nonempty = False
+            turn_idx += 1
+            if verbose and turn_idx % 50 == 0:
+                print(f"  [ingest] {turn_idx}/{total_turn_count} turns, {total_nodes} nodes so far")
 
     # Flush any remaining buffered text
     remaining = buffer.flush()
     if remaining.strip():
-        _flush(remaining, conv.sessions[-1].session_id if conv.sessions else "unknown")
+        _flush(remaining, current_session_id or (conv.sessions[-1].session_id if conv.sessions else "unknown"))
+
+    # Embed all nodes for semantic retrieval
+    store.embed_missing_nodes()
 
     elapsed = time.perf_counter() - t0
 

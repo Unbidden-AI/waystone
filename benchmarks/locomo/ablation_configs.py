@@ -29,6 +29,8 @@ class AblationConfig:
     full_context: bool = False                  # Inject raw transcript instead
     # Domain profile for extraction
     domain: str = "episodic_personal"           # Profile name from domain_profiles.py
+    # Semantic/vector augmentation
+    semantic: bool = False                      # True = embed nodes + hybrid retrieval
 
 
 # ---------------------------------------------------------------------------
@@ -113,6 +115,17 @@ ABLATION_CONFIGS: dict[str, AblationConfig] = {
         top_k=20,
         token_budget=750,
     ),
+    "engram_semantic": AblationConfig(
+        name="engram_semantic",
+        description="Default pipeline + semantic search augmentation. "
+                    "Isolates vector retrieval contribution.",
+        superseded_pruning=True,
+        confidence_threshold=None,
+        recency_decay=True,
+        top_k=50,
+        token_budget=None,
+        semantic=True,
+    ),
 }
 
 
@@ -126,4 +139,5 @@ PAPER_CONFIGS = [
     "engram_default",
     "engram_filtered",
     "engram_tight",
+    "engram_semantic",
 ]
