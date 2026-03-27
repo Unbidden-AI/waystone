@@ -85,7 +85,7 @@ EXTRACTION RULES:
 
 {edge_relations_section}
 
-13. Secondary/addendum facts MUST get their own nodes. When a fact is introduced as a secondary
+{extraction_focus_section}13. Secondary/addendum facts MUST get their own nodes. When a fact is introduced as a secondary
     detail — with "also", "in addition", "as well", "additionally", "where possible", "as needed",
     or any similar qualifier — create a SEPARATE node for it. Do NOT merge it as a parenthetical
     into the primary fact node.
@@ -121,6 +121,13 @@ def _format_edge_relations_section(profile: "DomainProfile") -> str:
     return "\n".join(lines)
 
 
+def _format_extraction_focus_section(profile: "DomainProfile") -> str:
+    """Format the domain-specific extraction focus (Layer 3). Returns empty string if not set."""
+    if not profile.extraction_focus:
+        return ""
+    return profile.extraction_focus + "\n\n"
+
+
 def build_extraction_prompt(
     transcript_text: str,
     domain_profile=None,
@@ -138,6 +145,7 @@ def build_extraction_prompt(
         EXTRACTION_PROMPT
         .replace("{node_types_section}", _format_node_types_section(profile))
         .replace("{edge_relations_section}", _format_edge_relations_section(profile))
+        .replace("{extraction_focus_section}", _format_extraction_focus_section(profile))
     )
 
     if existing_nodes:
@@ -224,7 +232,7 @@ INCREMENTAL EXTRACTION RULES:
 
 {edge_relations_section}
 
-TURN:
+{extraction_focus_section}TURN:
 {turn_text}"""
 
 
@@ -249,6 +257,7 @@ def build_incremental_prompt(turn_text: str, existing_nodes: list[dict], domain_
         INCREMENTAL_EXTRACTION_PROMPT
         .replace("{node_types_section}", _format_node_types_section(profile))
         .replace("{edge_relations_section}", _format_edge_relations_section(profile))
+        .replace("{extraction_focus_section}", _format_extraction_focus_section(profile))
         .replace("{existing_context}", existing_context)
         .replace("{turn_text}", turn_text)
     )

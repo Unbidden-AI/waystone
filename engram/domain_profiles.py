@@ -30,6 +30,7 @@ class DomainProfile:
     node_types: dict[str, str]       # type_name -> description for prompt
     edge_relations: dict[str, str]   # relation -> description for prompt
     node_types_note: str = ""        # extra note appended after node type list (optional)
+    extraction_focus: str = ""       # domain-specific extraction guidance (Layer 3); empty = no-op
 
 
 SOFTWARE_DEV = DomainProfile(
@@ -131,6 +132,29 @@ EPISODIC_PERSONAL = DomainProfile(
         "When a fact changes (e.g. someone changes jobs, moves, or updates a plan), create a new "
         "node with updates: [<old_node_id>] rather than overwriting. "
         "Tag every node with the relevant person's name so queries about that person retrieve all their facts."
+    ),
+    extraction_focus=(
+        "PERSONAL CONVERSATION EXTRACTION FOCUS — apply these rules on every turn:\n\n"
+        "PEOPLE: Create a person node for every named individual on their FIRST mention, even if the "
+        "only known facts are their name and relationship to the speaker. Never absorb a person into "
+        "another node.\n\n"
+        "DATES & TIMEFRAMES: When an event has any stated date or timeframe ('last summer', 'three "
+        "weeks ago', 'in 2019', 'next month'), include it verbatim in the event node's fact text and "
+        "tags. Undated events should still be extracted — omit the date field rather than guessing.\n\n"
+        "PLANS & INTENTIONS: Any expression of future intention is a plan node — 'I want to', 'we're "
+        "going to', 'I plan to', 'hopefully', 'I might', 'thinking about'. Include who, what, and "
+        "when (if stated). Confidence: 0.7.\n\n"
+        "OUTCOMES: Any report of how something turned out is an outcome node — 'it turned out', "
+        "'ended up', 'finally', 'unfortunately it', 'it worked'. Link to the originating event or "
+        "plan with a follows edge. Confidence: 0.9.\n\n"
+        "RELATIONSHIP SCAN: After drafting all other nodes, explicitly check: did anything CHANGE "
+        "between two named people in this turn? Check for engagements, breakups, reunions after "
+        "a long separation, one person becoming a caregiver or emotional anchor, major conflicts, "
+        "reconciliations, a friendship noticeably deepening or cooling. Each 'yes' gets a "
+        "relationship_update node. Static descriptions ('X is Y's sister') are facts, not updates.\n\n"
+        "TAGGING: Every node must include the names of all people it involves as tags. A health "
+        "fact about Jordan must have 'jordan' in tags. A plan involving both Alex and Sam must "
+        "have both names in tags. This is mandatory — it is how person-scoped queries work."
     ),
 )
 
