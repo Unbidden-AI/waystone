@@ -325,6 +325,9 @@ After Phase 1 stabilizes. Each milestone follows the same agent sequence pattern
 | **2.5** | Planning / decomposition (ReAct-style reasoning, task breakdown) | Research (Opus) + Code Review (Sonnet) |
 | **2.6** | TUI / IDE integration (Rich terminal UI or VS Code extension) | Code Review + QA + Security |
 | **2.7** | Adaptive strategies (learn which retrieval strategies work best per project) | Research + QA |
+| **2.8** | Health dashboard (`engram inspect` CLI + optional local web panel): node density, BFS depth distribution, retrieval score histograms, type breakdown, token budget utilization — actionable signals for extraction/retrieval quality without ground truth | Code Review + QA |
+| **2.9** | On-the-fly accuracy monitoring: self-supervised synthetic QA generation from extracted nodes, retrieval tested against generated questions, anomaly alerts surfaced via health metrics | Research (Sonnet) + QA |
+| **2.10** | Dynamic `extraction_focus` generation: auto-generate domain `extraction_focus` from first session sample rather than hand-authoring; fires when domain detection confidence is low; generated focus injected on top of generic domain schema | Research + QA |
 
 ---
 

@@ -17,6 +17,9 @@ Built-in profiles:
   - customer_support             — support tickets, helpdesk chats, issue resolution
   - education_tutoring           — tutoring sessions, classroom discussions, Q&A
   - news_events                  — news articles, event coverage, public statements
+  - agentic_workflow             — AI agent orchestration, tool calls, prompt engineering
+  - creative_writing             — characters, plot, worldbuilding, narrative craft
+  - product_management           — features, prioritization, user stories, roadmap decisions
 """
 
 from __future__ import annotations
@@ -630,6 +633,198 @@ NEWS_EVENTS = DomainProfile(
 )
 
 
+AGENTIC_WORKFLOW = DomainProfile(
+    name="agentic_workflow",
+    node_types={
+        "tool_call": (
+            "a call made to an external tool, API, file system, or capability — include "
+            "the tool name, inputs provided, result or output received, and whether it "
+            "succeeded or failed. Capture error messages verbatim when present."
+        ),
+        "agent_decision": (
+            "a choice made by the agent about how to proceed — include what was decided, "
+            "the alternatives considered or rejected, the reasoning, and the outcome. "
+            "Use for: model selection, approach selection, task delegation, retry vs. "
+            "abort decisions."
+        ),
+        "workflow_step": (
+            "a discrete, named phase or step in a multi-step agentic task — describe what "
+            "was accomplished, what it depended on, and what it enables next. Use for "
+            "clearly bounded stages in a pipeline or plan."
+        ),
+        "prompt_template": (
+            "a system prompt, task prompt, persona, or reusable instruction template — "
+            "include its purpose, any constraints or persona it establishes, and the context "
+            "in which it is applied. Capture notable rules or boundaries verbatim."
+        ),
+        "model_config": (
+            "a model selection, parameter setting, or inference configuration — include "
+            "model name or family, temperature, context window size, or any other settings "
+            "that affect generation behavior. Note the rationale if given."
+        ),
+        "task_decomposition": (
+            "a breakdown of a complex or ambiguous goal into concrete subtasks — include "
+            "the parent goal, the subtasks identified, the decomposition rationale, and "
+            "any ordering constraints between subtasks."
+        ),
+        "error_recovery": (
+            "a failure, unexpected output, or tool error and the agent's response to it — "
+            "include what failed, the root cause if identified, and the recovery strategy "
+            "chosen (retry, fallback, escalate, abandon)."
+        ),
+        "capability": (
+            "a named tool, skill, integration, or agent capability available in the "
+            "workflow — describe what it does, its inputs and outputs, any known limitations "
+            "or rate limits, and when it should or should not be used."
+        ),
+    },
+    edge_relations={
+        "executes": "source workflow step or agent decision executes the target tool call or capability",
+        "produces": "source tool call or step produces the target output, artifact, or state change",
+        "follows": "source step follows the target step in the workflow sequence",
+        "informs": "source tool call result or observation informs the target agent decision",
+        "recovers_from": "source error_recovery node addresses and responds to the target error or failure",
+        "uses": "source workflow step or agent decision uses the target prompt template or model config",
+        "decomposes_into": "source goal or task_decomposition breaks the target complex goal into subtasks",
+        "supersedes": "source prompt template or model config replaces the target earlier version",
+    },
+    node_types_note=(
+        "Always tag nodes with the agent name, workflow name, or task identifier so all "
+        "steps of a workflow are retrievable together. Tag tool_call nodes with the tool "
+        "name even when the call failed. Tag error_recovery nodes with both the error type "
+        "and the recovery strategy so failure patterns are queryable."
+    ),
+)
+
+
+CREATIVE_WRITING = DomainProfile(
+    name="creative_writing",
+    node_types={
+        "character": (
+            "a named character in the story — create one node per character on their first "
+            "mention. Include name, role (protagonist, antagonist, supporting, etc.), key "
+            "personality traits, core motivation, and relationship to other characters. "
+            "Do NOT split a character across multiple nodes."
+        ),
+        "plot_event": (
+            "a significant story event, scene, or narrative beat — include who is involved, "
+            "what happens, the setting, and its consequence for the characters or plot. "
+            "Use for events that change something: circumstances, relationships, character "
+            "understanding, or the direction of the story."
+        ),
+        "world_detail": (
+            "a piece of worldbuilding — a location, culture, rule of the world, piece of "
+            "history, or physical law — include how it affects the story, characters, or "
+            "the constraints it places on the narrative."
+        ),
+        "relationship": (
+            "the dynamic or history between two named characters — include the current "
+            "state of the relationship, its history, the tension or bond at its core, and "
+            "how it drives the narrative."
+        ),
+        "theme": (
+            "a recurring motif, symbol, or thematic concern in the story — include how it "
+            "manifests across scenes or characters, and what the story seems to be saying "
+            "about it."
+        ),
+        "narrative_choice": (
+            "a craft decision made about the story — POV, tense, structure, genre "
+            "convention, chapter structure, narrative distance, unreliable narrator — "
+            "include the rationale and the intended effect on the reader."
+        ),
+        "conflict": (
+            "an internal or external conflict driving a character or the plot — include "
+            "who is in conflict, what is at stake, and the current state of resolution. "
+            "Use for: character vs. self, character vs. character, character vs. world."
+        ),
+        "arc": (
+            "a character arc or plot arc — describe the starting state, intended "
+            "trajectory, key turning points, and endpoint. Distinguish character arcs "
+            "(internal transformation) from plot arcs (external sequence of events)."
+        ),
+    },
+    edge_relations={
+        "involves": "source plot event or conflict involves the target character as a participant",
+        "located_in": "source event or scene takes place in the target world detail (location or setting)",
+        "drives": "source conflict or relationship drives the target plot event or character arc",
+        "manifests": "source plot event or character choice manifests or develops the target theme",
+        "precedes": "source event or arc beat precedes the target in the story timeline",
+        "develops": "source plot event advances or complicates the target character arc",
+        "contradicts": "source character action contradicts an established trait (flag for consistency review)",
+        "relates_to": "source and target are connected without a more specific structural link",
+    },
+    node_types_note=(
+        "Always tag nodes with character names and the story or project title so queries "
+        "scoped to a project or character work correctly. Maintain one character node per "
+        "named character — do not create duplicates. When a character or world element is "
+        "revised, create a new node and link with supersedes rather than overwriting, to "
+        "preserve the evolution of creative choices."
+    ),
+)
+
+
+PRODUCT_MANAGEMENT = DomainProfile(
+    name="product_management",
+    node_types={
+        "feature": (
+            "a product capability, enhancement, or new behavior — include the user problem "
+            "it solves, the target user segment, scope boundaries, and current status "
+            "(proposed, planned, in progress, shipped, cut). Note the motivating insight "
+            "or request if stated."
+        ),
+        "user_story": (
+            "a structured user need — capture the user type, desired action or outcome, "
+            "and the business value; link to the feature it belongs to. Include acceptance "
+            "criteria or definition of done if stated."
+        ),
+        "decision": (
+            "a product decision — what was decided, who made it, the alternatives that were "
+            "considered and rejected, and the reasoning. Use for scope cuts, prioritization "
+            "calls, positioning choices, and architecture direction from a product angle."
+        ),
+        "priority": (
+            "a stated prioritization of work relative to other work — include what is being "
+            "elevated or deprioritized, the competing items, and the criteria used (impact, "
+            "effort, strategic fit, urgency)."
+        ),
+        "hypothesis": (
+            "an assumption or bet about user behavior, market conditions, or product-market "
+            "fit — include the stated belief, what evidence exists for it, and how it would "
+            "be validated or invalidated."
+        ),
+        "insight": (
+            "a finding from user research, analytics, customer feedback, or competitive "
+            "analysis — include the source, what was learned, and the product implication "
+            "or action it informs."
+        ),
+        "stakeholder": (
+            "a named person, team, or organization with a stake in the product — include "
+            "their role, goals, and any stated concerns, blockers, or commitments."
+        ),
+        "constraint": (
+            "a scope boundary, resource limitation, compliance requirement, or "
+            "non-negotiable — include the source of the constraint and how it shapes "
+            "the product decisions or timeline."
+        ),
+    },
+    edge_relations={
+        "solves": "source feature or decision addresses the target user problem or hypothesis",
+        "depends_on": "source feature or work item requires the target to be complete first",
+        "informed_by": "source decision or priority is informed by the target insight or research",
+        "assigned_to": "source feature or action item is owned by the target stakeholder or team",
+        "validates": "source shipped feature or experiment validates or invalidates the target hypothesis",
+        "supersedes": "source decision or priority replaces the target earlier direction",
+        "relates_to": "source and target are connected without a more specific structural link",
+    },
+    node_types_note=(
+        "Always tag features and decisions with the product area, team, and any associated "
+        "quarter or milestone (e.g. 'Q3 launch', 'v2.0', 'beta'). When a decision or "
+        "priority changes, create a new node with supersedes: [<old_node_id>] so the "
+        "full decision history is preserved and traversable."
+    ),
+)
+
+
 BUILTIN_PROFILES: dict[str, DomainProfile] = {
     "software_dev": SOFTWARE_DEV,
     "episodic_personal": EPISODIC_PERSONAL,
@@ -641,6 +836,9 @@ BUILTIN_PROFILES: dict[str, DomainProfile] = {
     "customer_support": CUSTOMER_SUPPORT,
     "education_tutoring": EDUCATION_TUTORING,
     "news_events": NEWS_EVENTS,
+    "agentic_workflow": AGENTIC_WORKFLOW,
+    "creative_writing": CREATIVE_WRITING,
+    "product_management": PRODUCT_MANAGEMENT,
 }
 
 
