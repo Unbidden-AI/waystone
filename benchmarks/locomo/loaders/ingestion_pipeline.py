@@ -1,9 +1,13 @@
 """
 Ingestion pipeline: convert a LOCOMO Conversation into an Engram GraphStore.
 
-Each session's turns are concatenated into a transcript and passed through
-Engram's extractor. We store one GraphStore per conversation (isolated DB
-per sample_id) so runs are reproducible and parallel-safe.
+Each session is processed as a self-contained transcript — one extraction call
+per session, matching how the Stop hook works in real-time use. If a session is
+too large for a single extraction call (finish_reason=length), it is bisected
+and each half retried recursively.
+
+We store one GraphStore per conversation (isolated DB per sample_id) so runs
+are reproducible and parallel-safe.
 """
 
 from __future__ import annotations
@@ -15,7 +19,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from engram.extractor import extract_turn, ExtractionBuffer
+from engram.extractor import extract_turn
 from engram.retriever import bfs_collect, score_by_relevance, extract_keywords
 from engram.store import GraphStore
 from engram.config import load_config, get_domain_profile
@@ -43,6 +47,10 @@ def ingest_conversation(
     """
     Ingest a LOCOMO conversation into a fresh GraphStore.
 
+    Each session is processed as a self-contained unit (one extraction call),
+    matching real-time episodic use. Sessions that exceed the model's output
+    window are bisected and retried.
+
     Args:
         conv: Parsed Conversation from LocomoDataset.
         db_dir: Directory to write the SQLite DB. Uses a temp dir if None.
@@ -66,17 +74,14 @@ def ingest_conversation(
     t0 = time.perf_counter()
     errors = []
     total_nodes = 0
-
-    # Use ExtractionBuffer + extract_turn to avoid max_tokens truncation.
-    # Buffer accumulates turns; flushes when threshold met (≥3 turns, >200 words).
-    buffer = ExtractionBuffer()
     source_label = conv.sample_id
     ctx_k = 30
     ctx_hops = 2
 
-    def _flush(flush_text: str, session_id: str) -> None:
+    def _extract_chunk(text: str, session_id: str, depth: int = 0) -> None:
+        """Extract a text chunk, bisecting on output-length truncation."""
         nonlocal total_nodes
-        keywords = extract_keywords(flush_text)
+        keywords = extract_keywords(text)
         context_nodes: list[dict] = []
         if keywords:
             entry_nodes = store.get_nodes_by_tags(keywords)
@@ -86,7 +91,7 @@ def ingest_conversation(
                 context_nodes.sort(key=lambda n: n.get("_relevance", 0), reverse=True)
                 context_nodes = context_nodes[:ctx_k]
         try:
-            extraction = asyncio.run(extract_turn(flush_text, context_nodes, config, domain_profile))
+            extraction = asyncio.run(extract_turn(text, context_nodes, config, domain_profile))
             nodes = extraction.get("nodes", [])
             edges = extraction.get("edges", [])
             for node in nodes:
@@ -94,43 +99,42 @@ def ingest_conversation(
                 node.setdefault("created_at", datetime.now(timezone.utc).isoformat())
             store.merge_extraction(nodes, edges)
             total_nodes += len(nodes)
+        except ValueError as e:
+            if "finish_reason=length" in str(e) and depth < 4:
+                # Output window exceeded — bisect on a newline boundary and retry
+                lines = text.splitlines()
+                if len(lines) < 2:
+                    errors.append(f"{session_id}: chunk too small to bisect: {e}")
+                    return
+                mid = len(lines) // 2
+                if verbose:
+                    print(f"  [bisect] {session_id}: splitting {len(lines)} lines at {mid} (depth={depth})")
+                _extract_chunk("\n".join(lines[:mid]), session_id, depth + 1)
+                _extract_chunk("\n".join(lines[mid:]), session_id, depth + 1)
+            else:
+                errors.append(f"{session_id}: {e}")
+                if verbose:
+                    print(f"  [warn] extract_turn failed for {session_id}: {e}")
         except Exception as e:
             errors.append(f"{session_id}: {e}")
             if verbose:
                 print(f"  [warn] extract_turn failed for {session_id}: {e}")
 
-    total_turn_count = sum(len(s.turns) for s in conv.sessions)
-    turn_idx = 0
-    current_session_id: str | None = None
-    buffer_nonempty = False
-    for session in conv.sessions:
-        # Issue #11: flush at session boundary to keep buffer windows session-pure
-        if buffer_nonempty and current_session_id != session.session_id:
-            _flush(buffer.flush(), current_session_id or session.session_id)
-            buffer_nonempty = False
-
-        current_session_id = session.session_id
-
-        # Issue #10: inject session boundary marker so LLM sees temporal context
+    def _session_text(session: Session) -> str:
+        """Format a session as a self-contained transcript with date header."""
+        lines = []
         if session.datetime_str:
-            buffer.add(f"[Session: {session.session_id} | Date: {session.datetime_str}]")
-            buffer_nonempty = True
-
+            lines.append(f"[Session: {session.session_id} | Date: {session.datetime_str}]")
         for turn in session.turns:
-            line = f"{turn.speaker}: {turn.text}"
-            should_flush = buffer.add(line)
-            buffer_nonempty = True
-            if should_flush:
-                _flush(buffer.flush(), session.session_id)
-                buffer_nonempty = False
-            turn_idx += 1
-            if verbose and turn_idx % 50 == 0:
-                print(f"  [ingest] {turn_idx}/{total_turn_count} turns, {total_nodes} nodes so far")
+            lines.append(f"{turn.speaker}: {turn.text}")
+        return "\n".join(lines)
 
-    # Flush any remaining buffered text
-    remaining = buffer.flush()
-    if remaining.strip():
-        _flush(remaining, current_session_id or (conv.sessions[-1].session_id if conv.sessions else "unknown"))
+    for i, session in enumerate(conv.sessions):
+        text = _session_text(session)
+        _extract_chunk(text, session.session_id)
+        if verbose:
+            print(f"  [ingest] {conv.sample_id} session {i+1}/{len(conv.sessions)} "
+                  f"({session.session_id}): {total_nodes} nodes so far")
 
     # Embed all nodes for semantic retrieval
     store.embed_missing_nodes()
@@ -154,13 +158,3 @@ def ingest_conversation(
         )
 
     return store, result
-
-
-def _session_transcript(session: Session, speaker_a: str, speaker_b: str) -> str:
-    """Format session turns as a plain-text transcript."""
-    lines = []
-    if session.datetime_str:
-        lines.append(f"[Conversation on {session.datetime_str}]")
-    for turn in session.turns:
-        lines.append(f"{turn.speaker}: {turn.text}")
-    return "\n".join(lines)
