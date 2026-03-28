@@ -15,6 +15,7 @@ from .config import get_db_path, get_project_dir, load_config
 from .extractor import (
     ExtractionBuffer,
     extract,
+    extract_config_items,
     extract_targeted,
     extract_turn,
     reconcile_group,
@@ -310,6 +311,83 @@ def extract_cmd(ctx, project, transcript_file, verify, lessons, decisions, quest
         )
 
 
+@cli.command("extract-config")
+@click.argument("project")
+@click.argument("config_file", type=click.Path(exists=True, dir_okay=False, readable=True))
+@click.option("--dry-run", is_flag=True, help="Print nodes without storing them")
+@click.option("--source", default=None, metavar="LABEL",
+              help="Source label stored on each node (defaults to filename)")
+@click.pass_context
+def extract_config_cmd(ctx, project, config_file, dry_run, source):
+    """Extract and classify items from a config file into the project graph.
+
+    Reads CONFIG_FILE (e.g. CLAUDE.md, MEMORY.md, SOUL.md), classifies each
+    item as pinned (always-inject) or conditional (relevance-gated), and inserts
+    the resulting nodes into PROJECT's graph.
+
+    Pinned nodes are flagged so they always appear in context output regardless
+    of query. Use 'engram pinned PROJECT' to review what's been pinned.
+    """
+    config = _load_cfg(ctx.obj["config_path"])
+    db_path = get_db_path(config, project)
+
+    if not db_path.parent.exists():
+        click.echo(f"Error: Project '{project}' not found.", err=True)
+        sys.exit(1)
+
+    config_path = Path(config_file)
+    config_text = config_path.read_text(encoding="utf-8")
+    source_label = source or config_path.name
+
+    click.echo(f"Extracting config items from '{config_path.name}' into '{project}'...")
+
+    try:
+        result = asyncio.run(extract_config_items(config_text, config))
+    except Exception as e:
+        click.echo(f"Error: Extraction failed: {e}", err=True)
+        sys.exit(1)
+
+    nodes = result.get("nodes", [])
+    if not nodes:
+        click.echo("No nodes extracted.")
+        return
+
+    pinned_count = sum(1 for n in nodes if n.get("pinned"))
+    conditional_count = len(nodes) - pinned_count
+
+    if dry_run:
+        click.echo(f"\nDry run — {len(nodes)} nodes ({pinned_count} pinned, {conditional_count} conditional):\n")
+        for node in nodes:
+            pin_marker = "[PINNED]" if node.get("pinned") else "[cond]  "
+            tags = ", ".join(node.get("tags", [])[:4])
+            click.echo(f"  {pin_marker} [{node.get('type', '?')}] {node['fact'][:90]}")
+            if tags:
+                click.echo(f"           tags: {tags}")
+        return
+
+    store = GraphStore(str(db_path))
+    inserted = 0
+    pinned_inserted = 0
+    now = datetime.now(timezone.utc).isoformat()
+
+    for node in nodes:
+        node.setdefault("created_at", now)
+        node["source_transcript"] = source_label
+        is_pinned = node.pop("pinned", False)
+        canonical_id = store.add_node(node)
+        inserted += 1
+        if is_pinned:
+            store.pin_node(canonical_id)
+            pinned_inserted += 1
+
+    store.close()
+
+    click.echo(
+        f"Inserted {inserted} nodes from '{config_path.name}': "
+        f"{pinned_inserted} pinned, {inserted - pinned_inserted} conditional."
+    )
+
+
 @cli.command("synthesize")
 @click.argument("project")
 @click.option("--dry-run", is_flag=True, help="Print synthesis nodes without storing them")
@@ -545,6 +623,80 @@ def show(ctx, project, failures):
                 click.echo(f"  [{node['type']}] {node['fact'][:80]}  ({tags})")
 
     store.close()
+
+
+@cli.command()
+@click.argument("project")
+@click.argument("node_id")
+@click.pass_context
+def pin(ctx, project, node_id):
+    """Pin a node so it always injects into context regardless of query relevance."""
+    config = _load_cfg(ctx.obj["config_path"])
+    db_path = get_db_path(config, project)
+    store = GraphStore(db_path)
+    ok = store.pin_node(node_id)
+    store.close()
+    if ok:
+        click.echo(f"Pinned node {node_id}")
+    else:
+        click.echo(f"Node {node_id} not found.", err=True)
+        sys.exit(1)
+
+
+@cli.command()
+@click.argument("project")
+@click.argument("node_id", required=False)
+@click.option("--source", default=None, metavar="LABEL",
+              help="Unpin all nodes with this source_transcript label (e.g. SOUL.md)")
+@click.pass_context
+def unpin(ctx, project, node_id, source):
+    """Remove the pinned flag from a node, or from all nodes matching a source label.
+
+    Either NODE_ID or --source is required.
+
+    Examples:
+
+      engram unpin myproject some_node_id
+
+      engram unpin myproject --source SOUL.md
+    """
+    if not node_id and not source:
+        click.echo("Error: provide NODE_ID or --source LABEL.", err=True)
+        sys.exit(1)
+    config = _load_cfg(ctx.obj["config_path"])
+    db_path = get_db_path(config, project)
+    store = GraphStore(db_path)
+    if source:
+        count = store.unpin_by_source(source)
+        store.close()
+        click.echo(f"Unpinned {count} node(s) with source '{source}'.")
+    else:
+        ok = store.unpin_node(node_id)
+        store.close()
+        if ok:
+            click.echo(f"Unpinned node {node_id}")
+        else:
+            click.echo(f"Node {node_id} not found.", err=True)
+            sys.exit(1)
+
+
+@cli.command("pinned")
+@click.argument("project")
+@click.pass_context
+def pinned_cmd(ctx, project):
+    """List all pinned nodes for a project."""
+    config = _load_cfg(ctx.obj["config_path"])
+    db_path = get_db_path(config, project)
+    store = GraphStore(db_path)
+    nodes = store.get_pinned_nodes()
+    store.close()
+    if not nodes:
+        click.echo("No pinned nodes.")
+        return
+    click.echo(f"Pinned nodes ({len(nodes)}):")
+    for node in nodes:
+        tags = ", ".join(node["tags"][:3]) if node["tags"] else ""
+        click.echo(f"  {node['id']}  [{node['type']}]  {node['fact'][:80]}  ({tags})")
 
 
 @cli.command()

@@ -92,14 +92,21 @@ def retrieve_with_stats(
     """
     strats = {**DEFAULT_STRATEGIES, **(strategies or {})}
 
-    keywords = extract_keywords(task_description)
-    log.debug("Retrieval: task=%r keywords=%s hops=%d top_k=%d", task_description[:80], keywords, hops, top_k)
-    if not keywords:
-        log.debug("No keywords extracted — returning empty result")
-        return RetrievalResult(markdown="No relevant context found.", nodes_before_strategies=0, nodes_after_strategies=0)
+    # Pinned nodes always inject regardless of query relevance
+    pinned_nodes = store.get_pinned_nodes()
+    pinned_ids = {n["id"] for n in pinned_nodes}
 
-    entry_nodes = store.get_nodes_by_tags(keywords)
-    log.debug("Tag search: %d entry nodes matched", len(entry_nodes))
+    keywords = extract_keywords(task_description)
+    log.debug("Retrieval: task=%r keywords=%s hops=%d top_k=%d pinned=%d", task_description[:80], keywords, hops, top_k, len(pinned_nodes))
+    if not keywords and not pinned_nodes:
+        log.debug("No keywords extracted and no pinned nodes — returning empty result")
+        return RetrievalResult(markdown="No relevant context found.", nodes_before_strategies=0, nodes_after_strategies=0)
+    if not keywords:
+        markdown = assemble_markdown([], task_description, [], pinned_nodes=pinned_nodes)
+        return RetrievalResult(markdown=markdown, nodes_before_strategies=0, nodes_after_strategies=0)
+
+    entry_nodes = [n for n in store.get_nodes_by_tags(keywords) if n["id"] not in pinned_ids]
+    log.debug("Tag search: %d entry nodes matched (excluding %d pinned)", len(entry_nodes), len(pinned_ids))
 
     # Augment with fact-text matches — catches nodes with sparse tags where keywords
     # appear in the fact itself but weren't extracted as tags by the LLM.
@@ -209,9 +216,12 @@ def retrieve_with_stats(
         collected_nodes = apply_token_budget(collected_nodes, strats["token_budget"])
         applied.append(f"token_budget({strats['token_budget']})")
 
+    # Exclude pinned node IDs from the relevance pool (they appear separately)
+    collected_nodes = [n for n in collected_nodes if n["id"] not in pinned_ids]
+
     nodes_after = len(collected_nodes)
     log.debug("Retrieval: %d nodes before strategies, %d after (strategies: %s)", nodes_before, nodes_after, applied)
-    markdown = assemble_markdown(collected_nodes, task_description, applied)
+    markdown = assemble_markdown(collected_nodes, task_description, applied, pinned_nodes=pinned_nodes)
     tokens_est = estimate_tokens(markdown)
 
     return RetrievalResult(
@@ -481,9 +491,15 @@ def cluster_by_tags(nodes: list[dict], max_cluster_size: int = 20) -> list[list[
     return result
 
 
-def assemble_markdown(nodes: list[dict], task: str, strategies_applied: list[str] | None = None) -> str:
+def assemble_markdown(
+    nodes: list[dict],
+    task: str,
+    strategies_applied: list[str] | None = None,
+    pinned_nodes: list[dict] | None = None,
+) -> str:
     """Assemble nodes into a formatted markdown context block."""
-    if not nodes:
+    pinned_nodes = pinned_nodes or []
+    if not nodes and not pinned_nodes:
         return "No relevant context found."
 
     lines = [
@@ -492,10 +508,21 @@ def assemble_markdown(nodes: list[dict], task: str, strategies_applied: list[str
         f"**Nodes:** {len(nodes)}",
     ]
 
+    if pinned_nodes:
+        lines.append(f"**Pinned:** {len(pinned_nodes)}")
+
     if strategies_applied:
         lines.append(f"**Strategies:** {', '.join(strategies_applied)}")
 
     lines.append("")
+
+    # Pinned nodes first — always-active context, exempt from relevance filtering
+    if pinned_nodes:
+        lines.append("## Always-Active Context")
+        lines.append("")
+        for node in pinned_nodes:
+            lines.append(f"- {node['fact']}")
+        lines.append("")
 
     # Group by type
     by_type: dict[str, list[dict]] = {}

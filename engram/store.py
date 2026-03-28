@@ -150,6 +150,18 @@ class GraphStore:
             log.info("Backfilled fact_hash for %d existing nodes", len(rows))
         self.conn.commit()
 
+        # Migration: add pinned column to nodes if it doesn't exist yet
+        try:
+            self.conn.execute("ALTER TABLE nodes ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0")
+            self.conn.commit()
+            log.info("Migrated nodes table: added pinned column")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_nodes_pinned ON nodes(pinned)"
+        )
+        self.conn.commit()
+
         # Migration: add weight column to edges if it doesn't exist yet
         try:
             self.conn.execute("ALTER TABLE edges ADD COLUMN weight REAL DEFAULT 1.0")
@@ -321,6 +333,43 @@ class GraphStore:
             f"SELECT * FROM nodes WHERE id IN ({placeholders})", node_ids
         ).fetchall()
         return [self._row_to_node(r) for r in rows]
+
+    def get_pinned_nodes(self) -> list[dict]:
+        """Return all pinned nodes, ordered by type then confidence descending."""
+        rows = self.conn.execute(
+            "SELECT * FROM nodes WHERE pinned = 1 ORDER BY type, confidence DESC"
+        ).fetchall()
+        return [self._row_to_node(r) for r in rows]
+
+    def pin_node(self, node_id: str) -> bool:
+        """Mark a node as pinned (always inject). Returns True if node existed."""
+        row = self.conn.execute("SELECT id FROM nodes WHERE id = ?", (node_id,)).fetchone()
+        if not row:
+            return False
+        self.conn.execute("UPDATE nodes SET pinned = 1 WHERE id = ?", (node_id,))
+        self.conn.commit()
+        return True
+
+    def unpin_node(self, node_id: str) -> bool:
+        """Remove pinned flag from a node. Returns True if node existed."""
+        row = self.conn.execute("SELECT id FROM nodes WHERE id = ?", (node_id,)).fetchone()
+        if not row:
+            return False
+        self.conn.execute("UPDATE nodes SET pinned = 0 WHERE id = ?", (node_id,))
+        self.conn.commit()
+        return True
+
+    def unpin_by_source(self, source_label: str) -> int:
+        """Remove pinned flag from all nodes with the given source_transcript label.
+
+        Returns the number of nodes unpinned.
+        """
+        cursor = self.conn.execute(
+            "UPDATE nodes SET pinned = 0 WHERE source_transcript = ? AND pinned = 1",
+            (source_label,),
+        )
+        self.conn.commit()
+        return cursor.rowcount
 
     def get_edges_for_nodes(self, node_ids: list[str]) -> list[dict]:
         """Fetch all edges where from_id or to_id is in node_ids."""

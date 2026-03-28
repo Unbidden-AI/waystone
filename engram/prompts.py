@@ -878,6 +878,35 @@ def build_synthesis_prompt(existing_nodes: list[dict]) -> str:
     return SYNTHESIS_PROMPT.replace("{existing_nodes}", nodes_block)
 
 
+CONFIG_EXTRACTION_PROMPT = """\
+You are extracting instructions and rules from a configuration file into a structured knowledge graph.
+
+Each item in the file should become one node. For each node, decide:
+- **pinned: true** if the item should ALWAYS be present in every AI context window, regardless of what the user is working on. Examples: persona/identity instructions, core behavioral rules, vault-level access rules, communication style.
+- **pinned: false** if the item is only relevant when the current task/topic matches. Examples: project-specific commands, domain technical rules, workflow steps for specific tools.
+
+Return a JSON object with a "nodes" array. Each node must have:
+  - "id": unique slug (snake_case, max 40 chars)
+  - "fact": the instruction or rule, verbatim or lightly cleaned, as a complete sentence
+  - "type": one of: constraint, preference, instruction, identity, workflow
+  - "confidence": 1.0 (all config items are verified facts)
+  - "pinned": true or false
+  - "tags": 3-8 lowercase keywords relevant to when this rule applies
+
+Configuration file:
+---
+{config_text}
+---
+
+Return only valid JSON. No explanation.
+"""
+
+
+def build_config_extraction_prompt(config_text: str) -> str:
+    """Build the prompt for extracting and classifying config file items."""
+    return CONFIG_EXTRACTION_PROMPT.replace("{config_text}", config_text)
+
+
 def build_reconcile_prompt(nodes: list[dict]) -> str:
     """Format the reconcile prompt with a group of candidate nodes."""
     lines = []

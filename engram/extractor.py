@@ -311,7 +311,11 @@ async def extract(transcript_text: str, config: dict, store=None, source_transcr
             density, floor
         )
         try:
-            extra_extraction = await extract(transcript_text, config, store, source_transcript)
+            extra_content = await _call_llm(
+                build_extraction_prompt(transcript_text, existing_nodes=existing_nodes),
+                config,
+            )
+            extra_extraction = assign_ids(parse_llm_response(extra_content))
             extra_nodes = extra_extraction["nodes"]
             extra_edges = extra_extraction["edges"]
 
@@ -475,6 +479,38 @@ async def extract_turn(
         if e.get("source") in valid_node_ids or e.get("target") in valid_node_ids
     ]
     return result
+
+
+async def extract_config_items(config_text: str, config: dict) -> dict:
+    """Extract and classify items from a config file (CLAUDE.md, MEMORY.md, SOUL.md, etc.).
+
+    Each item in the file becomes a node. The LLM classifies each as pinned=true
+    (always inject) or pinned=false (only inject when relevant).
+
+    Returns:
+        dict with "nodes" list — each node has id, fact, type, confidence, pinned, tags.
+    """
+    from engram.prompts import build_config_extraction_prompt
+    prompt = build_config_extraction_prompt(config_text)
+    content_str = await _call_llm(prompt, config)
+    # Parse response — config extraction uses a simpler schema (no edges)
+    cleaned = re.sub(r"<think>.*?</think>", "", content_str, flags=re.DOTALL).strip()
+    cleaned = re.sub(r"^```(?:json)?\s*\n?", "", cleaned)
+    cleaned = re.sub(r"\n?```\s*$", "", cleaned)
+    try:
+        result = json.loads(cleaned)
+    except json.JSONDecodeError:
+        candidate = _extract_first_json_object(cleaned)
+        if not candidate:
+            raise ValueError(f"Could not parse JSON from LLM response: {content_str[:300]}")
+        result = json.loads(candidate)
+    nodes = result.get("nodes", [])
+    # Ensure each node has required fields
+    for node in nodes:
+        node.setdefault("confidence", 1.0)
+        node.setdefault("tags", [])
+        node.setdefault("pinned", False)
+    return {"nodes": nodes}
 
 
 def parse_llm_response(content: str) -> dict:
