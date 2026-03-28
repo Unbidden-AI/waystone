@@ -30,7 +30,7 @@ def _get_model():
     if _model is None:
         from sentence_transformers import SentenceTransformer
         log.info("Loading embedding model %s (first use — may take a moment)", _MODEL_NAME)
-        _model = SentenceTransformer(_MODEL_NAME)
+        _model = SentenceTransformer(_MODEL_NAME, local_files_only=True)
     return _model
 
 

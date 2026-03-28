@@ -170,6 +170,18 @@ class GraphStore:
         except sqlite3.OperationalError:
             pass  # Column already exists
 
+        # Migration: add usage tracking columns
+        for col_def in [
+            "ALTER TABLE nodes ADD COLUMN hit_count INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE nodes ADD COLUMN entry_hit_count INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE nodes ADD COLUMN last_used_at TEXT",
+        ]:
+            try:
+                self.conn.execute(col_def)
+                self.conn.commit()
+            except sqlite3.OperationalError:
+                pass  # Column already exists
+
         # Create vec0 virtual table for semantic search (requires sqlite-vec loaded)
         if self._vec_available:
             from engram.embedder import EMBEDDING_DIM
@@ -206,6 +218,41 @@ class GraphStore:
             self.conn.commit()
             log.debug("Dedup: merged node %s into existing %s", node["id"], existing_id)
             return existing_id
+
+        # Semantic dedup: check for paraphrase duplicates before inserting
+        _new_blob: bytes | None = None
+        if self._vec_available:
+            from engram import embedder as _embedder
+            if _embedder.is_available():
+                try:
+                    _new_blob = _embedder.embed_text(node["fact"])
+                    for nid in self.search_by_embedding(_new_blob, top_k=6):
+                        nb = self.conn.execute(
+                            "SELECT embedding FROM node_embeddings WHERE node_id = ?", (nid,)
+                        ).fetchone()
+                        if not nb:
+                            continue
+                        sim = _embedder.cosine_similarity(_new_blob, bytes(nb[0]))
+                        if sim >= 0.92:
+                            existing_row2 = self.conn.execute(
+                                "SELECT tags, confidence FROM nodes WHERE id = ?", (nid,)
+                            ).fetchone()
+                            if existing_row2:
+                                merged_tags2 = sorted(set(json.loads(existing_row2[0])) | set(tags))
+                                merged_conf2 = max(existing_row2[1], node.get("confidence", 0.5))
+                                self.conn.execute(
+                                    "UPDATE nodes SET tags = ?, confidence = ? WHERE id = ?",
+                                    (json.dumps(merged_tags2), merged_conf2, nid),
+                                )
+                                self.conn.commit()
+                                log.debug(
+                                    "Semantic dedup at insert: merged into %s (sim=%.3f)", nid, sim
+                                )
+                                return nid
+                except Exception:
+                    log.debug("Semantic dedup check failed, inserting normally", exc_info=True)
+                    _new_blob = None
+
         self.conn.execute(
             """INSERT OR REPLACE INTO nodes
                (id, fact, type, confidence, source_transcript,
@@ -225,6 +272,12 @@ class GraphStore:
             ),
         )
         self.conn.commit()
+        # Eagerly store the embedding so future add_node calls can find this node
+        if _new_blob is not None:
+            try:
+                self.store_embeddings([(node["id"], _new_blob)])
+            except Exception:
+                log.debug("Failed to store embedding for new node %s", node["id"], exc_info=True)
         return node["id"]
 
     def delete_node(self, node_id: str) -> bool:
@@ -235,6 +288,161 @@ class GraphStore:
         self.conn.execute("DELETE FROM edges WHERE from_id = ? OR to_id = ?", (node_id, node_id))
         self.conn.execute("DELETE FROM nodes WHERE id = ?", (node_id,))
         self.conn.commit()
+        return True
+
+    def record_hits(self, node_ids: list[str], entry_ids: set[str]) -> None:
+        """Increment retrieval counters for a set of nodes.
+
+        node_ids: all nodes returned by a retrieval (BFS results after strategies)
+        entry_ids: subset that were direct BFS entry points (tag/semantic/fact-text matches)
+        """
+        if not node_ids:
+            return
+        now = datetime.now(timezone.utc).isoformat()
+        self.conn.executemany(
+            "UPDATE nodes SET hit_count = hit_count + 1, last_used_at = ? WHERE id = ?",
+            [(now, nid) for nid in node_ids],
+        )
+        if entry_ids:
+            self.conn.executemany(
+                "UPDATE nodes SET entry_hit_count = entry_hit_count + 1 WHERE id = ?",
+                [(nid,) for nid in entry_ids if nid in set(node_ids)],
+            )
+        self.conn.commit()
+
+    def vacuum_unused(
+        self,
+        min_age_days: int = 90,
+        max_confidence: float = 0.75,
+        dry_run: bool = False,
+    ) -> list[str]:
+        """Delete nodes that have never been retrieved and are likely stale.
+
+        Criteria (all must be true):
+          - hit_count = 0  (never returned by any query)
+          - last_used_at IS NULL
+          - created_at older than min_age_days
+          - confidence < max_confidence
+          - not pinned
+
+        Returns list of deleted node IDs (or would-delete IDs in dry_run).
+        """
+        cutoff = (
+            datetime.now(timezone.utc).replace(tzinfo=None)
+            - __import__("datetime").timedelta(days=min_age_days)
+        ).isoformat()
+        rows = self.conn.execute(
+            """SELECT id FROM nodes
+               WHERE hit_count = 0
+                 AND last_used_at IS NULL
+                 AND created_at < ?
+                 AND confidence < ?
+                 AND pinned = 0""",
+            (cutoff, max_confidence),
+        ).fetchall()
+        ids = [r[0] for r in rows]
+        if not dry_run and ids:
+            self.conn.executemany(
+                "DELETE FROM edges WHERE from_id = ? OR to_id = ?",
+                [(nid, nid) for nid in ids],
+            )
+            self.conn.executemany("DELETE FROM nodes WHERE id = ?", [(nid,) for nid in ids])
+            self.conn.commit()
+        return ids
+
+    def find_semantic_duplicates(
+        self, threshold: float = 0.92, top_k: int = 5, limit: int = 0
+    ) -> list[tuple[str, str, float]]:
+        """Find semantically similar node pairs above a cosine similarity threshold.
+
+        Returns list of (keep_id, drop_id, similarity) where keep_id is the higher-confidence
+        node of the pair. Each pair appears exactly once (deduplicated).
+
+        No-op if sqlite-vec or sentence-transformers are unavailable.
+        """
+        if not self._vec_available:
+            return []
+        from engram import embedder
+        if not embedder.is_available():
+            return []
+
+        sql = (
+            "SELECT e.node_id, e.embedding, n.confidence "
+            "FROM node_embeddings e JOIN nodes n ON e.node_id = n.id "
+            "ORDER BY n.created_at DESC"
+        )
+        rows = self.conn.execute(sql if not limit else sql + f" LIMIT {limit}").fetchall()
+        if len(rows) < 2:
+            return []
+
+        conf_map = {r[0]: r[2] for r in rows}
+        seen_pairs: set[frozenset] = set()
+        duplicates: list[tuple[str, str, float]] = []
+
+        for node_id, blob, conf in rows:
+            blob_bytes = bytes(blob)
+            neighbor_ids = self.search_by_embedding(blob_bytes, top_k=top_k + 1)
+            for nid in neighbor_ids:
+                if nid == node_id:
+                    continue
+                pair_key = frozenset({node_id, nid})
+                if pair_key in seen_pairs:
+                    continue
+                seen_pairs.add(pair_key)
+                neighbor_row = self.conn.execute(
+                    "SELECT embedding FROM node_embeddings WHERE node_id = ?", (nid,)
+                ).fetchone()
+                if not neighbor_row:
+                    continue
+                sim = embedder.cosine_similarity(blob_bytes, bytes(neighbor_row[0]))
+                if sim >= threshold:
+                    if conf_map.get(node_id, 0) >= conf_map.get(nid, 0):
+                        keep_id, drop_id = node_id, nid
+                    else:
+                        keep_id, drop_id = nid, node_id
+                    duplicates.append((keep_id, drop_id, sim))
+
+        return duplicates
+
+    def merge_node_into(self, keep_id: str, drop_id: str) -> bool:
+        """Merge drop_id into keep_id: union tags, max confidence, rewrite edges, delete drop_id.
+
+        Returns True if both nodes existed and the merge was performed.
+        """
+        keep_row = self.conn.execute(
+            "SELECT tags, confidence FROM nodes WHERE id = ?", (keep_id,)
+        ).fetchone()
+        drop_row = self.conn.execute(
+            "SELECT tags, confidence FROM nodes WHERE id = ?", (drop_id,)
+        ).fetchone()
+        if not keep_row or not drop_row:
+            return False
+
+        merged_tags = sorted(set(json.loads(keep_row[0])) | set(json.loads(drop_row[0])))
+        merged_conf = max(keep_row[1], drop_row[1])
+        self.conn.execute(
+            "UPDATE nodes SET tags = ?, confidence = ? WHERE id = ?",
+            (json.dumps(merged_tags), merged_conf, keep_id),
+        )
+        # Copy drop's outgoing edges to keep (skip self-loops and conflicts via OR IGNORE)
+        self.conn.execute(
+            "INSERT OR IGNORE INTO edges (from_id, to_id, relation) "
+            "SELECT ?, to_id, relation FROM edges WHERE from_id = ? AND to_id != ?",
+            (keep_id, drop_id, keep_id),
+        )
+        # Copy drop's incoming edges to keep (skip self-loops and conflicts via OR IGNORE)
+        self.conn.execute(
+            "INSERT OR IGNORE INTO edges (from_id, to_id, relation) "
+            "SELECT from_id, ?, relation FROM edges WHERE to_id = ? AND from_id != ?",
+            (keep_id, drop_id, keep_id),
+        )
+        # Remove all edges that still reference drop_id
+        self.conn.execute("DELETE FROM edges WHERE from_id = ? OR to_id = ?", (drop_id, drop_id))
+        self.conn.execute("DELETE FROM nodes WHERE id = ?", (drop_id,))
+        if self._vec_available:
+            self.conn.execute("DELETE FROM node_embeddings WHERE node_id = ?", (drop_id,))
+        self.conn.commit()
+        log.debug("Semantic dedup: merged %s into %s", drop_id, keep_id)
         return True
 
     def update_node_fact(self, node_id: str, new_fact: str, new_confidence: float | None = None) -> bool:
