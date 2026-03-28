@@ -334,6 +334,17 @@ class GraphStore:
         ).fetchall()
         return [self._row_to_node(r) for r in rows]
 
+    def get_pinned_embeddings(self) -> list[tuple[str, str, bytes]]:
+        """Return (id, fact, embedding_blob) for all pinned nodes that have embeddings."""
+        if not self._vec_available:
+            return []
+        rows = self.conn.execute(
+            "SELECT n.id, n.fact, e.embedding "
+            "FROM nodes n JOIN node_embeddings e ON n.id = e.node_id "
+            "WHERE n.pinned = 1"
+        ).fetchall()
+        return [(r[0], r[1], bytes(r[2])) for r in rows]
+
     def get_pinned_nodes(self) -> list[dict]:
         """Return all pinned nodes, ordered by type then confidence descending."""
         rows = self.conn.execute(

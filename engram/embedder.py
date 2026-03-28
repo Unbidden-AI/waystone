@@ -51,3 +51,15 @@ def embed_texts(texts: list[str]) -> list[bytes]:
 def embed_text(text: str) -> bytes:
     """Return embedding as float32 bytes for a single text."""
     return embed_texts([text])[0]
+
+
+def cosine_similarity(blob_a: bytes, blob_b: bytes) -> float:
+    """Cosine similarity between two float32 embedding blobs. Returns [-1, 1]."""
+    a = struct.unpack(f"{EMBEDDING_DIM}f", blob_a)
+    b = struct.unpack(f"{EMBEDDING_DIM}f", blob_b)
+    dot = sum(x * y for x, y in zip(a, b))
+    norm_a = sum(x * x for x in a) ** 0.5
+    norm_b = sum(x * x for x in b) ** 0.5
+    if norm_a == 0.0 or norm_b == 0.0:
+        return 0.0
+    return dot / (norm_a * norm_b)

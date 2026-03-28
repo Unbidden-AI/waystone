@@ -317,8 +317,12 @@ def extract_cmd(ctx, project, transcript_file, verify, lessons, decisions, quest
 @click.option("--dry-run", is_flag=True, help="Print nodes without storing them")
 @click.option("--source", default=None, metavar="LABEL",
               help="Source label stored on each node (defaults to filename)")
+@click.option("--dedup-threshold", type=float, default=0.75, show_default=True,
+              metavar="FLOAT",
+              help="Cosine similarity threshold above which a new pinned node is considered "
+                   "redundant with an existing pinned node and skipped (0 = disable).")
 @click.pass_context
-def extract_config_cmd(ctx, project, config_file, dry_run, source):
+def extract_config_cmd(ctx, project, config_file, dry_run, source, dedup_threshold):
     """Extract and classify items from a config file into the project graph.
 
     Reads CONFIG_FILE (e.g. CLAUDE.md, MEMORY.md, SOUL.md), classifies each
@@ -355,36 +359,87 @@ def extract_config_cmd(ctx, project, config_file, dry_run, source):
     pinned_count = sum(1 for n in nodes if n.get("pinned"))
     conditional_count = len(nodes) - pinned_count
 
+    store = GraphStore(str(db_path))
+
+    # Build dedup index: embed existing pinned nodes for similarity comparison.
+    # Only used when dedup_threshold > 0 and embedder is available.
+    dedup_index: list[tuple[str, str, bytes]] = []
+    embedder_ok = False
+    if dedup_threshold > 0:
+        from engram import embedder as _embedder
+        if _embedder.is_available() and store._vec_available:
+            embedder_ok = True
+            dedup_index = store.get_pinned_embeddings()
+
+    def _find_duplicate(fact: str) -> tuple[str, str, float] | None:
+        """Return (matched_id, matched_fact, sim) if fact is near-duplicate of a pinned node."""
+        if not embedder_ok or not dedup_index:
+            return None
+        from engram import embedder as _embedder
+        blob = _embedder.embed_text(fact)
+        best_id, best_fact, best_sim = "", "", 0.0
+        for pid, pfact, pemb in dedup_index:
+            sim = _embedder.cosine_similarity(blob, pemb)
+            if sim > best_sim:
+                best_sim, best_id, best_fact = sim, pid, pfact
+        if best_sim >= dedup_threshold:
+            return best_id, best_fact, best_sim
+        return None
+
     if dry_run:
         click.echo(f"\nDry run — {len(nodes)} nodes ({pinned_count} pinned, {conditional_count} conditional):\n")
         for node in nodes:
-            pin_marker = "[PINNED]" if node.get("pinned") else "[cond]  "
+            is_pinned = node.get("pinned", False)
+            pin_marker = "[PINNED]" if is_pinned else "[cond]  "
             tags = ", ".join(node.get("tags", [])[:4])
             click.echo(f"  {pin_marker} [{node.get('type', '?')}] {node['fact'][:90]}")
             if tags:
                 click.echo(f"           tags: {tags}")
+            if is_pinned and dedup_threshold > 0:
+                dup = _find_duplicate(node["fact"])
+                if dup:
+                    dup_id, dup_fact, dup_sim = dup
+                    click.echo(
+                        f"           DEDUP [sim={dup_sim:.3f} vs '{dup_id}']: "
+                        f"{dup_fact[:70]}"
+                    )
+        store.close()
         return
 
-    store = GraphStore(str(db_path))
     inserted = 0
     pinned_inserted = 0
+    dedup_skipped = 0
     now = datetime.now(timezone.utc).isoformat()
 
     for node in nodes:
         node.setdefault("created_at", now)
         node["source_transcript"] = source_label
         is_pinned = node.pop("pinned", False)
+        # Dedup check: skip pinning (but still insert) if near-duplicate pinned node exists.
+        skip_pin = False
+        if is_pinned:
+            dup = _find_duplicate(node["fact"])
+            if dup:
+                dup_id, dup_fact, dup_sim = dup
+                click.echo(
+                    f"  [dedup] Skipped pin (sim={dup_sim:.3f} vs '{dup_id}'): "
+                    f"{node['fact'][:70]}"
+                )
+                skip_pin = True
+                dedup_skipped += 1
         canonical_id = store.add_node(node)
         inserted += 1
-        if is_pinned:
+        if is_pinned and not skip_pin:
             store.pin_node(canonical_id)
             pinned_inserted += 1
 
     store.close()
 
+    dedup_note = f", {dedup_skipped} dedup-skipped" if dedup_skipped else ""
     click.echo(
         f"Inserted {inserted} nodes from '{config_path.name}': "
-        f"{pinned_inserted} pinned, {inserted - pinned_inserted} conditional."
+        f"{pinned_inserted} pinned, {inserted - pinned_inserted - dedup_skipped} conditional"
+        f"{dedup_note}."
     )
 
 

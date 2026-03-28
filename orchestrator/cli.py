@@ -7,6 +7,33 @@ import logging
 import sys
 from pathlib import Path
 
+_REPL_COMMANDS = ["/help", "/reset", "/stats", "/quit"]
+
+try:
+    import readline
+
+    def _completer(text: str, state: int) -> str | None:
+        matches = [c for c in _REPL_COMMANDS if c.startswith(text)]
+        return matches[state] if state < len(matches) else None
+
+    readline.set_completer(_completer)
+    # macOS uses libedit; GNU readline uses a different bind syntax
+    try:
+        readline.parse_and_bind("bind ^I rl_complete")  # libedit (macOS)
+    except Exception:
+        readline.parse_and_bind("tab: complete")  # GNU readline (Linux)
+
+    _HISTORY_FILE = Path.home() / ".engram_history"
+    try:
+        readline.read_history_file(_HISTORY_FILE)
+    except OSError:
+        pass
+    readline.set_history_length(500)
+    import atexit
+    atexit.register(readline.write_history_file, _HISTORY_FILE)
+except ImportError:
+    pass  # Windows — no readline, graceful degradation
+
 import click
 
 from engram.config import get_db_path, load_config
