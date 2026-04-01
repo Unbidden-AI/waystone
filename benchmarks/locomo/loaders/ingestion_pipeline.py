@@ -6,6 +6,12 @@ per session, matching how the Stop hook works in real-time use. If a session is
 too large for a single extraction call (finish_reason=length), it is bisected
 and each half retried recursively.
 
+Context carry-forward: to resolve co-references that span session boundaries or
+bisection boundaries, a small tail of prior raw text is prepended as a read-only
+header. The LLM is instructed not to re-extract from it — it exists only so that
+"she mentioned her new job" in turn 2 of session 3 can be resolved to the entity
+established at the end of session 2.
+
 We store one GraphStore per conversation (isolated DB per sample_id) so runs
 are reproducible and parallel-safe.
 """
@@ -43,6 +49,7 @@ def ingest_conversation(
     db_dir: str | Path | None = None,
     verbose: bool = False,
     domain: str | None = None,
+    dedup_threshold: float = 0.92,
 ) -> tuple[GraphStore, IngestionResult]:
     """
     Ingest a LOCOMO conversation into a fresh GraphStore.
@@ -69,7 +76,7 @@ def ingest_conversation(
     if domain is not None:
         config = {**config, "domain": {"name": domain}}
     domain_profile = get_domain_profile(config)
-    store = GraphStore(db_path)
+    store = GraphStore(db_path, dedup_threshold=dedup_threshold)
 
     t0 = time.perf_counter()
     errors = []
@@ -77,11 +84,34 @@ def ingest_conversation(
     source_label = conv.sample_id
     ctx_k = 30
     ctx_hops = 2
+    # Number of lines to carry forward as read-only context across bisection and
+    # session boundaries. Small enough to not bloat the prompt; large enough to
+    # resolve a co-reference ("she finally told me" → entity from prior turns).
+    CONTEXT_TAIL_LINES = 4
 
-    def _extract_chunk(text: str, session_id: str, depth: int = 0) -> None:
+    def _build_prompt_text(main_text: str, prior_tail: str | None) -> str:
+        """Prepend a read-only prior-context header when available."""
+        if not prior_tail:
+            return main_text
+        return (
+            "[Prior context — already extracted. Use only to resolve co-references "
+            "in the current segment. Do NOT re-extract facts from this block.]\n"
+            + prior_tail
+            + "\n\n[Current segment — extract from this:]\n"
+            + main_text
+        )
+
+    def _extract_chunk(
+        text: str,
+        session_id: str,
+        depth: int = 0,
+        prior_tail: str | None = None,
+        occurred_at: str | None = None,
+    ) -> None:
         """Extract a text chunk, bisecting on output-length truncation."""
         nonlocal total_nodes
-        keywords = extract_keywords(text)
+        prompt_text = _build_prompt_text(text, prior_tail)
+        keywords = extract_keywords(text)  # keywords from main text only
         context_nodes: list[dict] = []
         if keywords:
             entry_nodes = store.get_nodes_by_tags(keywords)
@@ -91,17 +121,21 @@ def ingest_conversation(
                 context_nodes.sort(key=lambda n: n.get("_relevance", 0), reverse=True)
                 context_nodes = context_nodes[:ctx_k]
         try:
-            extraction = asyncio.run(extract_turn(text, context_nodes, config, domain_profile))
+            extraction = asyncio.run(extract_turn(prompt_text, context_nodes, config, domain_profile))
             nodes = extraction.get("nodes", [])
             edges = extraction.get("edges", [])
             for node in nodes:
                 node["source_transcript"] = f"{source_label}/{session_id}"
                 node.setdefault("created_at", datetime.now(timezone.utc).isoformat())
+                if occurred_at:
+                    node.setdefault("occurred_at", occurred_at)
             store.merge_extraction(nodes, edges)
             total_nodes += len(nodes)
         except ValueError as e:
             if "finish_reason=length" in str(e) and depth < 4:
-                # Output window exceeded — bisect on a newline boundary and retry
+                # Output window exceeded — bisect on a newline boundary and retry.
+                # The second half gets the last few lines of the first half as
+                # prior context so cross-bisection co-references can be resolved.
                 lines = text.splitlines()
                 if len(lines) < 2:
                     errors.append(f"{session_id}: chunk too small to bisect: {e}")
@@ -109,8 +143,11 @@ def ingest_conversation(
                 mid = len(lines) // 2
                 if verbose:
                     print(f"  [bisect] {session_id}: splitting {len(lines)} lines at {mid} (depth={depth})")
-                _extract_chunk("\n".join(lines[:mid]), session_id, depth + 1)
-                _extract_chunk("\n".join(lines[mid:]), session_id, depth + 1)
+                first_half = "\n".join(lines[:mid])
+                second_half = "\n".join(lines[mid:])
+                bisect_tail = "\n".join(lines[max(0, mid - CONTEXT_TAIL_LINES):mid])
+                _extract_chunk(first_half, session_id, depth + 1, prior_tail=prior_tail, occurred_at=occurred_at)
+                _extract_chunk(second_half, session_id, depth + 1, prior_tail=bisect_tail, occurred_at=occurred_at)
             else:
                 errors.append(f"{session_id}: {e}")
                 if verbose:
@@ -121,23 +158,71 @@ def ingest_conversation(
                 print(f"  [warn] extract_turn failed for {session_id}: {e}")
 
     def _session_text(session: Session) -> str:
-        """Format a session as a self-contained transcript with date header."""
+        """Format a session as a self-contained transcript with date header.
+
+        Includes both the raw datetime string and a parsed ISO date so the
+        extraction model can reliably follow temporal resolution instructions
+        (replacing 'last week', 'yesterday', etc. with absolute dates).
+        """
         lines = []
         if session.datetime_str:
-            lines.append(f"[Session: {session.session_id} | Date: {session.datetime_str}]")
+            iso = _parse_session_date(session.datetime_str)
+            if iso:
+                # ISO date gives the model an unambiguous reference for resolving
+                # relative phrases — "last week" → week before this date.
+                lines.append(f"[Session: {session.session_id} | Date: {iso[:10]}]")
+            else:
+                lines.append(f"[Session: {session.session_id} | Date: {session.datetime_str}]")
         for turn in session.turns:
             lines.append(f"{turn.speaker}: {turn.text}")
         return "\n".join(lines)
 
+    def _parse_session_date(datetime_str: str | None) -> str | None:
+        """Parse LOCOMO session date string to ISO-8601 UTC.
+
+        Input format: '7:31 pm on 21 January, 2022'
+        Returns ISO string or None if unparseable.
+        """
+        if not datetime_str:
+            return None
+        for fmt in ("%I:%M %p on %d %B, %Y", "%I:%M %p on %d %B %Y"):
+            try:
+                dt = datetime.strptime(datetime_str.strip(), fmt)
+                return dt.replace(tzinfo=timezone.utc).isoformat()
+            except ValueError:
+                continue
+        return None
+
+    prev_session_tail: str | None = None
     for i, session in enumerate(conv.sessions):
         text = _session_text(session)
-        _extract_chunk(text, session.session_id)
+        session_occurred_at = _parse_session_date(session.datetime_str)
+        _extract_chunk(text, session.session_id, prior_tail=prev_session_tail,
+                       occurred_at=session_occurred_at)
+        # Capture the last N raw turns of this session (excluding the date header)
+        # for the next session to use as co-reference context.
+        session_lines = [f"{t.speaker}: {t.text}" for t in session.turns]
+        prev_session_tail = "\n".join(session_lines[-CONTEXT_TAIL_LINES:])
         if verbose:
             print(f"  [ingest] {conv.sample_id} session {i+1}/{len(conv.sessions)} "
                   f"({session.session_id}): {total_nodes} nodes so far")
 
     # Embed all nodes for semantic retrieval
     store.embed_missing_nodes()
+
+    # When sqlite-vec is unavailable (e.g. Python 3.14 macOS), the per-insert
+    # semantic dedup is skipped, causing paraphrase variants to accumulate as
+    # separate nodes.  Run a post-ingest brute-force dedup pass to recover.
+    if not store._vec_available:
+        from engram import embedder as _emb
+        if _emb.is_available():
+            dedup_removed = store.dedup_nodes_brute_force()
+            if verbose and dedup_removed:
+                print(
+                    f"  [dedup] {conv.sample_id}: removed {dedup_removed} duplicate nodes "
+                    f"({total_nodes} → {total_nodes - dedup_removed})"
+                )
+            total_nodes -= dedup_removed
 
     elapsed = time.perf_counter() - t0
 

@@ -27,6 +27,7 @@ import json
 import sys
 import tempfile
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
@@ -54,10 +55,12 @@ def run_benchmark(
     split: str = "dev",
     limit: int | None = None,
     use_llm_judge: bool = False,
-    llm_model: str = "claude-haiku-4-5-20251001",
+    llm_model: str = "gemini-2.5-flash-lite",
     categories: list[int] | None = None,
     db_dir: str | None = None,
     verbose: bool = True,
+    sample_ids_override: list[str] | None = None,
+    conv_workers: int = 4,
 ) -> dict[str, Any]:
     """
     Run the LOCOMO benchmark for one or more ablation configs.
@@ -72,6 +75,9 @@ def run_benchmark(
         sample_ids = ALL
     else:
         raise ValueError(f"split must be 'dev', 'test', or 'all', got {split!r}")
+
+    if sample_ids_override:
+        sample_ids = sample_ids_override
 
     ds = LocomoDataset(dataset_path)
 
@@ -117,6 +123,7 @@ def run_benchmark(
             categories=categories,
             db_dir=db_dir,
             verbose=verbose,
+            conv_workers=conv_workers,
         )
         results["configs"][config_name] = config_results
 
@@ -150,22 +157,28 @@ def _run_config(
     categories: list[int] | None,
     db_dir: str | None,
     verbose: bool,
+    conv_workers: int = 4,
 ) -> dict[str, Any]:
-    """Run a single ablation config across all (limited) conversations."""
-    all_scoring_results: list[ScoringResult] = []
-    all_ingestion_results: list[dict] = []
-    budget = TokenBudget()
+    """Run a single ablation config across all (limited) conversations.
 
+    Conversations run in parallel (conv_workers threads). Each conversation's
+    retrieval pass is sequential (SQLite), but LLM judge calls within each
+    conversation are concurrent. With multiple conv_workers active simultaneously,
+    judge calls across conversations also run concurrently.
+    """
     tmp_dir = db_dir or tempfile.mkdtemp(prefix=f"locomo_{config.name}_")
+    conversations = list(ds.iter_conversations(limit=limit, sample_ids=sample_ids))
 
-    for conv in ds.iter_conversations(limit=limit, sample_ids=sample_ids):
+    def _process_one_conv(conv) -> dict[str, Any]:
+        """Process a single conversation: ingest (if needed) + retrieve + judge."""
         if verbose:
             print(f"  [{config.name}] {conv.sample_id}: "
                   f"{len(conv.sessions)} sessions, {len(conv.qa_pairs)} QA")
 
+        ingestion_entry: dict | None = None
+
         if config.full_context:
             store = None
-            ingestion_result = None
         else:
             from pathlib import Path as _Path
             from engram.store import GraphStore as _GraphStore
@@ -174,27 +187,29 @@ def _run_config(
                 if verbose:
                     print(f"  [{config.name}] {conv.sample_id}: checkpoint found, skipping extraction")
                 store = _GraphStore(checkpoint_path)
-                ingestion_result = None
             else:
                 store, ingestion_result = ingest_conversation(
                     conv=conv,
                     db_dir=tmp_dir,
                     verbose=verbose,
                     domain=config.domain,
+                    dedup_threshold=config.dedup_threshold,
                 )
-            if ingestion_result:
-                all_ingestion_results.append({
-                    "sample_id": ingestion_result.sample_id,
-                    "nodes_created": ingestion_result.nodes_created,
-                    "elapsed_seconds": round(ingestion_result.elapsed_seconds, 2),
-                    "errors": ingestion_result.errors,
-                })
+                if ingestion_result:
+                    ingestion_entry = {
+                        "sample_id": ingestion_result.sample_id,
+                        "nodes_created": ingestion_result.nodes_created,
+                        "elapsed_seconds": round(ingestion_result.elapsed_seconds, 2),
+                        "errors": ingestion_result.errors,
+                    }
 
-        # Score each QA pair
+        # Retrieval pass — sequential (reads SQLite store)
         qa_pairs = conv.qa_pairs
         if categories:
             qa_pairs = [q for q in qa_pairs if q.category in categories]
 
+        retrieved: list[tuple[Any, str, float, list, list, int, str]] = []
+        tokens_total = 0
         for qa in qa_pairs:
             context = _retrieve_context(
                 conv=conv,
@@ -202,17 +217,18 @@ def _run_config(
                 store=store,
                 config=config,
             )
-
             tokens = estimate_tokens(context)
-            budget.retrieval_context += tokens
-            budget.query_count += 1
-
+            tokens_total += tokens
             kw_score, matched, missed = score_keyword_recall(context, qa.answer)
+            retrieved.append((qa, context, kw_score, matched, missed, tokens, qa.category_label))
 
-            llm_score = None
-            if use_llm_judge:
+        # LLM judge pass — concurrent (pure I/O, no shared state)
+        llm_scores: dict[int, float | None] = {i: None for i in range(len(retrieved))}
+        if use_llm_judge:
+            def _judge(idx_qa_ctx):
+                idx, qa, context = idx_qa_ctx
                 try:
-                    llm_score = score_llm_judge(
+                    return idx, score_llm_judge(
                         question=qa.question,
                         ground_truth_answer=qa.answer,
                         retrieved_context=context,
@@ -220,18 +236,73 @@ def _run_config(
                     )
                 except Exception as e:
                     if verbose:
-                        print(f"    [warn] LLM judge failed: {e}")
+                        print(f"    [warn] LLM judge failed for Q{idx}: {e}")
+                    return idx, None
 
-            all_scoring_results.append(ScoringResult(
+            with ThreadPoolExecutor(max_workers=20) as pool:
+                futures = [
+                    pool.submit(_judge, (i, qa, ctx))
+                    for i, (qa, ctx, *_) in enumerate(retrieved)
+                ]
+                for fut in as_completed(futures):
+                    idx, score = fut.result()
+                    llm_scores[idx] = score
+
+        scoring_results = [
+            ScoringResult(
                 question=qa.question,
                 ground_truth_answer=qa.answer,
                 retrieved_context=context,
                 keyword_score=kw_score,
-                llm_score=llm_score,
+                llm_score=llm_scores[i],
                 matched_keywords=matched,
                 missed_keywords=missed,
                 tokens_used=tokens,
-            ))
+            )
+            for i, (qa, context, kw_score, matched, missed, tokens, _) in enumerate(retrieved)
+        ]
+        cat_labels = [t[6] for t in retrieved]
+
+        return {
+            "scoring_results": scoring_results,
+            "cat_labels": cat_labels,
+            "ingestion_entry": ingestion_entry,
+            "tokens_total": tokens_total,
+            "query_count": len(retrieved),
+        }
+
+    # Run conversations in parallel
+    workers = min(conv_workers, len(conversations)) if conversations else 1
+    conv_outputs: list[dict] = [None] * len(conversations)  # type: ignore[list-item]
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        future_to_idx = {pool.submit(_process_one_conv, conv): i
+                         for i, conv in enumerate(conversations)}
+        for fut in as_completed(future_to_idx):
+            idx = future_to_idx[fut]
+            try:
+                conv_outputs[idx] = fut.result()
+            except Exception as e:
+                if verbose:
+                    print(f"  [error] conversation {conversations[idx].sample_id} failed: {e}")
+                conv_outputs[idx] = {
+                    "scoring_results": [], "cat_labels": [],
+                    "ingestion_entry": None, "tokens_total": 0, "query_count": 0,
+                }
+
+    # Merge results in original conversation order
+    all_scoring_results: list[ScoringResult] = []
+    all_categories: list[str] = []
+    all_ingestion_results: list[dict] = []
+    budget = TokenBudget()
+
+    for out in conv_outputs:
+        all_scoring_results.extend(out["scoring_results"])
+        all_categories.extend(out["cat_labels"])
+        if out["ingestion_entry"]:
+            all_ingestion_results.append(out["ingestion_entry"])
+        budget.retrieval_context += out["tokens_total"]
+        budget.query_count += out["query_count"]
 
     return {
         "config_name": config.name,
@@ -242,13 +313,24 @@ def _run_config(
             {
                 "question": r.question[:80],
                 "answer": r.ground_truth_answer,
+                "category": cat,
                 "keyword_score": r.keyword_score,
                 "llm_score": r.llm_score,
                 "tokens": r.tokens_used,
             }
-            for r in all_scoring_results
+            for r, cat in zip(all_scoring_results, all_categories)
         ],
     }
+
+
+def _build_prior_turns_window(conv, n: int) -> str:
+    """Return the last n raw turns across all sessions as a formatted string."""
+    all_turns = []
+    for session in conv.sessions:
+        for turn in session.turns:
+            all_turns.append(f"{turn.speaker}: {turn.text}")
+    tail = all_turns[-n:] if n < len(all_turns) else all_turns
+    return "\n".join(tail)
 
 
 def _retrieve_context(
@@ -269,29 +351,42 @@ def _retrieve_context(
                 lines.append(f"{turn.speaker}: {turn.text}")
         return "\n".join(lines)
 
-    if store is None or not config.use_bfs:
-        return ""
+    parts: list[str] = []
 
-    from engram.retriever import retrieve_with_stats
+    if config.use_bfs and store is not None:
+        from engram.retriever import retrieve_with_stats
 
-    strategies: dict[str, Any] = {
-        "superseded_pruning": config.superseded_pruning,
-        "recency_decay": config.recency_decay,
-        "confidence_threshold": config.confidence_threshold or 0.0,
-        "token_budget": config.token_budget or 0,
-        "semantic": config.semantic,
-    }
+        strategies: dict[str, Any] = {
+            "superseded_pruning": config.superseded_pruning,
+            "recency_decay": config.recency_decay,
+            "recency_half_life_days": config.recency_half_life_days,
+            "confidence_threshold": config.confidence_threshold or 0.0,
+            "token_budget": config.token_budget or 0,
+            "semantic": config.semantic,
+            "relevance_scoring": config.relevance_scoring,
+            "resolve_dates": config.resolve_dates,
+            "topk_formula": config.topk_formula,
+        }
 
-    try:
-        result = retrieve_with_stats(
-            store=store,
-            task_description=question,
-            top_k=config.top_k or 10,
-            strategies=strategies,
-        )
-        return result.markdown
-    except Exception:
-        return ""
+        try:
+            result = retrieve_with_stats(
+                store=store,
+                task_description=question,
+                hops=config.bfs_hops,
+                top_k=config.top_k,  # None triggers dynamic scaling in retrieve_with_stats
+                strategies=strategies,
+            )
+            if result.markdown:
+                parts.append(result.markdown)
+        except Exception:
+            pass
+
+    if config.prior_turns_window > 0:
+        window_text = _build_prior_turns_window(conv, config.prior_turns_window)
+        if window_text:
+            parts.append(f"## Recent Conversation\n{window_text}")
+
+    return "\n\n".join(parts)
 
 
 # ---------------------------------------------------------------------------
@@ -327,13 +422,14 @@ def main() -> None:
         help="Use LLM to judge answer quality (more accurate, uses API credits)",
     )
     parser.add_argument(
-        "--llm-model", default="claude-haiku-4-5-20251001",
-        help="Model for LLM judge",
+        "--llm-model", default="gemini-2.5-flash-lite",
+        help="Model for LLM judge (default: gemini-2.5-flash-lite, near-free; "
+             "use claude-haiku-4-5-20251001 for final paper numbers)",
     )
     parser.add_argument(
         "--categories", nargs="+", type=int,
-        help="Filter to QA categories (1=temporal, 2=explicit, 3=adversarial, "
-             "4=multi_session, 5=open_domain)",
+        help="Filter to QA categories (1=single_hop, 2=temporal, 3=open_domain, "
+             "4=multi_hop, 5=adversarial). Official protocol: use 1 2 3 4 (exclude cat 5).",
     )
     parser.add_argument(
         "--output", default=None,
@@ -341,11 +437,26 @@ def main() -> None:
     )
     parser.add_argument(
         "--db-dir", default=None,
-        help="Directory for SQLite DBs (default: temp dir)",
+        help="Directory for SQLite DBs. Use a stable path (e.g. ~/locomo_checkpoints) "
+             "to reuse ingest across runs — avoids expensive re-extraction. "
+             "Different domains or dedup_thresholds need different dirs.",
     )
     parser.add_argument(
         "--quiet", action="store_true",
         help="Suppress progress output",
+    )
+    parser.add_argument(
+        "--sample-ids", nargs="+", default=None, dest="sample_ids",
+        help="Limit to specific conversation IDs (e.g. conv-42). Overrides --split filtering.",
+    )
+    parser.add_argument(
+        "--quick", action="store_true",
+        help="Quick single-conversation test on conv-42. Use for change validation "
+             "before running the full dev set.",
+    )
+    parser.add_argument(
+        "--conv-workers", type=int, default=4, dest="conv_workers",
+        help="Number of conversations to process in parallel (default: 4).",
     )
     args = parser.parse_args()
 
@@ -356,17 +467,28 @@ def main() -> None:
     elif "paper" in config_names:
         config_names = PAPER_CONFIGS
 
+    # --quick: single-conversation change validation on conv-42
+    sample_ids_override = args.sample_ids
+    limit = args.limit
+    if args.quick:
+        sample_ids_override = ["conv-42"]
+        limit = 1
+        if not args.quiet:
+            print("[quick mode] Running on conv-42 only. Use full dev set only after approval.")
+
     run_benchmark(
         dataset_path=args.dataset,
         config_names=config_names,
         output_path=args.output,
         split=args.split,
-        limit=args.limit,
+        limit=limit,
         use_llm_judge=args.llm_judge,
         llm_model=args.llm_model,
         categories=args.categories,
         db_dir=args.db_dir,
         verbose=not args.quiet,
+        sample_ids_override=sample_ids_override,
+        conv_workers=args.conv_workers,
     )
 
 

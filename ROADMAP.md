@@ -188,7 +188,70 @@ def jsonl_to_markdown(jsonl_path: Path) -> str:
 
 ---
 
-## Phase 4: Distribution & Growth (ongoing)
+## Phase 4: Advanced Differentiation (parallel to Phase 2–3)
+
+These features are not required for launch but represent the highest-leverage architectural moats. Schedule them after Phase 1 ships and benchmark numbers are solid.
+
+### 4a: Local LLM Extraction (air-gapped / enterprise)
+
+**Problem**: Enterprise security teams (fintech, defense, legal) cannot send design conversations to any cloud API — not Gemini, not OpenAI, not Anthropic.
+
+**Solution**: Gate extraction behind a configurable `extraction_backend`:
+- `cloud` (default): current Gemini/OpenAI/Claude routing
+- `local`: route to a local vLLM or Ollama instance
+
+Recommended local model: **Qwen 2.5-32B** (5/5 constraint-following score in benchmarks, 15–20 tok/s on a 64GB machine). Already validated for structured extraction in internal benchmarks.
+
+```yaml
+# config.yaml
+extraction_backend: local
+local_llm_url: http://localhost:11434/v1
+local_llm_model: qwen2.5:32b
+```
+
+This makes Context Broker the only memory tool that works fully air-gapped. Mem0 and Zep have no equivalent.
+
+### 4b: Bi-Temporal Fact Validity
+
+**Problem**: `recency_decay` penalizes old facts but doesn't expire them. A superseded constraint stays retrievable at reduced confidence indefinitely, creating noise. There's no distinction between "when this decision was made" and "when it was ingested."
+
+**Solution**: Add `valid_from` / `valid_until` timestamps to nodes (event time, not ingestion time). Facts expire rather than decay. Enables accurate historical queries: "what did we decide about auth before the PCI audit?"
+
+Based on the Zep/Graphiti bi-temporal model (arXiv:2501.13956). Implementation: new columns on the `nodes` table; extraction prompt updated to capture event dates where present.
+
+### 4c: Graph Synthesis (RAPTOR-style Summarization)
+
+**Problem**: As a graph grows (5k+ nodes), no single query can surface a high-level view. "What have we decided about the payment system this quarter?" requires synthesizing dozens of disconnected nodes.
+
+**Solution**: Periodic background job that clusters related nodes into higher-level summary nodes linked via `synthesizes_from` edges. Three levels:
+- **L0**: raw extracted facts (existing)
+- **L1**: weekly summaries per topic cluster
+- **L2**: project-level architectural overview
+
+These summary nodes are retrievable like any other, dramatically improving "give me an overview" queries.
+
+### 4d: Zero-Friction Hook Capture
+
+**Problem**: Users must explicitly run `engram extract` on a transcript. This is too much friction — most sessions are never captured.
+
+**Solution**: Claude Code hook that silently captures every session on stop. VS Code extension that captures on save/close. Zero-configuration capture: install once, memory accumulates automatically.
+
+This is already partially specified in Phase 3 (`engram onboard`). The delta here is **automatic ongoing capture** vs. one-time import. The hook runs extraction in the background after each session ends, so the graph grows without the user ever thinking about it.
+
+### 4e: Graph Portability (data ownership commitment)
+
+**Problem**: If a user cancels their subscription, or wants to migrate to a self-hosted instance, they should be able to take their graph with them.
+
+**Commitment** (encode in ToS and implement in CLI):
+- `engram export <project>` dumps a full SQLite file — readable without Context Broker
+- `engram import <file>` ingests an exported graph into any instance (local or cloud)
+- Exported graphs include all nodes, edges, confidence scores, and timestamps
+
+This is a trust signal. Mem0's cloud is a black box. "You own your memory" is a real differentiator for privacy-conscious developers and enterprises.
+
+---
+
+## Phase 5: Distribution & Growth (ongoing)
 
 ### Claude Code Marketplace / MCP Registry
 
@@ -211,7 +274,13 @@ Lean into this in marketing: **"Shared memory for your entire engineering team."
 | Moat | Strength | Notes |
 |------|----------|-------|
 | Structured graph (not embeddings) | High | BFS traversal + typed edges + supersedes logic is qualitatively different from vector similarity |
-| Team network effects | High | Shared graph grows more valuable with more contributors |
+| Team network effects | High | Shared graph grows more valuable with more contributors; cannot replicate with flat cards |
+| `supersedes` edges | High | Structural temporal invalidation — Mem0 accumulates contradictions; Engram resolves them at ingest |
+| Local LLM / air-gapped | High | Enterprise/fintech/defense use case; Mem0 and Zep have no answer to this |
+| Typed nodes | Medium | decisions, constraints, trade-offs enable type-filtered retrieval; Mem0 cards are untyped blobs |
+| Zero per-query LLM cost | Medium | Retrieval is pure graph traversal; Mem0 runs LLM on every search call |
+| Data portability | Medium | SQLite export = you own your graph; Mem0 cloud is a black box |
+| Graph synthesis (Phase 4c) | Medium | L1/L2 summary nodes enable high-level queries; Mem0 flat cards never get synthesized |
 | Native MCP integration | Medium | First-mover advantage; other tools will follow |
 | Switching costs (accumulated graph) | Medium | A 6-month-old graph with 5,000 nodes is hard to abandon |
 | Integration breadth | Low | Cursor, Windsurf, Zed integrations require maintenance; anyone can copy |
@@ -224,5 +293,5 @@ The moat is **thin in year 1, strong in year 2+** as accumulated graphs and team
 
 - **Extraction cost economics**: At $0/mo free tier, we absorb Gemini extraction costs. Need to model this against free-tier conversion rates.
 - **Privacy / data residency**: Enterprise customers will ask about on-prem. Phase 2 should be designed for self-hosting from day one.
-- **Graph ownership**: If a user cancels, they should be able to export their full graph (SQLite dump). Make this a clear commitment in ToS.
+- **Graph ownership**: Formalized in Phase 4e — `engram export` / `engram import` with SQLite portability guarantee. Encode in ToS.
 - **Benchmark the MCP path**: Does Claude Code use `context_broker_query` on every prompt, or only when it decides context is needed? This matters a lot for recall vs. latency tradeoffs.

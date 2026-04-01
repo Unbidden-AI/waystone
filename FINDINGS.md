@@ -1211,3 +1211,253 @@ A-MEM is a Zettelkasten-inspired memory system where the LLM agent autonomously 
 - `config.yaml`: Added three tools to `orchestrator.tools.enabled`
 
 **Design note:** Store-aware tools are dispatched through a separate `_STORE_HANDLERS` dict so they don't require changing the `(args, cfg)` signature of sandbox tools. If `store` is `None` (e.g., a session without a loaded project), the tool returns a descriptive error rather than crashing.
+
+---
+
+## LOCOMO Benchmark Results (2026-03-30 — ongoing)
+
+*LOCOMO is a 10-conversation, 1,986 QA-pair benchmark of multi-session personal episodic memory. Each conversation spans ~29 sessions and years of synthetic personal life events. QA categories: single_hop (1), temporal (2), open_domain (3), multi_hop (4), adversarial (5). Official protocol excludes category 5.*
+
+*Evaluation split used: dev (conv-42 only during ablation iteration). Full dev set = conv-26, 30, 41, 42, 43.*
+
+### Scoring
+
+Two metrics reported throughout:
+- **Keyword exact** — ground-truth answer words present verbatim in retrieved context. Fast, deterministic.
+- **LLM strict** — Haiku judge rates context as YES/PARTIAL/NO for supporting the ground-truth answer. LLM strict = YES / total.
+
+### Baseline ablation table (conv-42, 260 QA pairs)
+
+| Config | Keyword exact | LLM strict | Avg tokens | Notes |
+|--------|--------------|-----------|-----------|-------|
+| no_memory | — | — | 0 | LLM parametric knowledge only |
+| full_context | — | — | ~18K | Raw transcript injected |
+| engram_all_off | — | — | — | BFS, no pipeline components |
+| engram_default v1 | ~20% | 0% | — | LLM judge broken (auth missing) |
+| engram_default v4 | 38.1% | 24.2% | 731 | Three fixes applied (see below) |
+| engram_default v5 | 42.3% | 23.5% | 739 | + retrieval-time date resolution |
+| engram_default v6 | 30.0% | 17.3% | 706 | + ISO date headers at ingest (re-ingest) — **negative result** |
+
+### v4 per-category breakdown (engram_default, conv-42)
+
+| Category | n | KW exact | LLM strict | LLM partial |
+|----------|---|---------|-----------|------------|
+| single_hop | 37 | 10.8% | 8.1% | 67.6% |
+| temporal | 40 | 25.0% | 12.5% | 60.0% |
+| open_domain | 11 | 9.1% | 0.0% | 45.5% |
+| multi_hop | 111 | 43.2% | 44.1% | 29.7% |
+| adversarial | 61 | 54.1% | 9.8% | 50.8% |
+| **OVERALL** | **260** | **38.1%** | **24.2%** | — |
+
+### v5 per-category breakdown (+ retrieval-time date resolution)
+
+| Category | n | KW exact | LLM strict | Delta KW | Delta LLM |
+|----------|---|---------|-----------|---------|----------|
+| single_hop | 37 | 10.8% | 5.4% | +0.0pp | -2.7pp (noise) |
+| temporal | 40 | **60.0%** | 15.0% | **+35.0pp** | +2.5pp |
+| open_domain | 11 | 9.1% | 0.0% | +0.0pp | +0.0pp |
+| multi_hop | 111 | 43.2% | 41.4% | +0.0pp | -2.7pp (noise) |
+| adversarial | 61 | 54.1% | 11.5% | +0.0pp | +1.7pp |
+| **OVERALL** | **260** | **42.3%** | **23.5%** | **+4.2pp** | -0.7pp (noise) |
+
+### Fixes applied and their contributions
+
+#### Fix 1 — LLM judge auth (v1 → v4 prerequisite)
+`scoring.py`: `score_llm_judge()` was instantiating `anthropic.Anthropic()` before loading `.env`, so `ANTHROPIC_API_KEY` was never set. Added dotenv load before client construction.
+- **Impact**: LLM judge went from 0% (auth failure silently scoring 0.0) to 24.2% on conv-42.
+
+#### Fix 2 — Seed preservation in retriever (v1 → v4)
+`retriever.py`: BFS was discarding seed nodes that didn't pass the `source_restriction` filter. High-recall seeds (direct keyword matches) were being pruned before graph traversal.
+- **Impact**: Retrieval no longer drops exact matches. Contributed to avg_tokens 298 → 731.
+
+#### Fix 3 — Recency half-life tuned for LOCOMO (v1 → v4)
+`ablation_configs.py`: `recency_half_life_days` default was 30 (real-time use). LOCOMO events span 2-4 years, so all facts scored near-zero recency and were pruned before reaching top_k.
+- **Fix**: Set `recency_half_life_days=3650` (10 years) in all `engram_default`/`engram_filtered`/`engram_tight` configs.
+- **Impact**: Avg tokens 298 → 731. Primary driver of the v1→v4 improvement.
+
+#### Fix 4 — Retrieval-time relative date resolution (v4 → v5)
+`retriever.py`: Added `_resolve_relative_dates(fact, occurred_at)` — rewrites 16 relative time phrases in rendered fact text using `occurred_at` timestamp.
+- Example: "last week" → "the week before January 21, 2022"
+- No re-ingestion required. Works on existing DBs.
+- **Impact**: Temporal keyword exact 25% → 60% (+35pp). LLM strict flat (+2.5pp noise).
+- **Paper interpretation**: Relative phrase resolution is a zero-cost retrieval-time improvement that disproportionately benefits temporal QA. Suitable as a standalone ablation component.
+
+#### Fix 5 — ISO date headers at ingest (v5 → v6) — NEGATIVE RESULT
+`ingestion_pipeline.py`: `_session_text()` was emitting session headers as `[Session: session_2 | Date: 7:31 pm on 21 January, 2022]`. The natural-language format didn't match the ISO example in the extraction prompt.
+- **Fix**: Parse datetime string to ISO-8601 in header: `[Session: session_2 | Date: 2022-01-21]`
+- **Measured impact**: Relative phrases in DB: 23 → 21 (marginal). Node count: 1085 → 1455 (+34%). Overall keyword exact: 42.3% → 30.0% (-12.3pp). LLM strict: 23.5% → 17.3% (-6.2pp).
+- **Root cause of regression**: ISO date format caused the extraction model to produce more verbose output per session, inflating the graph by 370 nodes. With fixed top_k=50, additional nodes dilute retrieval — relevant nodes compete with more noise.
+- **Paper verdict**: Fix 5 is a negative result worth reporting. Documents a real tradeoff: cleaner extraction prompts → more extracted facts → worse retrieval precision at fixed top_k. The retrieval-time fix (fix 4) dominates. The ISO date header change is retained in code for correctness but should not be treated as an accuracy improvement.
+
+### Key qualitative findings
+
+#### Adversarial category is keyword-noisy
+Adversarial questions are role-swapped ("What was the SECOND TOURNAMENT JOANNA WON?" when Nate won). The context contains all the named entities → high keyword score (54.1%). The LLM judge correctly identifies wrong attribution → low LLM strict (9.8%). **For paper: report adversarial LLM score, not keyword. Keyword adversarial scores are false positives.**
+
+#### Single_hop LLM at 5-8% is a retrieval precision problem
+73% of single_hop questions score LLM PARTIAL — the context has *related* facts but not the complete answer. Most single_hop answers are list-type ("watchingmovies", "exploringnature" — concatenated in the dataset). BFS returns ~300-700 tokens but misses the specific nodes. **This is not an extraction problem — the facts are in the DB. It is a retrieval depth/precision problem.**
+
+#### multi_hop LLM at 41-44% validates BFS graph traversal
+Multi-hop questions require connecting facts across sessions. LLM strict at 44% suggests BFS is successfully chaining related facts. This is the strongest signal that the graph structure adds value over flat retrieval.
+
+#### LLM PARTIAL credit is the ceiling signal
+Single_hop: 67-73% PARTIAL. Temporal: 57-60% PARTIAL. The context is frequently "in the neighborhood" — the right person, the right topic, but missing the precise answer. This points to extraction completeness gaps (some specific facts not captured) rather than retrieval failures.
+
+#### engram_temporal == engram_default (ablation design issue)
+`engram_temporal` and `engram_default` both use `domain='episodic_personal'` with identical config params. Temporal date resolution rules are already in `episodic_personal.layer1_rules`. **To isolate the temporal contribution as an ablation, a baseline profile *without* date resolution is needed.**
+
+---
+
+## Fix 6 — Post-ingest brute-force semantic dedup (root cause of v6 regression)
+
+### Root cause (corrected)
+The v6 regression (1085 → 1455 nodes, −12.3pp accuracy) was **not** caused by the ISO date header. The real cause: `sqlite-vec` cannot be loaded in Python 3.14 on macOS (`enable_load_extension` is disabled). This means `_vec_available=False` during every fresh ingest, which completely bypasses the per-insert semantic dedup block in `store.add_node()`. Without it, extraction model paraphrases insert as separate nodes:
+
+- "Acting was Joanna's first passion"
+- "Acting was Joanna's initial passion"
+- "Acting was Joanna's primary passion"
+
+Session_9 alone ballooned from 18 → 134 nodes (+116). Session_26 had 8 near-identical copies of the same tournament event. The v5 DB was fine because it was built in an older environment where `enable_load_extension` worked.
+
+### Fix
+Added `GraphStore.dedup_nodes_brute_force(threshold=0.92)` to `store.py`:
+1. Batch-embeds all nodes using sentence-transformers (always available, no sqlite-vec needed)
+2. Builds (n × 384) float32 matrix, normalizes rows, computes pairwise cosine in 512-row blocks via numpy
+3. Union-Find clustering of near-duplicate groups
+4. Per-cluster: union tags, max confidence, reassign edges to canonical (earliest `created_at`), delete duplicates
+
+Called from `ingestion_pipeline.py` after `embed_missing_nodes()` when `_vec_available=False`.
+
+**Expected outcome**: Fresh ingests should produce node counts near v5 levels (~1085 for conv-42), recovering the 12pp accuracy regression.
+
+---
+
+## Fix 7 — Fact-text keyword scoring for retrieval (single_hop vocabulary mismatch)
+
+### Root cause
+Single_hop LLM accuracy at 5.4% despite 73% PARTIAL: the retrieval pipeline uses tag-only keyword matching to score nodes and decide which become BFS seeds. Two failure patterns:
+
+**Pattern A (vocabulary mismatch)**: Query "allergic" → stored tag "allergy". The node "Joanna is allergic to most reptiles" has tags `["joanna", "allergy"]`. `_count_keyword_tag_hits` returns 1 (only "joanna" matches "joanna" tag). Node competes with 720+ other Joanna nodes for 25 seed slots → often excluded.
+
+**Pattern B (substring mismatch)**: Query "pets" → stored tag "new pet". `"pets" in "new pet"` → False (substring check fails). Max the dog node scores only 1, turtle nodes score 2 → turtles fill seed slots → BFS doesn't reach Max.
+
+### Fix
+Two changes to `retriever.py`:
+
+1. **`score_by_relevance`**: Added fact-text keyword hit counting alongside tag hits. For each keyword not already matched by a tag, check if it appears in the fact text. `_relevance = (tag_hits + fact_only_hits) * type_boost`.
+
+2. **High/low-overlap partition** in `retrieve_with_stats`: When `relevance_scoring=True`, use `n["_relevance"] >= 2` (which includes fact-text hits) instead of re-calling `_count_keyword_tag_hits` (tag-only). This ensures the same combined signal drives both sorting and seed selection.
+
+**Impact on allergy example**: "joanna" tag_hit=1 + "allergic" fact_hit=1 → `_relevance`=2 → high_overlap → becomes BFS seed → fact "Joanna is allergic to most reptiles" retrieved.
+
+**Pattern B (pets/plural)**: Not fully resolved by this fix — "pets" still doesn't substring-match "new pet" in either tags or fact text. Stemming would be needed for this case.
+
+
+---
+
+## Investigation — top_k as binding constraint (2026-03-31)
+
+### Background
+Conv-42 has 1085 nodes. With `engram_dynamic_topk` using `sqrt(1085)=32`, keyword accuracy dropped 3.8pp and LLM accuracy dropped 4.4pp vs fixed `top_k=50`. This investigation identifies why and characterizes the correct formula.
+
+### Finding 1: top_k is the binding constraint on every query
+
+Token distribution across 260 QA pairs is nearly uniform:
+```
+top_k=50: p10=731  p50=766  p90=800  (69-token range)
+top_k=32: p10=441  p50=466  p90=489  (48-token range)
+```
+The BFS saturates top_k on essentially every query — the graph is dense enough that there are always ≥ top_k reachable nodes from any seed set. top_k is the throughput budget, not a soft cap.
+
+**Implication**: Token count is driven by graph structure, not query relevance. The right lever for context-window management is top_k (or token_budget).
+
+### Finding 2: Seed count compounds the top_k cut
+
+`max_seeds = top_k // 2`, so cutting top_k from 50→32 reduces:
+- Output nodes by 36% (50→32)
+- Seed count by 36% (25→16)
+- BFS coverage area proportionally (fewer starting points = narrower traversal)
+
+The 13 questions where top_k=32 misses but top_k=50 hits are spread across categories (5 multi_hop, 4 adversarial, 3 single_hop, 1 temporal), ruling out systematic bias — it's raw coverage loss. The specific missed answers are specific fact nodes that BFS from 16 seeds never reaches but BFS from 25 seeds does.
+
+### Finding 3: sqrt formula is wrong for large graphs
+
+| nodes | sqrt | log2×5 | n//25 | fixed50 |
+|------:|-----:|-------:|------:|--------:|
+|   100 |   10 |     33 |    10 |      50 |
+|   300 |   17 |     41 |    12 |      50 |
+|   800 |   28 |     48 |    32 |      50 |
+|  1085 |   32 |     50 |    43 |      50 |
+|  1500 |   38 |     52 |    60 |      50 |
+|  5000 |   50 |     61 |   100 |      50 |
+
+`sqrt` compresses too aggressively — at 1085 nodes it gives 32 (36% below fixed 50). `int(log2(n) * 5)` hits exactly 50 at LOCOMO scale and scales gracefully. Added `engram_dynamic_topk_log` ablation config with `topk_formula="log2"`.
+
+### Finding 4: LLM comparison was confounded by nulls
+
+`engram_default` (top_k=50) run had 54/260 null LLM scores, concentrated in adversarial (36/61 = 59% null rate). The adversarial LLM comparison between configs is unreliable. Clean categories (multi_hop, single_hop, temporal) show:
+- multi_hop: 60.2% (top_k=50, 93 valid) vs 56.8% (top_k=32, all 111) — real 3.4pp loss
+- single_hop: 16.2% vs 16.2% — no difference
+- temporal: 20.0% vs 20.0% — no difference
+
+Multi_hop is the category most sensitive to top_k because BFS chain traversal depends on having sufficient seeds to cover the graph.
+
+### Changes made
+- `engram/retriever.py`: Dynamic top_k block now reads `strats["topk_formula"]` ("sqrt" | "log2"); defaults to "sqrt" for backward compat
+- `benchmarks/locomo/ablation_configs.py`: Added `topk_formula: str = "sqrt"` field to `AblationConfig`; added `engram_dynamic_topk_log` config
+- `benchmarks/locomo/harness.py`: Passes `topk_formula` through strategies dict
+
+### Validation result (conv-42, 260 QA, LLM judge)
+
+| config | top_k @ 1085 nodes | kw_accuracy | kw_exact | llm_accuracy | avg_tokens |
+|--------|-------------------|-------------|----------|--------------|------------|
+| engram_dynamic_topk (sqrt) | 32 | 47.3% | 40.8% | 31.5% | 464 |
+| engram_dynamic_topk_log (log2) | 50 | **56.9%** | **48.5%** | **38.5%** | 741 |
+
+log2 is the better formula at this graph scale. The token cost (+60%) is the trade-off; this is the same token cost as `engram_default` (fixed top_k=50). **Recommendation: `engram_dynamic_topk_log` supersedes `engram_dynamic_topk` as the dynamic scaling baseline.** The log2 formula should be the default for dynamic top_k going forward.
+
+---
+
+## Embedding model upgrade — bge-small-en-v1.5 (2026-03-31)
+
+### Motivation
+`all-MiniLM-L6-v2` (MTEB Retrieval: 41.95) was the default embedding model. `BAAI/bge-small-en-v1.5` is a retrieval-tuned model at the same 384 dimensions with MTEB Retrieval: 51.68 (+23%). Same embedding dimension means zero schema migration — a drop-in swap.
+
+### Change
+`engram/embedder.py`: Updated `_MODEL_NAME = "BAAI/bge-small-en-v1.5"` and updated the `EMBEDDING_DIM` comment. `local_files_only=True` is preserved; model was pre-downloaded to HF cache before the constant was changed.
+
+### Validation result (engram_semantic, conv-42, 260 QA, LLM judge)
+
+| config | model | kw_accuracy | kw_exact | llm_accuracy | avg_tokens |
+|--------|-------|-------------|----------|--------------|------------|
+| engram_semantic (all-MiniLM) | all-MiniLM-L6-v2 | 16.5% | 12.3% | — | 546 |
+| engram_semantic (bge-small) | bge-small-en-v1.5 | **41.5%** | **33.9%** | **21.7%** | 756 |
+
++25pp keyword accuracy improvement — the MTEB Retrieval gap translates directly to benchmark accuracy. The semantic config is now competitive with early-pipeline baselines.
+
+**Note**: `engram_semantic` uses `relevance_scoring=False` to isolate the vector signal. At 21.7% LLM accuracy it still trails `engram_dynamic_topk_log` (38.5%), suggesting keyword-seeded BFS + fact-text scoring outperforms pure embedding retrieval on this corpus.
+
+---
+
+## engram_combined ablation (2026-03-31)
+
+### Config
+Full stack: `semantic=True, relevance_scoring=True, topk_formula="log2"`. Tests whether keyword seed ranking and vector retrieval are additive.
+
+**Limitation**: `sqlite-vec` cannot be loaded on Python 3.14 macOS (`enable_load_extension` is disabled). `store._vec_available=False` → `search_by_embedding()` returns `[]` → the `semantic=True` flag has **no runtime effect** on retrieval. The `engram_semantic` and `engram_combined` results are actually keyword-only BFS — the embedding model affects dedup quality at ingestion but not retrieval ranking.
+
+### Validation result (conv-42, 260 QA, keyword only — LLM judge failed: Anthropic credits exhausted)
+
+| config | graph | nodes | kw_accuracy | kw_exact | avg_tokens |
+|--------|-------|-------|-------------|----------|------------|
+| engram_dynamic_topk_log | all-MiniLM dedup | 1017 | **56.9%** | **48.5%** | 741 |
+| engram_semantic | bge-small dedup | 712 | 41.5% | 33.9% | 756 |
+| engram_combined | bge-small dedup | 712 | 46.5% | 39.6% | 720 |
+
+The combined config (+5pp vs engram_semantic on the same graph) confirms that `relevance_scoring=True` + log2 top_k adds value independent of the semantic flag. However, both configs using the bge_small-deduped graph (712 nodes) trail the all-MiniLM graph (1017 nodes) by ~10pp in keyword accuracy.
+
+### Finding: bge-small dedup over-prunes at this threshold
+
+The bge-small checkpoint has 30% fewer nodes (712 vs 1017). More aggressive semantic dedup removed 305 nodes that contain answer keywords. The accuracy gap is likely driven by **dedup recall loss**, not the retrieval strategy. bge-small's higher MTEB Retrieval score means it correctly identifies more pairs as semantically equivalent — but on this corpus that appears to over-prune.
+
+**Next step**: Run `engram_combined` (or `engram_dynamic_topk_log`) on the all-MiniLM checkpoint to cleanly isolate retrieval strategy vs dedup quality. Also: fix the sqlite-vec Python 3.14 incompatibility to make semantic retrieval actually work at query time.

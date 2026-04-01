@@ -36,10 +36,16 @@ def _auto_tag_numerics(fact: str, tags: list[str]) -> list[str]:
     contain at least one digit. These are added to tags if not already present,
     so numeric-value queries can find the node even when the extractor omitted
     the specific value from its tag list.
+
+    ISO date strings (YYYY-MM-DD) are excluded to prevent date tokens from
+    polluting keyword BFS and degrading multi-hop entity retrieval.
     """
     # Match tokens containing at least one digit; include hyphens/slashes for
     # compound values like "15-minute" or "1000/min"
     raw = re.findall(r"[\w][\w/\-]*\d[\w/\-]*|(?<!\w)\d[\w/\-]*", fact.lower())
+    # Exclude ISO date strings (YYYY-MM-DD) — they pollute BFS tag matching
+    iso_date = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+    raw = [t for t in raw if not iso_date.match(t)]
     existing = {t.lower() for t in tags}
     extras = [t for t in raw if t not in existing and len(t) >= 1]
     # Deduplicate while preserving order
@@ -52,15 +58,22 @@ def _auto_tag_numerics(fact: str, tags: list[str]) -> list[str]:
     return result
 
 
+def _chunk(lst: list, size: int):
+    """Yield successive chunks of `size` from `lst`."""
+    for i in range(0, len(lst), size):
+        yield lst[i : i + size]
+
+
 class GraphStore:
     """DAG storage using SQLite with nodes and edges tables."""
 
-    def __init__(self, db_path: str | Path):
+    def __init__(self, db_path: str | Path, dedup_threshold: float = 0.92):
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(str(self.db_path))
         self.conn.row_factory = sqlite3.Row
         self._vec_available = self._load_sqlite_vec()
+        self._dedup_threshold = dedup_threshold
         self.init_db()
 
     def _load_sqlite_vec(self) -> bool:
@@ -170,6 +183,14 @@ class GraphStore:
         except sqlite3.OperationalError:
             pass  # Column already exists
 
+        # Migration: add occurred_at column (conversation date, for accurate recency decay)
+        try:
+            self.conn.execute("ALTER TABLE nodes ADD COLUMN occurred_at TEXT")
+            self.conn.commit()
+            log.info("Migrated nodes table: added occurred_at column")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
         # Migration: add usage tracking columns
         for col_def in [
             "ALTER TABLE nodes ADD COLUMN hit_count INTEGER NOT NULL DEFAULT 0",
@@ -233,7 +254,7 @@ class GraphStore:
                         if not nb:
                             continue
                         sim = _embedder.cosine_similarity(_new_blob, bytes(nb[0]))
-                        if sim >= 0.92:
+                        if sim >= self._dedup_threshold:
                             existing_row2 = self.conn.execute(
                                 "SELECT tags, confidence FROM nodes WHERE id = ?", (nid,)
                             ).fetchone()
@@ -256,8 +277,8 @@ class GraphStore:
         self.conn.execute(
             """INSERT OR REPLACE INTO nodes
                (id, fact, type, confidence, source_transcript,
-                source_message_index, tags, created_at, supersedes, fact_hash)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                source_message_index, tags, created_at, occurred_at, supersedes, fact_hash)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 node["id"],
                 node["fact"],
@@ -267,6 +288,7 @@ class GraphStore:
                 node.get("source_message_index"),
                 json.dumps(tags),
                 node.get("created_at", datetime.now(timezone.utc).isoformat()),
+                node.get("occurred_at"),
                 json.dumps(node.get("supersedes", [])),
                 fhash,
             ),
@@ -533,14 +555,17 @@ class GraphStore:
         return [self._row_to_node(r) for r in rows]
 
     def get_nodes_by_ids(self, node_ids: list[str]) -> list[dict]:
-        """Fetch multiple nodes by ID in a single query."""
+        """Fetch multiple nodes by ID, chunked to stay within SQLite variable limits."""
         if not node_ids:
             return []
-        placeholders = ",".join("?" * len(node_ids))
-        rows = self.conn.execute(
-            f"SELECT * FROM nodes WHERE id IN ({placeholders})", node_ids
-        ).fetchall()
-        return [self._row_to_node(r) for r in rows]
+        results = []
+        for chunk in _chunk(node_ids, 900):
+            placeholders = ",".join("?" * len(chunk))
+            rows = self.conn.execute(
+                f"SELECT * FROM nodes WHERE id IN ({placeholders})", chunk
+            ).fetchall()
+            results.extend(self._row_to_node(r) for r in rows)
+        return results
 
     def get_pinned_embeddings(self) -> list[tuple[str, str, bytes]]:
         """Return (id, fact, embedding_blob) for all pinned nodes that have embeddings."""
@@ -591,15 +616,25 @@ class GraphStore:
         return cursor.rowcount
 
     def get_edges_for_nodes(self, node_ids: list[str]) -> list[dict]:
-        """Fetch all edges where from_id or to_id is in node_ids."""
+        """Fetch all edges where from_id or to_id is in node_ids, chunked for SQLite limits."""
         if not node_ids:
             return []
-        placeholders = ",".join("?" * len(node_ids))
-        rows = self.conn.execute(
-            f"SELECT * FROM edges WHERE from_id IN ({placeholders}) OR to_id IN ({placeholders})",
-            node_ids + node_ids,
-        ).fetchall()
-        return [dict(r) for r in rows]
+        results = []
+        seen_rowids: set = set()
+        for chunk in _chunk(node_ids, 499):  # doubled in query, so 499*2 < 999
+            placeholders = ",".join("?" * len(chunk))
+            rows = self.conn.execute(
+                f"SELECT rowid, * FROM edges WHERE from_id IN ({placeholders}) OR to_id IN ({placeholders})",
+                chunk + chunk,
+            ).fetchall()
+            for r in rows:
+                if r[0] not in seen_rowids:
+                    seen_rowids.add(r[0])
+                    results.append(dict(r))
+        # Strip the synthetic rowid key we added for dedup
+        for d in results:
+            d.pop("rowid", None)
+        return results
 
     def get_edges_from(self, node_id: str) -> list[dict]:
         """Get all outgoing edges from a node."""
@@ -681,11 +716,15 @@ class GraphStore:
 
         # Collect all node IDs touched by non-supersedes edges
         node_ids = list({nid for row in edges for nid in (row[0], row[1])})
-        placeholders = ",".join("?" * len(node_ids))
-        rows = self.conn.execute(
-            f"SELECT id, tags FROM nodes WHERE id IN ({placeholders})", node_ids
-        ).fetchall()
-        tags_by_id: dict[str, set] = {row[0]: set(json.loads(row[1])) for row in rows}
+        all_tag_rows = []
+        for chunk in _chunk(node_ids, 900):
+            placeholders = ",".join("?" * len(chunk))
+            all_tag_rows.extend(
+                self.conn.execute(
+                    f"SELECT id, tags FROM nodes WHERE id IN ({placeholders})", chunk
+                ).fetchall()
+            )
+        tags_by_id: dict[str, set] = {row[0]: set(json.loads(row[1])) for row in all_tag_rows}
 
         # Merge neighbor tags into each endpoint (1 hop, bidirectional)
         updated: dict[str, set] = {nid: set(tags) for nid, tags in tags_by_id.items()}
@@ -714,10 +753,11 @@ class GraphStore:
         ids = [r["id"] for r in rows]
         if not ids:
             return 0
-        placeholders = ",".join("?" * len(ids))
-        self.conn.execute(f"DELETE FROM edges WHERE from_id IN ({placeholders})", ids)
-        self.conn.execute(f"DELETE FROM edges WHERE to_id IN ({placeholders})", ids)
-        self.conn.execute(f"DELETE FROM nodes WHERE id IN ({placeholders})", ids)
+        for chunk in _chunk(ids, 900):
+            placeholders = ",".join("?" * len(chunk))
+            self.conn.execute(f"DELETE FROM edges WHERE from_id IN ({placeholders})", chunk)
+            self.conn.execute(f"DELETE FROM edges WHERE to_id IN ({placeholders})", chunk)
+            self.conn.execute(f"DELETE FROM nodes WHERE id IN ({placeholders})", chunk)
         self.conn.commit()
         return len(ids)
 
@@ -749,10 +789,11 @@ class GraphStore:
         rows = self.conn.execute(query, params).fetchall()
         ids = [r["id"] for r in rows]
         if not dry_run and ids:
-            placeholders = ",".join("?" * len(ids))
-            self.conn.execute(f"DELETE FROM edges WHERE from_id IN ({placeholders})", ids)
-            self.conn.execute(f"DELETE FROM edges WHERE to_id IN ({placeholders})", ids)
-            self.conn.execute(f"DELETE FROM nodes WHERE id IN ({placeholders})", ids)
+            for chunk in _chunk(ids, 900):
+                placeholders = ",".join("?" * len(chunk))
+                self.conn.execute(f"DELETE FROM edges WHERE from_id IN ({placeholders})", chunk)
+                self.conn.execute(f"DELETE FROM edges WHERE to_id IN ({placeholders})", chunk)
+                self.conn.execute(f"DELETE FROM nodes WHERE id IN ({placeholders})", chunk)
             self.conn.commit()
         return ids
 
@@ -1011,6 +1052,156 @@ class GraphStore:
             (query_blob, top_k),
         ).fetchall()
         return [r[0] for r in rows]
+
+    def dedup_nodes_brute_force(
+        self,
+        threshold: float = 0.90,
+        batch_size: int = 512,
+    ) -> int:
+        """Post-ingest brute-force semantic deduplication.
+
+        When sqlite-vec is unavailable (e.g. Python 3.14 on macOS), the
+        per-insert semantic dedup block is skipped and near-duplicate
+        paraphrases accumulate as separate nodes.  This method batch-embeds
+        all nodes, computes pairwise cosine similarities, clusters near-
+        duplicates via union-find, and merges each cluster into a single
+        canonical node (earliest created_at wins).
+
+        Tags are unioned across all cluster members; confidence takes the
+        maximum.  Edges from/to merged nodes are reassigned to the canonical
+        node before the duplicates are deleted.
+
+        Returns the number of nodes removed.
+        """
+        from engram import embedder
+        if not embedder.is_available():
+            return 0
+
+        rows = self.conn.execute(
+            "SELECT id, fact, tags, confidence, created_at FROM nodes ORDER BY created_at"
+        ).fetchall()
+        if len(rows) < 2:
+            return 0
+
+        ids = [r[0] for r in rows]
+        facts = [r[1] for r in rows]
+        tags_list = [json.loads(r[2]) for r in rows]
+        confs = [r[3] for r in rows]
+
+        blobs = embedder.embed_texts(facts)
+
+        # Build similarity pairs using numpy (required by sentence-transformers anyway)
+        dup_pairs: list[tuple[int, int]] = []
+        try:
+            import struct
+            import numpy as np
+            n = len(ids)
+            dim = embedder.EMBEDDING_DIM
+            vecs = np.array(
+                [struct.unpack(f"{dim}f", b) for b in blobs], dtype=np.float32
+            )
+            norms = np.linalg.norm(vecs, axis=1, keepdims=True)
+            norms = np.where(norms == 0, 1e-9, norms)
+            normalized = vecs / norms
+            # Process in blocks to bound peak memory
+            for start in range(0, n, batch_size):
+                end = min(start + batch_size, n)
+                block = normalized[start:end] @ normalized.T  # (block, n)
+                ri_arr, ci_arr = np.where(block >= threshold)
+                for ri, ci in zip(ri_arr.tolist(), ci_arr.tolist()):
+                    i, j = start + int(ri), int(ci)
+                    if i < j:
+                        dup_pairs.append((i, j))
+        except ImportError:
+            for i in range(len(ids)):
+                for j in range(i + 1, len(ids)):
+                    if embedder.cosine_similarity(blobs[i], blobs[j]) >= threshold:
+                        dup_pairs.append((i, j))
+
+        if not dup_pairs:
+            return 0
+
+        # Union-Find: cluster transitively similar nodes
+        parent = list(range(len(ids)))
+
+        def _find(x: int) -> int:
+            while parent[x] != x:
+                parent[x] = parent[parent[x]]
+                x = parent[x]
+            return x
+
+        for i, j in dup_pairs:
+            pi, pj = _find(i), _find(j)
+            if pi != pj:
+                parent[pj] = pi
+
+        # Group clusters: canonical = lowest index (= earliest created_at)
+        from collections import defaultdict
+        clusters: dict[int, list[int]] = defaultdict(list)
+        for idx in range(len(ids)):
+            clusters[_find(idx)].append(idx)
+
+        removed = 0
+        for canonical_idx, members in clusters.items():
+            if len(members) < 2:
+                continue
+
+            canonical_id = ids[canonical_idx]
+            dup_ids = [ids[m] for m in members if m != canonical_idx]
+            all_member_ids = [ids[m] for m in members]
+
+            # Merge tags (union) and confidence (max)
+            merged_tags: set[str] = set()
+            merged_conf: float = 0.0
+            for m in members:
+                merged_tags |= set(tags_list[m])
+                merged_conf = max(merged_conf, confs[m])
+            self.conn.execute(
+                "UPDATE nodes SET tags = ?, confidence = ? WHERE id = ?",
+                (json.dumps(sorted(merged_tags)), merged_conf, canonical_id),
+            )
+
+            # Reassign edges before deleting duplicates.
+            # Edges between cluster members are dropped (both endpoints gone).
+            dup_ph = ",".join("?" * len(dup_ids))
+            mem_ph = ",".join("?" * len(all_member_ids))
+            # Outgoing: dup → external  becomes  canonical → external
+            self.conn.execute(
+                f"""INSERT OR IGNORE INTO edges (from_id, to_id, relation, weight)
+                    SELECT ?, to_id, relation, COALESCE(weight, 1.0)
+                    FROM edges
+                    WHERE from_id IN ({dup_ph})
+                    AND to_id NOT IN ({mem_ph})""",
+                [canonical_id] + dup_ids + all_member_ids,
+            )
+            # Incoming: external → dup  becomes  external → canonical
+            self.conn.execute(
+                f"""INSERT OR IGNORE INTO edges (from_id, to_id, relation, weight)
+                    SELECT from_id, ?, relation, COALESCE(weight, 1.0)
+                    FROM edges
+                    WHERE to_id IN ({dup_ph})
+                    AND from_id NOT IN ({mem_ph})""",
+                [canonical_id] + dup_ids + all_member_ids,
+            )
+
+            # Delete all edges involving any duplicate, then delete the nodes
+            self.conn.execute(
+                f"DELETE FROM edges WHERE from_id IN ({dup_ph}) OR to_id IN ({dup_ph})",
+                dup_ids + dup_ids,
+            )
+            self.conn.execute(
+                f"DELETE FROM nodes WHERE id IN ({dup_ph})",
+                dup_ids,
+            )
+            removed += len(dup_ids)
+
+        self.conn.commit()
+        log.info(
+            "Brute-force dedup: removed %d duplicate nodes (threshold=%.2f)",
+            removed,
+            threshold,
+        )
+        return removed
 
     def close(self):
         """Close the database connection."""

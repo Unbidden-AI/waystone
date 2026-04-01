@@ -11,8 +11,8 @@ import struct
 
 log = logging.getLogger(__name__)
 
-EMBEDDING_DIM = 384  # all-MiniLM-L6-v2 output dimension
-_MODEL_NAME = "all-MiniLM-L6-v2"
+EMBEDDING_DIM = 384  # bge-small-en-v1.5 output dimension (retrieval-tuned, same dim as all-MiniLM-L6-v2)
+_MODEL_NAME = "BAAI/bge-small-en-v1.5"
 _model = None
 
 

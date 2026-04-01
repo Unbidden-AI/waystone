@@ -274,9 +274,11 @@ async def extract(transcript_text: str, config: dict, store=None, source_transcr
                     len(candidates),
                 )
 
-    prompt = build_extraction_prompt(transcript_text, existing_nodes=existing_nodes)
+    from engram.config import get_domain_profile
+    domain_profile = get_domain_profile(config)
+    prompt = build_extraction_prompt(transcript_text, domain_profile=domain_profile, existing_nodes=existing_nodes)
     try:
-        content = await _call_llm(prompt, config)
+        content = await _call_llm(prompt, config, domain_profile)
         extraction = parse_llm_response(content)
     except Exception as exc:
         error_msg = str(exc)
@@ -312,8 +314,9 @@ async def extract(transcript_text: str, config: dict, store=None, source_transcr
         )
         try:
             extra_content = await _call_llm(
-                build_extraction_prompt(transcript_text, existing_nodes=existing_nodes),
+                build_extraction_prompt(transcript_text, domain_profile=domain_profile, existing_nodes=existing_nodes),
                 config,
+                domain_profile,
             )
             extra_extraction = assign_ids(parse_llm_response(extra_content))
             extra_nodes = extra_extraction["nodes"]
@@ -476,7 +479,7 @@ async def extract_turn(
     valid_node_ids = {n["id"] for n in result["nodes"]}
     result["edges"] = [
         e for e in result.get("edges", [])
-        if e.get("source") in valid_node_ids or e.get("target") in valid_node_ids
+        if e.get("from_id") in valid_node_ids or e.get("to_id") in valid_node_ids
     ]
     return result
 

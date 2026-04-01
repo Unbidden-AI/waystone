@@ -30,7 +30,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 WORKER = Path(__file__).resolve().parent / "extraction_worker.py"
 sys.path.insert(0, str(REPO_ROOT))
 
-STATE_DIR = Path.home() / ".context-broker"
+STATE_DIR = Path.home() / ".engram"
 PAUSE_FILE = STATE_DIR / "paused"
 SESSION_STATE_MAX_CHARS = 2400  # ~600 tokens
 SESSION_STATE_TTL_SECONDS = 600  # fallback expiry: 10 minutes
@@ -306,7 +306,6 @@ def main():
 
         project_dir = get_db_path(config, project).parent
         last_context_path = project_dir / "last_context.md"
-        last_context_path.write_text(retrieval.markdown)
 
         if retrieval.nodes_after_strategies == 0:
             sys.exit(0)
@@ -318,10 +317,18 @@ def main():
         )
         additional_context = preamble + retrieval.markdown
 
+        prior_turns_window = inc_cfg.get("prior_turns_window", 0)
+        if prior_turns_window and transcript_path:
+            recent_turns = _read_recent_turns(transcript_path, prior_turns_window)
+            if recent_turns:
+                additional_context += "\n\n## Recent Conversation\n" + recent_turns
+
         session_state_path = db_path.parent / "session_state.md"
         session_state = _read_active_session_state(session_state_path)
         if session_state:
             additional_context += "\n\n## Recent session activity\n" + session_state
+
+        last_context_path.write_text(additional_context)
 
         output = {
             "hookSpecificOutput": {
@@ -361,6 +368,46 @@ def _spawn_extraction(
 
 
 MIN_ASSISTANT_WORDS = 40
+
+
+def _read_recent_turns(transcript_path: str, n: int) -> str:
+    """Return the last n user+assistant turns from the session JSONL as plain text."""
+    path = Path(transcript_path).expanduser()
+    if not path.exists() or n <= 0:
+        return ""
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return ""
+
+    turns: list[str] = []
+    for raw in lines:
+        raw = raw.strip()
+        if not raw:
+            continue
+        try:
+            entry = json.loads(raw)
+        except Exception:
+            continue
+        message = entry.get("message", {})
+        role = message.get("role")
+        if role not in ("user", "assistant"):
+            continue
+        content = message.get("content", [])
+        text = ""
+        if isinstance(content, list):
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "text":
+                    text = block.get("text", "").strip()
+                    break
+        elif isinstance(content, str):
+            text = content.strip()
+        if text:
+            label = "User" if role == "user" else "Assistant"
+            turns.append(f"{label}: {text}")
+
+    tail = turns[-n:] if n < len(turns) else turns
+    return "\n".join(tail)
 
 
 def _read_assistant_since(transcript_path: str, watermark: int) -> tuple[str, int]:

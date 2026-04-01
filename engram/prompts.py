@@ -111,6 +111,13 @@ def _format_node_types_section(profile: "DomainProfile") -> str:
     lines = ["11. Node types:"]
     for type_name, description in profile.node_types.items():
         lines.append(f'    - "{type_name}": {description}')
+    valid_types = ", ".join(f'"{t}"' for t in profile.node_types)
+    lines.append(
+        f"   - CRITICAL: Use ONLY these exact type names: {valid_types}. "
+        "Never invent new types such as \"fact\", \"rationale\", \"goal\", \"risk\", "
+        "\"pending_task\", \"assessment\", \"benefit\", \"blocker\", \"instruction\", "
+        "or any other name not in the list above. When in doubt, use \"implementation\"."
+    )
     if profile.node_types_note:
         lines.append(f"   - IMPORTANT: {profile.node_types_note}")
     return "\n".join(lines)
@@ -156,6 +163,17 @@ def build_extraction_prompt(
         .replace("{edge_relations_section}", _format_edge_relations_section(profile))
         .replace("{extraction_focus_section}", _format_extraction_focus_section(profile))
     )
+
+    if profile.extraction_examples:
+        example_lines = []
+        for i, (snippet, json_out) in enumerate(profile.extraction_examples, 1):
+            example_lines.append(f"## EXAMPLE {i}\n\nTranscript:\n{snippet}\n\nExpected output:\n{json_out}")
+        examples_section = (
+            "\nEXAMPLES (study these before extracting — they demonstrate correct extraction quality):\n\n"
+            + "\n\n---\n\n".join(example_lines)
+            + "\n\n"
+        )
+        base = base.replace("TRANSCRIPT:", examples_section + "TRANSCRIPT:")
 
     if existing_nodes:
         lines = []

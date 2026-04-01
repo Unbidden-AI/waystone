@@ -49,13 +49,13 @@ from the graph; use it to answer questions about this project accurately.""",
         "min_words": 200,      # min total words across buffered turns to trigger flush
         "max_turns": 10,       # flush unconditionally after this many turns
         "short_turn_words": 20, # turns shorter than this don't count toward min_words
+        "prior_turns_window": 0, # raw turns to append to retrieval context (0 = disabled)
     },
 }
 
 CONFIG_SEARCH_PATHS = [
     Path("config.yaml"),
     Path.home() / ".engram" / "config.yaml",
-    Path.home() / ".context-broker" / "config.yaml",
 ]
 
 

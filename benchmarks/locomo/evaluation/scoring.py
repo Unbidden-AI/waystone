@@ -61,13 +61,15 @@ def score_keyword_recall(
         answer_words = _tokenize(answer_lower)
         return 1.0, answer_words, []
 
-    # Word-level overlap
+    # Word-level overlap — use a word-set from the context to avoid substring
+    # false positives (e.g. "and" matching inside "sandbox").
     answer_words = _tokenize(answer_lower)
     if not answer_words:
         return 0.0, [], []
 
-    matched = [w for w in answer_words if w in context_lower]
-    missed = [w for w in answer_words if w not in context_lower]
+    context_words = set(_tokenize(context_lower))
+    matched = [w for w in answer_words if w in context_words]
+    missed = [w for w in answer_words if w not in context_words]
     overlap = len(matched) / len(answer_words)
 
     score = overlap if overlap >= min_overlap else 0.0
@@ -87,6 +89,42 @@ def _tokenize(text: str) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# Judge result cache — persist to disk so reruns never re-score identical pairs
+# ---------------------------------------------------------------------------
+
+import hashlib
+import json as _json
+from pathlib import Path as _Path
+
+_JUDGE_CACHE_PATH = _Path.home() / ".cache" / "engram_judge_cache.json"
+_judge_cache: dict[str, float] | None = None
+
+
+def _load_judge_cache() -> dict[str, float]:
+    global _judge_cache
+    if _judge_cache is None:
+        if _JUDGE_CACHE_PATH.exists():
+            try:
+                _judge_cache = _json.loads(_JUDGE_CACHE_PATH.read_text())
+            except Exception:
+                _judge_cache = {}
+        else:
+            _judge_cache = {}
+    return _judge_cache
+
+
+def _save_judge_cache() -> None:
+    if _judge_cache is not None:
+        _JUDGE_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _JUDGE_CACHE_PATH.write_text(_json.dumps(_judge_cache))
+
+
+def _judge_cache_key(question: str, answer: str, context: str, model: str) -> str:
+    raw = f"{model}\x00{question}\x00{answer}\x00{context}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:24]
+
+
+# ---------------------------------------------------------------------------
 # LLM judge scorer (accurate path)
 # ---------------------------------------------------------------------------
 
@@ -94,32 +132,72 @@ def score_llm_judge(
     question: str,
     ground_truth_answer: str,
     retrieved_context: str,
-    model: str = "claude-haiku-4-5-20251001",
+    model: str = "gemini-2.5-flash-lite",
 ) -> float:
     """
     Use an LLM to assess whether retrieved_context supports ground_truth_answer.
 
     Returns a score: 1.0 (supported), 0.5 (partially supported), 0.0 (not supported).
-    Uses Haiku by default — cheap enough to run on all 1,986 QA pairs.
-    """
-    import anthropic
 
-    client = anthropic.Anthropic()
+    Results are cached to ~/.cache/engram_judge_cache.json — reruns never re-score
+    the same (question, answer, context, model) tuple. Clear the cache file to force
+    re-evaluation.
+
+    Model routing:
+      - "gemini-*"  → Gemini OpenAI-compatible endpoint
+      - "claude-*"  → Anthropic client (use for final paper numbers only)
+    """
+    import os
+    from pathlib import Path
+
+    # Cache check — skip API call if we've already judged this exact triple
+    cache = _load_judge_cache()
+    cache_key = _judge_cache_key(question, ground_truth_answer, retrieved_context, model)
+    if cache_key in cache:
+        return cache[cache_key]
+
+    env_path = Path(__file__).parent.parent.parent.parent / ".env"
+    if env_path.exists():
+        from dotenv import load_dotenv
+        load_dotenv(env_path, override=False)
 
     prompt = _judge_prompt(question, ground_truth_answer, retrieved_context)
 
-    response = client.messages.create(
-        model=model,
-        max_tokens=64,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    raw = response.content[0].text.strip().upper()
+    if model.startswith("gemini"):
+        from openai import OpenAI
+        client = OpenAI(
+            api_key=os.environ["GEMINI_API_KEY"],
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+        )
+        response = client.chat.completions.create(
+            model=model,
+            max_tokens=16,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = response.choices[0].message.content.strip().upper()
+    else:
+        # Anthropic path — claude-* models
+        import anthropic
+        if not os.environ.get("ANTHROPIC_API_KEY"):
+            raise RuntimeError("ANTHROPIC_API_KEY not set")
+        client = anthropic.Anthropic()
+        response = client.messages.create(
+            model=model,
+            max_tokens=16,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = response.content[0].text.strip().upper()
 
     if raw.startswith("YES"):
-        return 1.0
-    if raw.startswith("PARTIAL"):
-        return 0.5
-    return 0.0
+        score = 1.0
+    elif raw.startswith("PARTIAL"):
+        score = 0.5
+    else:
+        score = 0.0
+
+    cache[cache_key] = score
+    _save_judge_cache()
+    return score
 
 
 def _judge_prompt(question: str, answer: str, context: str) -> str:
@@ -209,8 +287,8 @@ def score_batch(
 
 
 def _estimate_tokens(text: str) -> int:
-    """Rough token estimate: ~0.75 tokens per word."""
-    return int(len(text.split()) * 0.75)
+    """Rough token estimate: ~4 chars per token. Matches retriever's estimate."""
+    return len(text) // 4
 
 
 # ---------------------------------------------------------------------------

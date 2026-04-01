@@ -24,7 +24,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-STATE_DIR = Path.home() / ".context-broker"
+STATE_DIR = Path.home() / ".engram"
 PAUSE_FILE = STATE_DIR / "paused"
 
 

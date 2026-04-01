@@ -2,6 +2,7 @@
 
 import logging
 import math
+import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -92,6 +93,19 @@ def retrieve_with_stats(
     """
     strats = {**DEFAULT_STRATEGIES, **(strategies or {})}
 
+    # Dynamic top_k: scale with graph size when top_k is None.
+    # Formula selected by strats["topk_formula"]: "sqrt" or "log2".
+    # "sqrt" = min(50, max(10, sqrt(n))) — aggressive, good for small graphs
+    # "log2" = min(100, max(10, int(log2(n)*5))) — ~50 at LOCOMO scale, sane at all sizes
+    if top_k is None:
+        node_count = store.get_stats()["node_count"]
+        formula = strats.get("topk_formula", "sqrt")
+        if formula == "log2":
+            top_k = min(100, max(10, int(math.log2(max(node_count, 2)) * 5)))
+        else:
+            top_k = min(50, max(10, int(math.sqrt(node_count))))
+        log.debug("Dynamic top_k (%s): %d (graph has %d nodes)", formula, top_k, node_count)
+
     # Pinned nodes always inject regardless of query relevance
     pinned_nodes = store.get_pinned_nodes()
     pinned_ids = {n["id"] for n in pinned_nodes}
@@ -102,7 +116,8 @@ def retrieve_with_stats(
         log.debug("No keywords extracted and no pinned nodes — returning empty result")
         return RetrievalResult(markdown="No relevant context found.", nodes_before_strategies=0, nodes_after_strategies=0)
     if not keywords:
-        markdown = assemble_markdown([], task_description, [], pinned_nodes=pinned_nodes)
+        markdown = assemble_markdown([], task_description, [], pinned_nodes=pinned_nodes,
+                                     resolve_dates=strats.get("resolve_dates", True))
         return RetrievalResult(markdown=markdown, nodes_before_strategies=0, nodes_after_strategies=0)
 
     entry_nodes = [n for n in store.get_nodes_by_tags(keywords) if n["id"] not in pinned_ids]
@@ -150,10 +165,16 @@ def retrieve_with_stats(
     keyword_set = set(keywords)
     max_seeds = max(1, top_k // 2)
 
-    high_overlap = [
-        n for n in entry_nodes
-        if _count_keyword_tag_hits(n.get("tags", []), keyword_set) >= 2
-    ]
+    # Use _relevance score (tags + fact-text hits) when it has been computed,
+    # otherwise fall back to raw tag count.  This ensures the same signal that
+    # drove ordering also drives the high/low-overlap partition.
+    if strats["relevance_scoring"]:
+        high_overlap = [n for n in entry_nodes if n.get("_relevance", 0) >= 2]
+    else:
+        high_overlap = [
+            n for n in entry_nodes
+            if _count_keyword_tag_hits(n.get("tags", []), keyword_set) >= 2
+        ]
     low_overlap_ids = {n["id"] for n in high_overlap}
     low_overlap = [n for n in entry_nodes if n["id"] not in low_overlap_ids]
 
@@ -210,7 +231,25 @@ def retrieve_with_stats(
         key=lambda n: (n.get("_score", n.get("confidence", 0)), -n.get("_bfs_depth", 0)),
         reverse=True,
     )
-    collected_nodes = collected_nodes[:top_k]
+
+    # Seed preservation: ensure directly query-matched seed nodes (depth=0) are not
+    # completely displaced by recency-biased BFS-expanded nodes. Reserve up to 40% of
+    # top_k slots for seeds, filling remaining slots with the highest-scoring non-seeds.
+    # This prevents stable early-conversation facts (allergies, hobbies) from being
+    # buried by recent-session nodes when recency decay is active.
+    seed_ids = {n["id"] for n in entry_nodes}
+    seeds_in_collected = [n for n in collected_nodes if n["id"] in seed_ids]
+    non_seeds_in_collected = [n for n in collected_nodes if n["id"] not in seed_ids]
+    seed_reserve = min(len(seeds_in_collected), top_k * 2 // 5)  # up to 40% reserved for seeds
+    collected_nodes = (
+        seeds_in_collected[:seed_reserve]
+        + non_seeds_in_collected[:top_k - seed_reserve]
+    )
+    # Re-sort the final set by score so output is coherently ordered
+    collected_nodes.sort(
+        key=lambda n: (n.get("_score", n.get("confidence", 0)), -n.get("_bfs_depth", 0)),
+        reverse=True,
+    )
 
     if strats["token_budget"] > 0:
         collected_nodes = apply_token_budget(collected_nodes, strats["token_budget"])
@@ -221,7 +260,16 @@ def retrieve_with_stats(
 
     nodes_after = len(collected_nodes)
     log.debug("Retrieval: %d nodes before strategies, %d after (strategies: %s)", nodes_before, nodes_after, applied)
-    markdown = assemble_markdown(collected_nodes, task_description, applied, pinned_nodes=pinned_nodes)
+
+    # Record usage for hit-count tracking (frequency-based deprioritization / vacuum)
+    entry_ids = {n["id"] for n in entry_nodes}
+    store.record_hits(node_ids=[n["id"] for n in collected_nodes], entry_ids=entry_ids)
+
+    markdown = assemble_markdown(
+        collected_nodes, task_description, applied,
+        pinned_nodes=pinned_nodes,
+        resolve_dates=strats.get("resolve_dates", True),
+    )
     tokens_est = estimate_tokens(markdown)
 
     return RetrievalResult(
@@ -237,17 +285,59 @@ def retrieve_with_stats(
 # Strategy implementations
 # ---------------------------------------------------------------------------
 
-def _count_keyword_tag_hits(tags: list[str], keyword_set: set) -> int:
-    """Count distinct keywords that appear as a substring in any tag.
+def _stem(word: str) -> str:
+    """Minimal suffix-stripping for English words.
 
-    Mirrors the SQL LIKE %keyword% behavior so multi-word tags like
-    "event format" are counted as a match for keyword "format".
+    Targets plurals and common inflections only — conservative to avoid
+    over-stemming. E.g.: "pets" → "pet", "allergies" → "allergy",
+    "swimming" → "swim", "worked" → "work".
     """
-    matched = set()
-    for kw in keyword_set:
-        if any(kw in tag.lower() for tag in tags):
-            matched.add(kw)
-    return len(matched)
+    if len(word) <= 3:
+        return word
+    # -ies → -y  ("allergies" → "allergy", "hobbies" → "hobby")
+    if word.endswith("ies") and len(word) > 4:
+        return word[:-3] + "y"
+    # -ing → base, collapsing double consonant  ("swimming" → "swim")
+    if word.endswith("ing") and len(word) > 5:
+        stem = word[:-3]
+        if len(stem) >= 2 and stem[-1] == stem[-2] and stem[-1] not in "aeiou":
+            stem = stem[:-1]
+        return stem
+    # -ed → base, collapsing double consonant  ("stopped" → "stop")
+    if word.endswith("ed") and len(word) > 4:
+        stem = word[:-2]
+        if len(stem) >= 2 and stem[-1] == stem[-2] and stem[-1] not in "aeiou":
+            stem = stem[:-1]
+        return stem
+    # -es → base  ("dishes" → "dish", "goes" → "go") — handled before -s
+    if word.endswith("es") and len(word) >= 4:
+        return word[:-2]
+    # -s → base  ("pets" → "pet", "cats" → "cat") — skip -ss/-us/-is/-as endings
+    if word.endswith("s") and len(word) >= 4 and not word.endswith(("ss", "us", "is", "as")):
+        return word[:-1]
+    return word
+
+
+def _tag_matches_keyword(tags: list[str], kw: str) -> bool:
+    """True if keyword matches any tag via substring or stemmed-token comparison."""
+    kw_stem = _stem(kw)
+    for tag in tags:
+        tag_lower = tag.lower()
+        if kw in tag_lower:
+            return True
+        if any(kw_stem == _stem(tok) for tok in re.findall(r"[a-z]+", tag_lower)):
+            return True
+    return False
+
+
+def _count_keyword_tag_hits(tags: list[str], keyword_set: set) -> int:
+    """Count distinct keywords that match any tag (substring or stemmed-token).
+
+    Extends the original SQL LIKE %keyword% behavior with stem-based matching
+    so morphological variants like "pets"/"pet" or "allergies"/"allergy"
+    count as a hit even when only one form appears in the stored tags.
+    """
+    return sum(1 for kw in keyword_set if _tag_matches_keyword(tags, kw))
 
 
 def score_by_relevance(nodes: list[dict], keywords: list[str]) -> list[dict]:
@@ -256,6 +346,12 @@ def score_by_relevance(nodes: list[dict], keywords: list[str]) -> list[dict]:
     Nodes with more keyword overlap are placed first, which makes them
     BFS seed priorities. Applies type-based boost to prioritize decisions,
     constraints, and trade-offs.
+
+    Fact-text hits are included alongside tag hits so that vocabulary
+    mismatches between query and stored tags don't bury relevant nodes.
+    For example, a query keyword "allergic" matches the fact text
+    "Joanna is allergic to most reptiles" even when the stored tag is
+    "allergy" (which wouldn't match via substring).
     """
     TYPE_BOOST = {
         "decision": 1.5,
@@ -266,10 +362,21 @@ def score_by_relevance(nodes: list[dict], keywords: list[str]) -> list[dict]:
 
     keyword_set = set(keywords)
     for node in nodes:
-        relevance = _count_keyword_tag_hits(node.get("tags", []), keyword_set)
+        node_tags = node.get("tags", [])
+        tag_hits = _count_keyword_tag_hits(node_tags, keyword_set)
+        # Count keywords found in fact text but not already matched by a tag.
+        # Uses stemmed comparison so "allergic"/"allergy", "pet"/"pets" etc. count.
+        fact_lower = node.get("fact", "").lower()
+        fact_tokens = set(re.findall(r"[a-z]+", fact_lower))
+        fact_stems = {_stem(t) for t in fact_tokens}
+        fact_only_hits = sum(
+            1 for kw in keyword_set
+            if (kw in fact_lower or _stem(kw) in fact_stems)
+            and not _tag_matches_keyword(node_tags, kw)
+        )
         node_type = node.get("type", "").lower()
         boost = TYPE_BOOST.get(node_type, 1.0)
-        node["_relevance"] = relevance * boost
+        node["_relevance"] = (tag_hits + fact_only_hits) * boost
     nodes.sort(key=lambda n: n["_relevance"], reverse=True)
     return nodes
 
@@ -306,9 +413,10 @@ def apply_recency_decay(nodes: list[dict], half_life_days: int) -> list[dict]:
     """
     now = datetime.now(timezone.utc)
     for node in nodes:
-        created = node.get("created_at", "")
+        # Prefer occurred_at (actual conversation date) over created_at (ingestion time)
+        ts = node.get("occurred_at") or node.get("created_at", "")
         try:
-            created_dt = datetime.fromisoformat(created)
+            created_dt = datetime.fromisoformat(ts)
             if created_dt.tzinfo is None:
                 created_dt = created_dt.replace(tzinfo=timezone.utc)
             age_days = (now - created_dt).total_seconds() / 86400
@@ -491,11 +599,51 @@ def cluster_by_tags(nodes: list[dict], max_cluster_size: int = 20) -> list[list[
     return result
 
 
+def _resolve_relative_dates(fact: str, occurred_at: str | None) -> str:
+    """Rewrite relative date phrases in a fact string using the node's occurred_at timestamp.
+
+    E.g. "Nate lost his job last week" -> "Nate lost his job the week before January 21, 2022"
+    when occurred_at is set. Leaves the fact unchanged if occurred_at is missing or unparseable.
+    """
+    if not occurred_at:
+        return fact
+    try:
+        import re as _re
+        from datetime import datetime as _datetime, timezone as _timezone
+        dt = _datetime.fromisoformat(occurred_at)
+        date_label = dt.strftime("%B %-d, %Y")
+        substitutions = [
+            (r"\bthe day before yesterday\b", f"two days before {date_label}"),
+            (r"\byesterday\b", f"the day before {date_label}"),
+            (r"\bearlier this week\b", f"earlier in the week of {date_label}"),
+            (r"\bearlier this month\b", f"earlier in the month of {date_label}"),
+            (r"\ba few days ago\b", f"a few days before {date_label}"),
+            (r"\ba few weeks ago\b", f"a few weeks before {date_label}"),
+            (r"\ba few months ago\b", f"a few months before {date_label}"),
+            (r"\blast week\b", f"the week before {date_label}"),
+            (r"\blast month\b", f"the month before {date_label}"),
+            (r"\blast year\b", f"the year before {date_label}"),
+            (r"\bnext week\b", f"the week after {date_label}"),
+            (r"\bnext month\b", f"the month after {date_label}"),
+            (r"\bthis week\b", f"the week of {date_label}"),
+            (r"\bthis month\b", f"the month of {date_label}"),
+            (r"\bthis year\b", f"the year {dt.year}"),
+            (r"\brecently\b", f"around {date_label}"),
+        ]
+        result = fact
+        for pattern, replacement in substitutions:
+            result = _re.sub(pattern, replacement, result, flags=_re.IGNORECASE)
+        return result
+    except (ValueError, TypeError):
+        return fact
+
+
 def assemble_markdown(
     nodes: list[dict],
     task: str,
     strategies_applied: list[str] | None = None,
     pinned_nodes: list[dict] | None = None,
+    resolve_dates: bool = True,
 ) -> str:
     """Assemble nodes into a formatted markdown context block."""
     pinned_nodes = pinned_nodes or []
@@ -544,7 +692,19 @@ def assemble_markdown(
                 source = f" [source: {node['source_transcript']}:{node['source_message_index']}]"
             elif node.get("source_message_index") is not None:
                 source = f" [source: msg {node['source_message_index']}]"
-            lines.append(f"- {node['fact']}{confidence_str}{source}")
+            date_str = ""
+            if node.get("occurred_at"):
+                try:
+                    from datetime import datetime, timezone
+                    dt = datetime.fromisoformat(node["occurred_at"])
+                    date_str = f" [date: {dt.strftime('%B %-d, %Y')}]"
+                except (ValueError, TypeError):
+                    pass
+            resolved_fact = (
+                _resolve_relative_dates(node["fact"], node.get("occurred_at"))
+                if resolve_dates else node["fact"]
+            )
+            lines.append(f"- {resolved_fact}{confidence_str}{date_str}{source}")
         lines.append("")
 
     return "\n".join(lines)

@@ -23,13 +23,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterator
 
-# QA category labels from the LOCOMO paper
+# QA category labels from the LOCOMO paper (verified against locomo10.json)
+# Cat 5 = adversarial: questions have `adversarial_answer` not `answer`.
+# The official evaluation protocol EXCLUDES cat 5 from accuracy scoring —
+# use --categories 1 2 3 4 when running the harness.
 QA_CATEGORY_LABELS = {
-    1: "temporal",
-    2: "explicit_memory",
-    3: "adversarial",
-    4: "multi_session",
-    5: "open_domain",
+    1: "single_hop",       # direct single-session recall
+    2: "temporal",         # date / time ordering questions
+    3: "open_domain",      # inference / reasoning over stored facts
+    4: "multi_hop",        # cross-session synthesis
+    5: "adversarial",      # adversarial — uses adversarial_answer field, not answer
 }
 
 
@@ -231,9 +234,11 @@ class LocomoDataset:
             if not isinstance(q, dict):
                 continue
             cat = q.get("category", 0)
+            # Cat 5 (adversarial) uses `adversarial_answer`, not `answer`
+            answer = q.get("answer") or q.get("adversarial_answer", "")
             pairs.append(QAPair(
                 question=q.get("question", ""),
-                answer=q.get("answer", ""),
+                answer=answer,
                 evidence=q.get("evidence", []),
                 category=cat,
                 category_label=QA_CATEGORY_LABELS.get(cat, f"cat_{cat}"),

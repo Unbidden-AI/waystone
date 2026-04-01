@@ -3,9 +3,14 @@
 
 After each conversation stop:
   1. Saves a clean markdown transcript to ~/.context-broker/transcripts/<project>/.
-  2. Spawns background extraction of the saved transcript (full-quality, with --verify).
+  2. Spawns background extraction of only the NEW turns since last extraction,
+     with 2 prior turns prepended as read-only co-reference context.
   3. If enough new nodes have been added since the last reconcile, spawns background
      `engram reconcile` to find supersedes relationships.
+
+Per-session extraction state is tracked in
+  ~/.context-broker/transcripts/<project>/<session_short_id>.state
+so that each Stop-hook fire only extracts the delta (not the full growing transcript).
 
 Thresholds (tunable via ~/.context-broker/config.yaml under 'maintenance:'):
   reconcile_threshold: 75   # new nodes since last reconcile before triggering
@@ -21,13 +26,17 @@ Install:
 import json
 import subprocess
 import sys
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-TRANSCRIPTS_DIR = Path.home() / ".context-broker" / "transcripts"
+TRANSCRIPTS_DIR = Path.home() / ".engram" / "transcripts"
+
+# Number of already-extracted turns to prepend as read-only co-reference context
+PRIOR_CONTEXT_TURNS = 2
 
 # Defaults — overridable via config.yaml under 'maintenance:'
 DEFAULT_RECONCILE_THRESHOLD = 75   # new nodes since last reconcile
@@ -65,10 +74,13 @@ def main():
         short_id = session_id[:8] if len(session_id) >= 8 else session_id
         out_path = out_dir / f"{timestamp}_{short_id}.md"
 
-        md = _jsonl_to_markdown(jsonl_path)
-        if not md.strip():
+        # Parse all turns from the JSONL
+        turns = _jsonl_to_turns(jsonl_path)
+        if not turns:
             sys.exit(0)
 
+        # Save full transcript (for history and the latest symlink)
+        md = _turns_to_markdown(turns)
         out_path.write_text(md)
 
         # Update the symlink to always point to the latest transcript
@@ -83,8 +95,29 @@ def main():
         if session_state_path.exists():
             session_state_path.unlink()
 
-        # --- Background extraction of this transcript ---
-        _spawn_background_extraction(project, str(out_path))
+        # --- Incremental extraction: only new turns since last extraction ---
+        state_path = out_dir / f"{short_id}.state"
+        state = _load_state(state_path)
+        last_idx = state.get("last_extracted_idx", 0)
+
+        if last_idx >= len(turns):
+            sys.exit(0)  # No new turns to extract
+
+        # Build delta snippet: 2 prior turns (for co-reference context) + new turns
+        prior_turns = turns[max(0, last_idx - PRIOR_CONTEXT_TURNS):last_idx]
+        new_turns = turns[last_idx:]
+        snippet = _build_delta_snippet(prior_turns, new_turns)
+
+        # Write delta to a temp file for extraction
+        delta_path = out_dir / f"{timestamp}_{short_id}_delta.md"
+        delta_path.write_text(snippet)
+
+        # Update state before spawning (prevent double-extraction if hook fires twice)
+        state["last_extracted_idx"] = len(turns)
+        _save_state(state_path, state)
+
+        # Spawn extraction of the delta only
+        _spawn_background_extraction(project, str(delta_path))
 
         # --- Threshold-triggered reconcile ---
         store = GraphStore(db_path)
@@ -97,6 +130,106 @@ def main():
 
     sys.exit(0)
 
+
+# ---------------------------------------------------------------------------
+# Turn parsing
+# ---------------------------------------------------------------------------
+
+def _jsonl_to_turns(jsonl_path: Path) -> list[tuple[str, str]]:
+    """Parse Claude Code JSONL transcript into a list of (role, content) tuples."""
+    turns = []
+    try:
+        raw_lines = jsonl_path.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return turns
+
+    for raw in raw_lines:
+        raw = raw.strip()
+        if not raw:
+            continue
+        try:
+            entry = json.loads(raw)
+        except Exception:
+            continue
+
+        entry_type = entry.get("type")
+        message = entry.get("message", {})
+        role = message.get("role", "")
+
+        # User turn
+        if entry_type == "user" and role == "user":
+            content = message.get("content", "")
+            if isinstance(content, str) and content.strip():
+                turns.append(("user", content.strip()))
+
+        # Assistant turn
+        elif role == "assistant":
+            content = message.get("content", [])
+            text_parts = []
+            if isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        text = block.get("text", "").strip()
+                        if text:
+                            text_parts.append(text)
+            elif isinstance(content, str) and content.strip():
+                text_parts.append(content.strip())
+
+            if text_parts:
+                turns.append(("assistant", " ".join(text_parts)))
+
+    return turns
+
+
+def _turns_to_markdown(turns: list[tuple[str, str]]) -> str:
+    """Convert turn list to plain markdown."""
+    lines = []
+    for role, content in turns:
+        prefix = "**User**" if role == "user" else "**Assistant**"
+        lines.append(f"{prefix}: {content}\n")
+    return "\n".join(lines)
+
+
+def _build_delta_snippet(
+    prior_turns: list[tuple[str, str]],
+    new_turns: list[tuple[str, str]],
+) -> str:
+    """Build extraction snippet: prior context header + new turns to extract."""
+    parts = []
+    if prior_turns:
+        parts.append(
+            "[Prior context — already extracted. Use only to resolve co-references "
+            "in the current segment. Do NOT re-extract facts from this block.]\n"
+        )
+        parts.append(_turns_to_markdown(prior_turns))
+        parts.append("\n\n[Current segment — extract from this:]\n")
+    parts.append(_turns_to_markdown(new_turns))
+    return "".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# State persistence
+# ---------------------------------------------------------------------------
+
+def _load_state(state_path: Path) -> dict:
+    if state_path.exists():
+        try:
+            return json.loads(state_path.read_text())
+        except Exception:
+            pass
+    return {"last_extracted_idx": 0}
+
+
+def _save_state(state_path: Path, state: dict) -> None:
+    try:
+        state_path.write_text(json.dumps(state))
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Background processes
+# ---------------------------------------------------------------------------
 
 def _engram_cmd() -> list[str]:
     """Return the best available command prefix to invoke the engram CLI."""
@@ -162,51 +295,9 @@ def _maybe_spawn_reconcile(project: str, current_nodes: int, project_dir: Path, 
         pass
 
 
-def _jsonl_to_markdown(jsonl_path: Path) -> str:
-    """Convert a Claude Code JSONL transcript to plain markdown."""
-    lines = []
-    try:
-        raw_lines = jsonl_path.read_text(encoding="utf-8").splitlines()
-    except Exception:
-        return ""
-
-    for raw in raw_lines:
-        raw = raw.strip()
-        if not raw:
-            continue
-        try:
-            entry = json.loads(raw)
-        except Exception:
-            continue
-
-        entry_type = entry.get("type")
-        message = entry.get("message", {})
-        role = message.get("role", "")
-
-        # User turn
-        if entry_type == "user" and role == "user":
-            content = message.get("content", "")
-            if isinstance(content, str) and content.strip():
-                lines.append(f"**User**: {content.strip()}\n")
-
-        # Assistant turn
-        elif role == "assistant":
-            content = message.get("content", [])
-            text_parts = []
-            if isinstance(content, list):
-                for block in content:
-                    if isinstance(block, dict) and block.get("type") == "text":
-                        text = block.get("text", "").strip()
-                        if text:
-                            text_parts.append(text)
-            elif isinstance(content, str) and content.strip():
-                text_parts.append(content.strip())
-
-            if text_parts:
-                lines.append(f"**Assistant**: {' '.join(text_parts)}\n")
-
-    return "\n".join(lines)
-
+# ---------------------------------------------------------------------------
+# Project detection
+# ---------------------------------------------------------------------------
 
 def _detect_project(cwd: str) -> str:
     """Find the Context Broker project name for this working directory."""

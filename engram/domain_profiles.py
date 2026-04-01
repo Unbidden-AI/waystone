@@ -35,6 +35,9 @@ class DomainProfile:
     node_types_note: str = ""        # extra note appended after node type list (optional)
     extraction_focus: str = ""       # domain-specific extraction guidance (Layer 3); empty = no-op
     layer1_rules: str = ""           # domain-specific Layer 1 rules (replaces default rules 1-10); empty = use default
+    extraction_examples: list[tuple[str, str]] = field(default_factory=list)
+    # List of (transcript_snippet, json_output) few-shot examples injected before the transcript.
+    # Keep snippets short (3-6 turns). Targeted at known model failure modes (numerics, rationale).
 
 
 SOFTWARE_DEV = DomainProfile(
@@ -69,6 +72,76 @@ SOFTWARE_DEV = DomainProfile(
         "the old term so the decision is retrievable from both the old and new directions. "
         'Example: a decision to switch from JSON to Avro must have tags: ["json", "avro", "event format", ...].'
     ),
+    extraction_examples=[
+        # Example 1: numeric thresholds — model must emit separate nodes per distinct value
+        (
+            """\
+[0] Engineer A: Rate limiting — what are we going with?
+[1] Engineer B: 1000 requests per minute for authenticated users, 100 per minute for unauthenticated. \
+Hard cap enforced at the Kong gateway using X-RateLimit-Remaining headers.
+[2] Engineer A: And lockout policy for failed logins?
+[3] Engineer B: Five consecutive failures triggers a 5-minute lockout. \
+Minimum password length is 12 characters.""",
+            """\
+{
+  "nodes": [
+    {"id":"n1","fact":"Authenticated users are rate-limited to 1000 requests per minute","type":"constraint",\
+"confidence":0.9,"source_message":1,"supersedes":[],"tags":["rate limit","rate limiting","authenticated",\
+"1000","rpm","requests per minute","throttle"]},
+    {"id":"n2","fact":"Unauthenticated users are rate-limited to 100 requests per minute","type":"constraint",\
+"confidence":0.9,"source_message":1,"supersedes":[],"tags":["rate limit","rate limiting","unauthenticated",\
+"100","rpm","requests per minute","throttle"]},
+    {"id":"n3","fact":"Rate limiting is enforced at the Kong API Gateway using X-RateLimit-Remaining headers",\
+"type":"implementation","confidence":0.9,"source_message":1,"supersedes":[],"tags":["kong","gateway",\
+"api gateway","rate limit","x-ratelimit-remaining","header","enforcement"]},
+    {"id":"n4","fact":"5 consecutive failed login attempts trigger a 5-minute account lockout","type":"constraint",\
+"confidence":0.9,"source_message":3,"supersedes":[],"tags":["lockout","failed login","5 attempts",\
+"5 minutes","brute force","authentication","security"]},
+    {"id":"n5","fact":"Minimum password length is 12 characters","type":"constraint","confidence":0.9,\
+"source_message":3,"supersedes":[],"tags":["password","password length","12 characters","minimum",\
+"policy","security"]}
+  ],
+  "edges": [
+    {"from":"n1","to":"n3","relation":"depends_on"},
+    {"from":"n2","to":"n3","relation":"depends_on"}
+  ]
+}"""
+        ),
+        # Example 2: rationale-embedded decision + transition with prior-state tags
+        (
+            """\
+[0] Engineer A: We were going to use Redis for dedup state — still the plan?
+[1] Engineer B: No, we ruled out Redis. The network overhead was adding 20ms per event, \
+which blows our 50ms SLA. We're using an in-process Bloom filter instead.
+[2] Engineer A: What's the false-positive rate?
+[3] Engineer B: 0.1% at 10 million entries. We'll reset it every 24 hours.""",
+            """\
+{
+  "nodes": [
+    {"id":"n1","fact":"Deduplication state storage changed from Redis to an in-process Bloom filter",\
+"type":"transition","confidence":0.95,"source_message":1,"supersedes":[],"tags":["redis","bloom filter",\
+"deduplication","dedup","in-process","state storage"]},
+    {"id":"n2","fact":"Redis was rejected for deduplication state — network overhead added 20ms per event",\
+"type":"lesson_learned","confidence":0.95,"source_message":1,"supersedes":[],"tags":["redis","rejected",\
+"network overhead","20ms","latency","deduplication","dedup"]},
+    {"id":"n3","fact":"Deduplication SLA is 50ms — Redis network overhead of 20ms violated this budget",\
+"type":"constraint","confidence":0.95,"source_message":1,"supersedes":[],"tags":["sla","50ms","latency",\
+"budget","deduplication","dedup"]},
+    {"id":"n4","fact":"Bloom filter false-positive rate is 0.1% at 10 million entries",\
+"type":"implementation","confidence":0.9,"source_message":3,"supersedes":[],"tags":["bloom filter",\
+"false positive","0.1%","10 million","capacity","deduplication"]},
+    {"id":"n5","fact":"Bloom filter is reset every 24 hours","type":"implementation","confidence":0.9,\
+"source_message":3,"supersedes":[],"tags":["bloom filter","reset","24 hours","ttl","deduplication"]}
+  ],
+  "edges": [
+    {"from":"n1","to":"n2","relation":"relates_to"},
+    {"from":"n1","to":"n3","relation":"relates_to"},
+    {"from":"n4","to":"n1","relation":"relates_to"},
+    {"from":"n5","to":"n1","relation":"relates_to"}
+  ]
+}"""
+        ),
+    ],
 )
 
 EPISODIC_PERSONAL = DomainProfile(
@@ -162,8 +235,16 @@ EPISODIC_PERSONAL = DomainProfile(
         "relationship to the speaker (best friend, cousin, roommate, coworker)\n"
         "   - Every named place (city, neighborhood, venue, country) mentioned in connection with "
         "an event or person\n"
-        "   - Every date, timeframe, or duration ('last summer', 'three weeks ago', 'in 2019', "
-        "'for six months', 'next March') — include verbatim in the fact text\n"
+        "   - Every date, timeframe, or duration — RESOLVE relative references to absolute dates "
+        "using the session date header at the top of the transcript (e.g. [Session: 1 | Date: 2023-05-08]). "
+        "REPLACE the relative phrase with the resolved date in the fact text — do NOT keep 'last week', "
+        "'yesterday', 'last month' etc. in the fact. Examples: "
+        "'yesterday' → '7 May 2023' (one day before session date); 'last month' → 'April 2023'; "
+        "'three weeks ago' → 'late April 2023'; 'next March' → 'March 2024'. "
+        "Write dates in natural English ('14 January 2022', 'week of 14 January 2022') not ISO format. "
+        "Store the resolved date in both fact text and tags. When precision is only approximate "
+        "('last summer' → 'summer 2022'), write that period. Undated events are still extracted — "
+        "omit date resolution only when the session date is absent.\n"
         "   - Every stated quantity or threshold ('two kids', 'five years together', '$40k salary', "
         "'moved four times', 'hasn't spoken in months')\n\n"
         "6. Capture EMOTIONAL CONTEXT and STATED FEELINGS as their own nodes when they are "
@@ -197,9 +278,200 @@ EPISODIC_PERSONAL = DomainProfile(
         "PEOPLE: Create a person node for every named individual on their FIRST mention, even if the "
         "only known facts are their name and relationship to the speaker. Never absorb a person into "
         "another node.\n\n"
-        "DATES & TIMEFRAMES: When an event has any stated date or timeframe ('last summer', 'three "
-        "weeks ago', 'in 2019', 'next month'), include it verbatim in the event node's fact text and "
-        "tags. Undated events should still be extracted — omit the date field rather than guessing.\n\n"
+        "DATES & TIMEFRAMES: The transcript header contains the session date (e.g. [Session: 1 | "
+        "Date: 2023-05-08]). Use it to resolve ALL relative temporal references to absolute dates "
+        "before writing them into facts and tags. IMPORTANT: REPLACE the relative phrase in the "
+        "fact text with the resolved date — do NOT keep 'last week', 'yesterday', 'last month', etc.\n"
+        "  - 'yesterday' → one day before session date, written as '7 May 2023' (natural English)\n"
+        "  - 'last week' → prior week, written as 'week of 30 April 2023'\n"
+        "  - 'last month' → prior month and year, written as 'April 2023'\n"
+        "  - 'three weeks ago' → approximate date, written as 'late April 2023'\n"
+        "  - 'next March' → next March after session date, written as 'March 2024'\n"
+        "Bad: 'Nate won the tournament last week.' (relative phrase kept)\n"
+        "Good: 'Nate won the tournament the week of 14 January 2022.' (resolved, natural English)\n"
+        "Write dates in natural English ('14 January 2022', 'week of 14 January 2022'), NOT ISO format. "
+        "Store the resolved date in both the fact text and tags. "
+        "When precision is only month or year level ('last summer' → 'summer 2022'), write that period. "
+        "Undated events should still be extracted — omit date resolution only when "
+        "the session date is absent from the header.\n\n"
+        "PLANS & INTENTIONS: Any expression of future intention is a plan node — 'I want to', 'we're "
+        "going to', 'I plan to', 'hopefully', 'I might', 'thinking about'. Include who, what, and "
+        "when (if stated). Confidence: 0.7.\n\n"
+        "OUTCOMES: Any report of how something turned out is an outcome node — 'it turned out', "
+        "'ended up', 'finally', 'unfortunately it', 'it worked'. Link to the originating event or "
+        "plan with a follows edge. Confidence: 0.9.\n\n"
+        "RELATIONSHIP SCAN: After drafting all other nodes, explicitly check: did anything CHANGE "
+        "between two named people in this turn? Check for engagements, breakups, reunions after "
+        "a long separation, one person becoming a caregiver or emotional anchor, major conflicts, "
+        "reconciliations, a friendship noticeably deepening or cooling. Each 'yes' gets a "
+        "relationship_update node. Static descriptions ('X is Y's sister') are facts, not updates.\n\n"
+        "TAGGING: Every node must include the names of all people it involves as tags. A health "
+        "fact about Jordan must have 'jordan' in tags. A plan involving both Alex and Sam must "
+        "have both names in tags. This is mandatory — it is how person-scoped queries work."
+    ),
+    extraction_examples=[
+        # Example 1: person anchors + date tagging + compound fact splitting
+        # Targets: explicit memory (30%), multi-session (25%), temporal (20%)
+        # Key lesson: create a separate person node for every named individual on first mention;
+        # include date verbatim in fact text and tags; split compound events into separate nodes.
+        (
+            """\
+[Session: 1 | Date: 2023-04-15]
+[0] Speaker A: How's your friend group been lately?
+[1] Speaker B: Really good! My college roommate Priya just started a new job at a biotech startup \
+in San Francisco last month. She's really excited — big pay bump but a lot more responsibility.
+[2] Speaker A: Nice! And your family?
+[3] Speaker B: My brother Marcus graduated from community college in March. Super proud of him. \
+Oh, and he's been dating someone new for about two months — her name is Chloe.""",
+            """\
+{
+  "nodes": [
+    {"id":"n1","fact":"Priya is Speaker B's college roommate","type":"person","confidence":0.95,\
+"source_message":1,"supersedes":[],"tags":["priya","college roommate","friend"]},
+    {"id":"n2","fact":"Priya started a new job at a biotech startup in San Francisco in March 2023",\
+"type":"fact","confidence":0.9,"source_message":1,"supersedes":[],"tags":["priya","job","biotech",\
+"startup","san francisco","career","march 2023","new job"]},
+    {"id":"n3","fact":"San Francisco","type":"place","confidence":0.9,"source_message":1,\
+"supersedes":[],"tags":["san francisco","sf","california"]},
+    {"id":"n4","fact":"Priya feels excited about the new job — big pay increase but also more responsibility",\
+"type":"fact","confidence":0.9,"source_message":1,"supersedes":[],"tags":["priya","excited",\
+"pay raise","responsibility","feelings","job"]},
+    {"id":"n5","fact":"Marcus is Speaker B's brother","type":"person","confidence":0.95,\
+"source_message":3,"supersedes":[],"tags":["marcus","brother","family"]},
+    {"id":"n6","fact":"Marcus graduated from community college in March 2023",\
+"type":"event","confidence":0.95,"source_message":3,"supersedes":[],"tags":["marcus","graduated",\
+"community college","graduation","march 2023","education"]},
+    {"id":"n7","fact":"Chloe is Marcus's new girlfriend as of approximately February 2023 \
+(two months before April 2023)","type":"fact","confidence":0.8,"source_message":3,"supersedes":[],\
+"tags":["marcus","chloe","dating","girlfriend","relationship","february 2023"]},
+    {"id":"n8","fact":"Chloe","type":"person","confidence":0.8,"source_message":3,\
+"supersedes":[],"tags":["chloe","marcus","girlfriend"]}
+  ],
+  "edges": [
+    {"from":"n2","to":"n1","relation":"involves"},
+    {"from":"n2","to":"n3","relation":"located_at"},
+    {"from":"n4","to":"n2","relation":"references"},
+    {"from":"n6","to":"n5","relation":"involves"},
+    {"from":"n7","to":"n5","relation":"involves"},
+    {"from":"n7","to":"n8","relation":"involves"}
+  ]
+}"""
+        ),
+        # Example 2: plan + outcome + relationship_update
+        # Targets: multi-session (25%), adversarial (15%), explicit (30%)
+        # Key lesson: future intentions are plan nodes (confidence 0.7); relationship milestones
+        # (engagement, breakup) are relationship_update nodes, NOT fact or event; outcomes link
+        # back to the originating plan with a follows edge.
+        (
+            """\
+[Session: 3 | Date: 2023-07-20]
+[0] Speaker B: I'm planning to do a solo trip to Japan this fall — probably October. \
+Tokyo and maybe Kyoto for a few days.
+[1] Speaker A: Amazing! Big news from you lately?
+[2] Speaker B: Oh — my friend Kayla and her boyfriend Derek just got engaged last weekend! \
+They've been together about four years. They're thinking spring wedding but nothing's set.
+[3] Speaker A: Congrats to them! How do you feel about the trip?
+[4] Speaker B: Honestly nervous, it's my first solo trip abroad. But really excited too.""",
+            """\
+{
+  "nodes": [
+    {"id":"n1","fact":"Speaker B plans a solo trip to Japan in October 2023, visiting Tokyo and Kyoto",\
+"type":"plan","confidence":0.7,"source_message":0,"supersedes":[],"tags":["japan","trip","travel",\
+"solo","october 2023","fall","tokyo","kyoto","vacation","abroad"]},
+    {"id":"n2","fact":"Tokyo","type":"place","confidence":0.9,"source_message":0,\
+"supersedes":[],"tags":["tokyo","japan","city"]},
+    {"id":"n3","fact":"Kyoto","type":"place","confidence":0.9,"source_message":0,\
+"supersedes":[],"tags":["kyoto","japan","city"]},
+    {"id":"n4","fact":"Kayla is Speaker B's friend","type":"person","confidence":0.95,\
+"source_message":2,"supersedes":[],"tags":["kayla","friend"]},
+    {"id":"n5","fact":"Derek is Kayla's boyfriend","type":"person","confidence":0.95,\
+"source_message":2,"supersedes":[],"tags":["derek","kayla","boyfriend"]},
+    {"id":"n6","fact":"Kayla and Derek got engaged in July 2023 after approximately four years together",\
+"type":"relationship_update","confidence":0.95,"source_message":2,"supersedes":[],"tags":["kayla",\
+"derek","engaged","engagement","july 2023","four years","relationship milestone"]},
+    {"id":"n7","fact":"Kayla and Derek are considering a spring wedding but no date is set yet",\
+"type":"plan","confidence":0.7,"source_message":2,"supersedes":[],"tags":["kayla","derek","wedding",\
+"spring","plan","engaged"]},
+    {"id":"n8","fact":"Speaker B feels nervous and excited about the Japan trip — first solo trip abroad",\
+"type":"fact","confidence":0.9,"source_message":4,"supersedes":[],"tags":["japan","trip","nervous",\
+"excited","solo","abroad","feelings"]}
+  ],
+  "edges": [
+    {"from":"n1","to":"n2","relation":"involves"},
+    {"from":"n1","to":"n3","relation":"involves"},
+    {"from":"n6","to":"n4","relation":"involves"},
+    {"from":"n6","to":"n5","relation":"involves"},
+    {"from":"n7","to":"n6","relation":"follows"},
+    {"from":"n8","to":"n1","relation":"references"}
+  ]
+}"""
+        ),
+        # Example 3: fact update (adversarial) — changed situation with updates edge + prior-state tags
+        # Targets: adversarial (15%), explicit (30%)
+        # Key lesson: when a person's situation changes, create a node for the PRIOR STATE and a
+        # separate node for the NEW STATE. The new-state node sets supersedes on the prior-state
+        # node and adds an updates edge. Tags on the new-state node must include prior-state vocab
+        # (e.g. "coffee shop") so queries about the old state still find the transition.
+        (
+            """\
+[Session: 7 | Date: 2023-11-10]
+[0] Speaker A: Wasn't Marcus still working at the coffee shop?
+[1] Speaker B: He quit in September actually — he got a full-time job at a logistics company, \
+doing warehouse management. It pays a lot better.
+[2] Speaker A: Good for him. And is he still living at home?
+[3] Speaker B: No, he finally moved out! He found an apartment in the same neighborhood, \
+moved in early November. He seems really happy about it.""",
+            """\
+{
+  "nodes": [
+    {"id":"n1","fact":"Marcus previously worked at a coffee shop (before September 2023)",\
+"type":"fact","confidence":0.9,"source_message":1,"supersedes":[],"tags":["marcus","coffee shop",\
+"job","previous job","work"]},
+    {"id":"n2","fact":"Marcus started a full-time warehouse management job at a logistics company \
+in September 2023","type":"fact","confidence":0.95,"source_message":1,"supersedes":["n1"],\
+"tags":["marcus","logistics","warehouse management","full-time","job","career","september 2023",\
+"coffee shop"]},
+    {"id":"n3","fact":"Marcus's logistics job pays significantly more than his previous coffee shop role",\
+"type":"fact","confidence":0.9,"source_message":1,"supersedes":[],"tags":["marcus","pay","salary",\
+"logistics","coffee shop","raise","income"]},
+    {"id":"n4","fact":"Marcus previously lived at his parents' house (before November 2023)",\
+"type":"fact","confidence":0.9,"source_message":3,"supersedes":[],"tags":["marcus","parents house",\
+"living situation","home","family"]},
+    {"id":"n5","fact":"Marcus moved into his own apartment in the same neighborhood in early November 2023",\
+"type":"event","confidence":0.95,"source_message":3,"supersedes":["n4"],"tags":["marcus","moved",\
+"apartment","neighborhood","november 2023","moved out","parents house","independent living"]},
+    {"id":"n6","fact":"Marcus seems happy after moving into his own apartment",\
+"type":"fact","confidence":0.8,"source_message":3,"supersedes":[],"tags":["marcus","happy",\
+"feelings","apartment","moved out"]}
+  ],
+  "edges": [
+    {"from":"n2","to":"n1","relation":"updates"},
+    {"from":"n3","to":"n2","relation":"references"},
+    {"from":"n5","to":"n4","relation":"updates"},
+    {"from":"n6","to":"n5","relation":"references"}
+  ]
+}"""
+        ),
+    ],
+)
+
+
+import dataclasses as _dc
+
+# Variant of episodic_personal with date resolution rules removed from the extraction prompt.
+# Used for the engram_no_temporal ablation: relative date phrases are kept as-is in fact text
+# so the benchmark can measure the accuracy contribution of temporal resolution.
+EPISODIC_PERSONAL_NO_DATES = _dc.replace(
+    EPISODIC_PERSONAL,
+    name="episodic_personal_no_dates",
+    extraction_focus=(
+        "PERSONAL CONVERSATION EXTRACTION FOCUS — apply these rules on every turn:\n\n"
+        "PEOPLE: Create a person node for every named individual on their FIRST mention, even if the "
+        "only known facts are their name and relationship to the speaker. Never absorb a person into "
+        "another node.\n\n"
+        "DATES & TIMEFRAMES: Preserve relative time references exactly as spoken in the fact text "
+        "('last week', 'yesterday', 'last month', etc.). Do NOT resolve them to absolute dates. "
+        "Undated events should still be extracted.\n\n"
         "PLANS & INTENTIONS: Any expression of future intention is a plan node — 'I want to', 'we're "
         "going to', 'I plan to', 'hopefully', 'I might', 'thinking about'. Include who, what, and "
         "when (if stated). Confidence: 0.7.\n\n"
@@ -828,6 +1100,7 @@ PRODUCT_MANAGEMENT = DomainProfile(
 BUILTIN_PROFILES: dict[str, DomainProfile] = {
     "software_dev": SOFTWARE_DEV,
     "episodic_personal": EPISODIC_PERSONAL,
+    "episodic_personal_no_dates": EPISODIC_PERSONAL_NO_DATES,
     "medical_clinical": MEDICAL_CLINICAL,
     "legal": LEGAL,
     "meeting_notes": MEETING_NOTES,

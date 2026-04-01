@@ -996,6 +996,148 @@ def prune_cmd(ctx, project, older_than_days, confidence_below, source_pattern, e
     store.close()
 
 
+@cli.command("vacuum")
+@click.argument("project")
+@click.option(
+    "--min-age-days",
+    default=90,
+    show_default=True,
+    type=int,
+    help="Only prune nodes older than N days",
+)
+@click.option(
+    "--max-confidence",
+    default=0.75,
+    show_default=True,
+    type=float,
+    help="Only prune nodes with confidence below this threshold",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    default=False,
+    help="Preview what would be removed without deleting",
+)
+@click.pass_context
+def vacuum_cmd(ctx, project, min_age_days, max_confidence, dry_run):
+    """Remove stale nodes that have never been retrieved.
+
+    Deletes nodes that satisfy ALL of:
+      - Never returned by any query (hit_count = 0)
+      - Older than --min-age-days
+      - Confidence below --max-confidence
+      - Not pinned
+
+    Use --dry-run to preview without deleting.
+    """
+    cfg = _load_cfg(ctx.obj["config_path"])
+    db_path = get_db_path(cfg, project)
+    store = GraphStore(db_path)
+    ids = store.vacuum_unused(min_age_days=min_age_days, max_confidence=max_confidence, dry_run=dry_run)
+    store.close()
+
+    if not ids:
+        click.echo("No stale nodes found.")
+        return
+
+    if dry_run:
+        click.echo(f"Would remove {len(ids)} stale node(s). Run without --dry-run to delete.")
+    else:
+        click.echo(f"Removed {len(ids)} stale node(s) from '{project}'.")
+
+
+@cli.command("dedup")
+@click.argument("project")
+@click.option(
+    "--threshold",
+    default=0.92,
+    show_default=True,
+    type=float,
+    help="Cosine similarity threshold above which two nodes are considered duplicates",
+)
+@click.option(
+    "--top-k",
+    default=5,
+    show_default=True,
+    type=int,
+    help="Neighbors to check per node when scanning for duplicates",
+)
+@click.option(
+    "--limit",
+    default=0,
+    show_default=True,
+    type=int,
+    help="Max nodes to scan per run (0 = all). Use to batch large graphs.",
+)
+@click.option(
+    "--execute",
+    is_flag=True,
+    default=False,
+    help="Actually merge duplicate nodes (default: preview only)",
+)
+@click.pass_context
+def dedup_cmd(ctx, project, threshold, top_k, limit, execute):
+    """Find and merge semantically duplicate nodes.
+
+    Two nodes are considered duplicates when their embedding cosine similarity
+    exceeds --threshold. The lower-confidence node is merged into the higher-
+    confidence one: tags are unioned, confidence takes the max, and edges are
+    rewritten to point at the surviving node.
+
+    Runs in preview mode by default. Use --execute to actually merge.
+    Requires sqlite-vec and sentence-transformers to be installed.
+
+    Examples:
+
+    \b
+      engram dedup myproject
+      engram dedup myproject --threshold 0.90 --execute
+    """
+    cfg = _load_cfg(ctx.obj["config_path"])
+    db_path = get_db_path(cfg, project)
+    store = GraphStore(db_path)
+
+    if not store._vec_available:
+        click.echo("sqlite-vec not available — semantic dedup requires sqlite-vec.", err=True)
+        store.close()
+        ctx.exit(1)
+
+    click.echo("Embedding any unindexed nodes...")
+    embedded = store.embed_missing_nodes()
+    if embedded:
+        click.echo(f"  Embedded {embedded} new node(s).")
+
+    limit_str = f", limit={limit}" if limit else ""
+    click.echo(f"Scanning for duplicates (threshold={threshold}, top_k={top_k}{limit_str})...")
+    pairs = store.find_semantic_duplicates(threshold=threshold, top_k=top_k, limit=limit)
+
+    if not pairs:
+        store.close()
+        click.echo("No semantic duplicates found.")
+        return
+
+    click.echo(f"Found {len(pairs)} duplicate pair(s):")
+    for keep_id, drop_id, sim in pairs[:20]:
+        keep_row = store.conn.execute("SELECT fact FROM nodes WHERE id = ?", (keep_id,)).fetchone()
+        drop_row = store.conn.execute("SELECT fact FROM nodes WHERE id = ?", (drop_id,)).fetchone()
+        if keep_row and drop_row:
+            keep_fact = (keep_row[0][:60] + "...") if len(keep_row[0]) > 63 else keep_row[0]
+            drop_fact = (drop_row[0][:60] + "...") if len(drop_row[0]) > 63 else drop_row[0]
+            click.echo(f"  sim={sim:.3f}  KEEP [{keep_id}] {keep_fact}")
+            click.echo(f"         DROP [{drop_id}] {drop_fact}")
+    if len(pairs) > 20:
+        click.echo(f"  ... and {len(pairs) - 20} more.")
+
+    if not execute:
+        click.echo(f"\nRun with --execute to merge {len(pairs)} pair(s).")
+        store.close()
+        return
+
+    merged = sum(1 for keep_id, drop_id, _ in pairs if store.merge_node_into(keep_id, drop_id))
+    store.close()
+    click.echo(f"Merged {merged} duplicate node(s) from '{project}'.")
+
+
 @cli.command("hook-init")
 @click.argument("project")
 @click.option(

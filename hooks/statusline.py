@@ -23,7 +23,7 @@ import sys
 import time
 from pathlib import Path
 
-STATE_PATH = Path.home() / ".context-broker" / "state.json"
+STATE_PATH = Path.home() / ".engram" / "state.json"
 STATE_MAX_AGE_SECS = 300  # Don't show stale CB state after 5 min
 
 
