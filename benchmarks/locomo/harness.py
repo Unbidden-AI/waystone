@@ -166,7 +166,12 @@ def _run_config(
     conversation are concurrent. With multiple conv_workers active simultaneously,
     judge calls across conversations also run concurrently.
     """
-    tmp_dir = db_dir or tempfile.mkdtemp(prefix=f"locomo_{config.name}_")
+    if db_dir:
+        tmp_dir = db_dir
+    else:
+        from pathlib import Path as _Path
+        tmp_dir = str(_Path.home() / ".engram" / "locomo_cache" / config.name)
+        _Path(tmp_dir).mkdir(parents=True, exist_ok=True)
     conversations = list(ds.iter_conversations(limit=limit, sample_ids=sample_ids))
 
     def _process_one_conv(conv) -> dict[str, Any]:
@@ -390,6 +395,71 @@ def _retrieve_context(
 
 
 # ---------------------------------------------------------------------------
+# Pre-run preflight check
+# ---------------------------------------------------------------------------
+
+def _preflight_check(
+    dataset_path: str,
+    config_names: list[str],
+    sample_ids: list[str],
+    limit: int | None,
+    db_dir_override: str | None,
+) -> None:
+    """Print extraction model config and which conversations will need extraction vs reuse."""
+    from engram.config import load_config
+
+    cfg = load_config()
+    llm = cfg.get("llm", {})
+    model = llm.get("model", "UNKNOWN")
+    max_tokens = llm.get("max_tokens", "UNKNOWN")
+    base_url = llm.get("base_url", "")
+
+    print("=" * 60)
+    print("PRE-RUN CONFIG CHECK")
+    print(f"  Extraction model : {model}")
+    print(f"  max_tokens       : {max_tokens}")
+    print(f"  base_url         : {base_url}")
+    print()
+
+    ds = LocomoDataset(dataset_path)
+    convs = list(ds.iter_conversations(limit=limit, sample_ids=sample_ids))
+
+    for config_name in config_names:
+        if config_name not in ABLATION_CONFIGS:
+            continue
+        config = ABLATION_CONFIGS[config_name]
+        if config.full_context:
+            print(f"  Config: {config_name}  — full_context mode, no extraction")
+            continue
+
+        if db_dir_override:
+            db_dir = db_dir_override
+        else:
+            db_dir = str(Path.home() / ".engram" / "locomo_cache" / config_name)
+
+        will_extract = []
+        will_reuse = []
+        for conv in convs:
+            cp = Path(db_dir) / f"{conv.sample_id}.db"
+            if cp.exists():
+                will_reuse.append(conv.sample_id)
+            else:
+                will_extract.append(conv.sample_id)
+
+        print(f"  Config: {config_name}")
+        print(f"    db_dir: {db_dir}")
+        if will_reuse:
+            print(f"    Checkpoint found (skip extraction) : {will_reuse}")
+        if will_extract:
+            print(f"    *** NO checkpoint — WILL EXTRACT  : {will_extract}")
+        if not will_extract:
+            print(f"    All checkpoints present — no extraction needed")
+
+    print("=" * 60)
+    print()
+
+
+# ---------------------------------------------------------------------------
 # CLI entry point
 # ---------------------------------------------------------------------------
 
@@ -437,9 +507,10 @@ def main() -> None:
     )
     parser.add_argument(
         "--db-dir", default=None,
-        help="Directory for SQLite DBs. Use a stable path (e.g. ~/locomo_checkpoints) "
-             "to reuse ingest across runs — avoids expensive re-extraction. "
-             "Different domains or dedup_thresholds need different dirs.",
+        help="Directory for SQLite DBs. Defaults to ~/.engram/locomo_cache/<config_name>/ "
+             "so checkpoints persist automatically across runs. Override to use a different "
+             "location or share DBs between configs. Different domains or dedup_thresholds "
+             "need different dirs.",
     )
     parser.add_argument(
         "--quiet", action="store_true",
@@ -451,7 +522,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--quick", action="store_true",
-        help="Quick single-conversation test on conv-42. Use for change validation "
+        help="Quick single-conversation test on conv-26. Use for change validation "
              "before running the full dev set.",
     )
     parser.add_argument(
@@ -467,14 +538,25 @@ def main() -> None:
     elif "paper" in config_names:
         config_names = PAPER_CONFIGS
 
-    # --quick: single-conversation change validation on conv-42
+    # --quick: single-conversation change validation on conv-26
     sample_ids_override = args.sample_ids
     limit = args.limit
     if args.quick:
-        sample_ids_override = ["conv-42"]
+        sample_ids_override = ["conv-26"]
         limit = 1
         if not args.quiet:
-            print("[quick mode] Running on conv-42 only. Use full dev set only after approval.")
+            print("[quick mode] Running on conv-26 only. Use full dev set only after approval.")
+
+    if not args.quiet:
+        _preflight_check(
+            dataset_path=args.dataset,
+            config_names=config_names,
+            sample_ids=sample_ids_override or (
+                DEV if args.split == "dev" else TEST if args.split == "test" else ALL
+            ),
+            limit=limit,
+            db_dir_override=args.db_dir,
+        )
 
     run_benchmark(
         dataset_path=args.dataset,

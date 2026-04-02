@@ -24,7 +24,9 @@ Three synthetic transcripts representing realistic software project design discu
 
 ## Extraction Mode Comparison
 
-Three extraction modes were benchmarked against the same retrieval evaluation:
+> **Note:** The three-mode benchmarks below (Full/Incremental/Buffered) were conducted in early March 2026 against a prompt-and-retriever state that has since been substantially improved. The current best recall on the software dev benchmark is **95%** (Gemini 2.5 Flash + `--verify`, top_k=30, with prior-state tagging, compound hyphen keyword fix, and enumeration context tagging). This section is preserved as historical context on extraction architecture tradeoffs.
+
+Three extraction modes were benchmarked against the same retrieval evaluation (early March 2026, pre-prompt-improvement baseline):
 
 | Mode | Recall | ≥80% Questions | Avg Tokens | LLM Calls | Extraction Time |
 |------|--------|----------------|-----------|-----------|-----------------|
@@ -61,21 +63,29 @@ Turns are accumulated and flushed to the LLM only when a threshold is met:
 
 **Best for:** Real-time use where per-turn extraction cost is prohibitive, but you still want the graph building incrementally without waiting for the full transcript.
 
+### Episodic ingestion (current production mode)
+
+The Stop hook (`hooks/context_broker_stop.py`) captures only the new turns since the last extraction (delta), prepends 2 prior turns as co-reference context, and submits to `engram extract --verify`. This is structurally similar to incremental but operates at conversation-end rather than per-turn, avoiding per-turn cost while retaining the delta coherence benefit. A `MAX_DELTA_TURNS=50` hard cap prevents runaway LLM cost if state is lost. This is the recommended real-time mode.
+
 ---
 
 ## Recall Analysis
 
-### Why full extraction wins
+### Why full extraction wins (and current improvement trajectory)
 
-Full extraction gives the LLM complete global context — it sees all 42 messages in a design transcript and can reason about the entire arc. Incremental and buffered modes give the LLM only a window, plus a retrieved snapshot of what's been extracted so far. That snapshot is good but imperfect (recall on the snapshot itself is ~60%), so errors compound over turns.
+Full extraction gives the LLM complete global context — it sees all 42 messages in a design transcript and can reason about the entire arc. Incremental and buffered modes give the LLM only a window, plus a retrieved snapshot of what's been extracted so far. That snapshot is good but imperfect (recall on the snapshot itself is ~60% at the original baseline), so errors compound over turns.
+
+The gap between modes has narrowed substantially as the extraction prompt improved. With the current prompt (prior-state tagging rule, compound hyphen fix, enumeration context tagging, `--verify` pass), full single-shot extraction reaches **95% recall** (21/23 ≥80%) on the software dev benchmark.
 
 ### Where all modes struggle (0% recall questions)
 
-Six questions had 0% recall in the full mode run:
+Six questions had 0% recall in the early full mode run:
 - `q_pipe_02`, `q_pipe_07`: Data pipeline questions about specific numeric values (e.g., deduplication window size, backpressure thresholds)
 - `q_auth_04`, `q_auth_06`: Authentication questions about security edge cases mentioned briefly in conversation
 
 The pattern: **specific numeric values and briefly-mentioned edge cases are under-tagged.** The extraction LLM assigns tags based on primary topic keywords, but a fact like "30-second deduplication window using Redis sorted sets" may only get tagged `["deduplication", "redis", "window"]` — and a query about "event replay" or "idempotency" won't match those tags.
+
+Most of these chronic failures have since been resolved. See [Persistent Failing Questions](#persistent-failing-questions) for current status.
 
 ### Recall improvements implemented
 
@@ -87,7 +97,17 @@ When `get_nodes_by_tags` finds no tag matches, fall back to substring search aga
 
 Before BFS traversal, entry nodes are filtered to those matching ≥2 query keywords. Single-keyword matches are too generic and can seed the BFS in the wrong cluster of the graph. If no nodes pass the ≥2 threshold, fall back to all candidates. This prevents a query about "API versioning strategy" from seeding BFS at an unrelated node that happens to be tagged `["api"]`.
 
-These two changes were applied to `retriever.py` and `store.py` after the initial baseline benchmarks. The improvements are visible in the current benchmark results.
+**3. Compound hyphen keyword expansion** (`retriever.py`, 2026-03-18)
+
+`extract_keywords()` now emits non-numeric hyphenated compounds as both the whole token AND split parts ("hot-path" → "hot-path", "hot", "path"). Solved q_pipe_04 (25%→100%).
+
+**4. Prior-state tagging rule** (`prompts.py` Rule 11, 2026-03-18)
+
+When a decision/transition supersedes a prior approach, tags MUST include the old term so it's retrievable from both directions. Also requires "from X to Y" language in transition fact text. Solved q_pipe_02 (0%→100%); lifted baseline from 89% → 95%.
+
+**5. Enumeration context tagging rule** (`prompts.py` verification section, 2026-03-18)
+
+When a node is one of several items explicitly enumerated together, include tags from the enumeration's label. Helped q_pipe_04 and q_pipe_01.
 
 ---
 
@@ -165,27 +185,29 @@ Extraction cost (an LLM call, typically 30–120 seconds) exceeds the token savi
 
 ---
 
-## Claude Code Hook Integration Design
+## Claude Code Hook Integration
 
-Context Broker can integrate with the Claude Code CLI via hooks to silently inject project context into every prompt without user effort.
+The hook integration is **operational**. Both hooks are live and active in daily development use. Install via `python hooks/install.py`.
 
 ### Hook architecture
 
-**`UserPromptSubmit` hook** — runs before each user prompt reaches the model:
+**`UserPromptSubmit` hook** (`hooks/context_broker_submit.py`) — runs before each user prompt reaches the model:
 1. Receives the user's prompt text on stdin as JSON
 2. Runs `engram query <project> "<prompt>"` locally (SQLite lookup, <5ms)
 3. Writes the retrieved context block to stdout
 4. Claude Code prepends this to the prompt automatically
 
-**`Stop` hook** — runs after each assistant response:
-1. Receives the last assistant message and last user message
-2. Formats them as a turn: `**User**: ... \n\n**Assistant**: ...`
-3. Pipes the turn to `engram extract-turn <project>`
-4. The buffered extractor decides whether to flush to the LLM
+**`Stop` hook** (`hooks/context_broker_stop.py`) — runs after each conversation ends:
+1. Parses the full JSONL transcript and saves to `~/.engram/transcripts/<project>/`
+2. Computes the delta: only turns since the last extraction (tracked in `<session_id>.state`)
+3. Prepends 2 prior turns as co-reference context, writes a delta snippet to a temp file
+4. Spawns `engram extract <project> <delta_file> --verify` as a detached background process
+5. Checks node count; if `current_nodes - last_reconcile_nodes >= reconcile_threshold (75)` and total ≥ 100, spawns `engram reconcile` to find supersedes relationships
+6. Hard cap: `MAX_DELTA_TURNS=50` prevents runaway extraction cost if state file is lost
 
 ### What this achieves
 
-- **Zero user friction.** The user works normally. Every prompt is silently enriched with project context. Every response is silently extracted into the graph.
+- **Zero user friction.** The user works normally. Every prompt is silently enriched with project context. Every conversation end triggers background graph enrichment.
 - **Compounding quality.** The graph grows richer with each exchange. By conversation 10, retrieval is meaningfully better than conversation 1 because more architectural context has been accumulated.
 - **Cross-session memory.** When the user starts a new Claude Code session, the hook immediately reloads project context. The model behaves as if it has been working on the project continuously.
 
@@ -197,11 +219,21 @@ An underappreciated benefit: the injected context often conveys user intent more
 
 ## Known Limitations
 
-### Recall ceiling (~60% on current benchmarks)
+### Recall on software dev benchmark (current: 95%)
 
-Full extraction with Gemini 2.5 Flash achieves 60% recall on structured transcripts designed for extraction. Real-world transcripts are messier; practical recall may be lower. Missing 40% of facts is a meaningful failure rate — the model may confidently apply wrong or incomplete context.
+Gemini 2.5 Flash + `--verify` with current prompt improvements (prior-state tagging, compound hyphen fix, enumeration context tagging, top_k=30) achieves **95% recall** (21/23 ≥80% questions) on the software dev benchmark. Two questions remain below 80%:
+- `q_pipe_01` (75%): grading artifact — retriever returns correct fact but keyword overlap fails vs. ground truth phrasing
+- `q_api_08` (75%): same grading artifact pattern
 
-This is partly an extraction quality problem (some facts are under-tagged or missed) and partly a retrieval problem (the BFS neighborhood doesn't always contain what's needed). Both have headroom for improvement.
+These are not retrieval gaps; they reflect keyword-overlap scoring limitations in the eval harness rather than missing facts in the graph.
+
+### LOCOMO episodic memory benchmark (current: ~50%)
+
+On the LOCOMO benchmark (real human conversations, keyword accuracy scoring), the current `engram_default` pipeline scores approximately **49.8% keyword accuracy** on conv-26 (March 2026 baseline). Competitive targets: Zep ~73%, Mem0 ~88%. This is the active improvement frontier. The LOCOMO task differs substantially from the software dev benchmark — shorter, denser conversations with personal context rather than technical design discussions, and keyword-based accuracy vs. recall-of-ground-truth-nodes scoring.
+
+### Specific values are under-extracted
+
+Numeric thresholds, config key names, and briefly-mentioned edge cases are systematically under-retrieved. The extraction LLM tags nodes with primary topic terms but not with the specific values themselves, making them invisible to keyword-based retrieval. The fact-text fallback helps but doesn't fully close this gap.
 
 ### Specific values are under-extracted
 
@@ -393,7 +425,7 @@ These are known improvement vectors identified during development, not yet imple
 
 ### Higher-recall tag generation
 
-The single most impactful extraction improvement would be richer synonym and value-level tagging. The extraction prompt already instructs the LLM to "tag richly with every keyword a future query might use," but specific numeric values and edge-case terminology are still commonly missed. A dedicated tagging pass or post-processing step that adds numeric values and known synonyms from a domain vocabulary could meaningfully improve the 60% recall ceiling.
+The extraction prompt already instructs the LLM to "tag richly with every keyword a future query might use," and the current prompt achieves 95% on the software dev benchmark. The remaining gap on LOCOMO-style conversations (personal, denser context) suggests that synonym and value-level tagging are still the primary opportunity. A dedicated tagging pass or post-processing step that adds numeric values and known synonyms from a domain vocabulary could improve recall on queries where the user's terminology diverges from stored tag vocabulary.
 
 ### Semantic fallback via embedding
 
@@ -473,15 +505,17 @@ Compute vector embeddings for each node's fact text (e.g., using `all-MiniLM-L6-
 
 | Metric | Value | Notes |
 |--------|-------|-------|
-| Full extraction recall | 60% | Gemini 2.5 Flash, default strategies |
-| Buffered extraction recall | 47% | ~18% call rate vs per-turn |
+| Software dev benchmark recall (current best) | **95%** | Gemini 2.5 Flash + `--verify`, top_k=30, 21/23 ≥80% |
+| Software dev benchmark recall (no verify) | 92% | Gemini 2.5 Flash, default strategies, 19/23 ≥80% |
+| LOCOMO benchmark (keyword accuracy) | ~50% | `engram_default` on conv-26, March 2026; targets: Zep 73%, Mem0 88% |
+| Buffered extraction recall (early baseline) | 47% | ~18% call rate vs per-turn, early March 2026 |
 | Incremental cross-turn edges | ~27/transcript | api_design + data_pipeline average |
 | Avg retrieval latency | <5ms | Local SQLite, all modes |
 | Avg context output | ~540 tokens | top_k=10, default strategies |
 | Token reduction vs full transcript | ~90–95% | vs 8k–20k token transcripts |
 | Break-even (token ROI) | ~7 downstream prompts | At avg 540 token injection vs 4000 token history |
-| Extraction time (full, 3 transcripts) | 230s | Gemini 2.5 Flash |
-| Extraction time (buffered, 2 transcripts) | 196s | 7 flushes across 39 turns |
+| Extraction time (full + verify, 3 transcripts) | ~356s | Gemini 2.5 Flash, top_k=30 |
+| Extraction time (no verify, 3 transcripts) | ~195s | Gemini 2.5 Flash, ~258 nodes |
 
 ---
 
@@ -553,8 +587,8 @@ This compounds more aggressively than the single-user case. A single developer's
 
 Listed in rough priority order based on expected impact relative to implementation complexity.
 
-**1. Hook script implementation**
-Write `~/.claude/hooks/ctx-inject.sh` (UserPromptSubmit) and `~/.claude/hooks/ctx-extract.sh` (Stop) to activate seamless Claude Code integration. The architecture is fully designed; the scripts are the remaining step to making the broker operational in daily development use.
+**1. Hook integration — DONE**
+`hooks/context_broker_submit.py` (UserPromptSubmit) and `hooks/context_broker_stop.py` (Stop) are implemented and operational. Install via `python hooks/install.py`. Both hooks are active in daily development use. The Stop hook uses episodic delta extraction with session state tracking and a `MAX_DELTA_TURNS=50` cost cap.
 
 **2. Re-run benchmarks with the `KeyError` fix**
 The `project_auth_system.md` transcript failed in both incremental and buffered modes. Now that the malformed-node filter is in place, a re-run would give complete three-way benchmark data for all 23 evaluation questions.
@@ -583,23 +617,25 @@ Currently each project is an isolated SQLite database. Cross-project queries (e.
 
 ### Issues and Mitigation Plans
 
-#### 1. Recall quality is not product-ready
+#### 1. Recall quality — current status and remaining gaps
 
-**Issue:** Full extraction achieves 60% recall on purpose-built, structured transcripts. Real-world conversations are messier; production recall is likely lower. Missing 40% of facts means the broker occasionally injects stale or incomplete context silently and confidently. A single incident where injected context causes a real bug is enough to destroy user trust.
+**Status:** Software dev benchmark recall is now **95%** (21/23 ≥80%, Gemini 2.5 Flash + `--verify`, March 2026). The internal ≥80% target for software dev transcripts is met. The active recall frontier is the LOCOMO episodic memory benchmark (~50% keyword accuracy vs. Zep 73%, Mem0 88%).
+
+**Issue (LOCOMO gap):** LOCOMO conversations are denser, more personal, and scored differently than the software dev benchmark. Closing the gap from 50% → 73%+ requires improvements in episodic retrieval quality, not just extraction quality.
 
 **Plan:**
 
-*Short term — raise the recall floor before shipping:*
-- Add synonym and value-level tagging: instruct the extraction LLM to include numeric thresholds, acronym expansions, and common paraphrase pairs directly in tags. Target the known failure class: specific values and edge cases that are under-tagged today.
-- Add a post-extraction validation pass that flags nodes with fewer than 3 tags, facts under 10 words, or a confidence score that contradicts the node type (e.g., an "implemented" node at confidence 0.3). Flag for re-extraction rather than silent acceptance.
-- Add extraction quality scoring per transcript (node count / transcript length, tag density, edge-to-node ratio). Surface the score to the user so they know which transcripts produced weak graphs.
+*Short term — close the LOCOMO gap:*
+- Run ablation experiments on LOCOMO dev split (first 5 conversations) to identify which pipeline components most affect keyword accuracy.
+- Tune retrieval parameters (top_k, hops, strategy pipeline) for LOCOMO-style queries, which differ from software dev queries.
+- Investigate whether `--verify` and targeted passes help or hurt on LOCOMO conversations.
 
 *Medium term — close the vocabulary gap:*
 - Implement an optional embedding-based fallback retrieval step. When keyword and fact-text search both return no results, fall back to cosine similarity over node fact embeddings. This is opt-in infrastructure (requires an embedding model) but closes the remaining synonym mismatch gap.
 - Fine-tune or prompt-engineer a dedicated extraction model on a labeled dataset of transcripts and ground-truth node sets. A model that has seen thousands of correctly-extracted graphs will tag more consistently and miss fewer edge cases than a general-purpose LLM given a prompt.
 
 *Product-level guard:*
-- Set an explicit internal recall target of ≥80% on the benchmark suite before any public release. Make the benchmark reproducible by any contributor so the threshold is continuously verified.
+- Software dev recall target (≥80% on benchmark suite) is met. Next target: ≥73% LOCOMO keyword accuracy to match Zep. Make both benchmarks reproducible by any contributor so thresholds are continuously verified.
 
 ---
 
@@ -629,7 +665,7 @@ Currently each project is an isolated SQLite database. Cross-project queries (e.
 **Plan:**
 
 *Tiered extraction quality:*
-- Document model tiers explicitly: Tier 1 (local 7B–14B models, free, ~40–64% recall), Tier 2 (Gemini 2.5 Flash, cheap, ~92–94% recall), Tier 3 (Claude Sonnet / Gemini Pro, higher cost, untested ceiling). GPT-4o benchmarked at only ~50% — do not place in Tier 3. Let users choose based on their cost tolerance.
+- Document model tiers explicitly: Tier 1 (local 7B–14B models, free, ~40–72% recall — Qwen3.5-9B tops at 72%), Tier 2 (Gemini 2.5 Flash, cheap, **95% recall** with `--verify`), Tier 3 (Claude Sonnet / larger models, higher cost, untested ceiling). GPT-4o benchmarked at only ~50% — do not place in Tier 2 or 3. Nemotron 120B: 71%, Qwen 3.5 35B: 64%. Let users choose based on their cost tolerance.
 - The extraction prompt already works with any OpenAI-compatible endpoint. Make model selection a one-line config change with clear recall implications documented.
 
 *Managed extraction service (cloud product):*
@@ -647,8 +683,8 @@ Currently each project is an isolated SQLite database. Cross-project queries (e.
 
 **Plan:**
 
-*Phase 1 — Claude Code (now):*
-The hook integration is fully designed. Ship the hook scripts and document the setup. Establish the pattern, collect feedback, and build the user base within the Claude Code ecosystem before expanding.
+*Phase 1 — Claude Code (DONE):*
+The hook integration is operational. Both hooks (`context_broker_submit.py`, `context_broker_stop.py`) are shipped and active. Install via `python hooks/install.py`. Pattern is established; collect feedback and build user base before expanding.
 
 *Phase 2 — VS Code extension:*
 A VS Code extension can integrate with GitHub Copilot Chat, Cursor, and Continue.dev (among others) via the Language Model API or by reading from the workspace chat history. The extension calls `engram query` on every prompt submission and injects the result as a context message. Reaches the largest IDE user base without requiring CLI tool adoption.
@@ -762,7 +798,7 @@ Build and validate the free individual tier first — it costs nothing and build
 
 A series of prompt modifications were tested to improve recall on numeric fact retrieval (questions like "what is the token expiry?" that require matching a specific number in the graph). The experiment produced a significant regression and recovery, with important lessons for future prompt work.
 
-**Baseline state entering this session:** Gemini 2.5 Flash at ~57–66% recall on the standard benchmark (3 transcripts × 23 questions × 4 presets).
+**Baseline state entering this session (2026-03-09):** Gemini 2.5 Flash at ~57–66% recall on the standard benchmark (3 transcripts × 23 questions × 4 presets). This was prior to all prompt improvements; current best is 95%.
 
 ---
 
@@ -845,8 +881,8 @@ All models run against the same 3 transcripts (~15k chars total, 23 eval questio
 
 | Model | Nodes extracted | Recall (baseline) | ≥80% questions | Extraction time | Notes |
 |-------|----------------|-------------------|----------------|-----------------|-------|
-| Gemini 2.5 Flash | ~297 | **92%** | **19/23** | ~195s | Reference; best overall (2026-03-13) |
-| Gemini 2.5 Flash + verify | ~295 | **94%** | **20/23** | ~396s | Best with verification pass (2026-03-13) |
+| Gemini 2.5 Flash | ~258 | **92%** | **19/23** | ~195s | Reference; best no-verify (2026-03-18, top_k=30) |
+| Gemini 2.5 Flash + verify | ~258 | **95%** | **21/23** | ~356s | **Current best** (2026-03-18, top_k=30, prior-state tagging + hyphen fix) |
 | Gemini 2.5 Flash + lesson_learned Rule 14 (no verify) | 276 | 82% | 15/23 | ~273s | Rule 14 in base prompt caused -10% recall, -21 fewer nodes; reverted (2026-03-17) |
 | Gemini 2.5 Flash + lesson_learned Rule 14 + verify | 304 | 80% | 14/23 | ~333s | verify didn't recover the Rule 14 regression; reverted (2026-03-17) |
 | Claude Sonnet 4.5 | — | — | — | — | Not yet benchmarked cleanly |
