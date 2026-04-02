@@ -32,6 +32,9 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
+# Module-level provider cache — avoids recreating the API client on every call
+_provider_instances: dict[str, "LLMProvider"] = {}
+
 
 # ---------------------------------------------------------------------------
 # Provider protocol
@@ -154,8 +157,10 @@ class GeminiNativeProvider(LLMProvider):
             None, lambda: self.complete_sync(prompt, max_tokens=max_tokens, **kwargs)
         )
 
-    def complete_sync(self, prompt: str, *, max_tokens: int, **kwargs) -> str:
+    def complete_sync(self, prompt: str, *, max_tokens: int, system: str | None = None, **kwargs) -> str:
         config_kwargs = dict(max_output_tokens=max_tokens, temperature=0.1)
+        if system:
+            config_kwargs["system_instruction"] = system
         config_kwargs.update(kwargs)
         gen_cfg = self._types.GenerateContentConfig(**config_kwargs)
 
@@ -283,8 +288,14 @@ def get_provider(config: dict) -> LLMProvider | None:
         log.warning("use_native_sdk=true but no Gemini API key found — falling back")
         return None
 
+    cache_key = f"{model}:{api_key}"
+    if cache_key in _provider_instances:
+        return _provider_instances[cache_key]
+
     try:
-        return GeminiNativeProvider(model=model, api_key=api_key)
+        provider = GeminiNativeProvider(model=model, api_key=api_key)
+        _provider_instances[cache_key] = provider
+        return provider
     except ImportError as e:
         log.warning("use_native_sdk=true but google-genai not installed (%s) — falling back", e)
         return None

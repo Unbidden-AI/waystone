@@ -81,6 +81,45 @@ class ExtractionBuffer:
 async def _call_llm(prompt: str, config: dict, domain_profile=None) -> str:
     """Make an LLM API call and return the raw response content."""
     llm_cfg = config["llm"]
+
+    thinking_enabled = llm_cfg.get("enable_thinking", True)
+    system_suffix = "" if thinking_enabled else " /no_think"
+    system_msg = f"You are a context extraction engine. Return only valid JSON.{system_suffix}"
+
+    # Native Gemini SDK path — unlocks count_tokens, context caching, etc.
+    # Falls back to OpenAI-compatible httpx path when use_native_sdk is false
+    # or google-genai is not installed.
+    from .llm import get_provider
+    _native = get_provider(config)
+    if _native is not None:
+        max_tok = llm_cfg.get("max_tokens", 4096)
+        temp = llm_cfg.get("temperature", 0.1)
+        _MAX_RETRIES = 6
+        for attempt in range(_MAX_RETRIES):
+            try:
+                return await _native.complete_async(
+                    prompt,
+                    max_tokens=max_tok,
+                    system=system_msg,
+                    temperature=temp,
+                )
+            except Exception as exc:
+                exc_str = str(exc)
+                # Propagate output-truncation errors immediately (bisection handles them)
+                if "finish_reason" in exc_str or "MAX_TOKENS" in exc_str:
+                    raise
+                if attempt < _MAX_RETRIES - 1 and any(
+                    code in exc_str for code in ("429", "503", "502", "500", "504")
+                ):
+                    wait = min(30 * (attempt + 1), 120) if "429" in exc_str else 2 ** attempt
+                    log.warning(
+                        "LLM error (attempt %d/%d), retrying in %ds: %s",
+                        attempt + 1, _MAX_RETRIES, wait, exc_str[:120],
+                    )
+                    await asyncio.sleep(wait)
+                    continue
+                raise
+
     headers = {}
     api_key_env = llm_cfg.get("api_key_env")
     if api_key_env:
@@ -97,17 +136,11 @@ async def _call_llm(prompt: str, config: dict, domain_profile=None) -> str:
             headers["Authorization"] = f"Bearer {api_key}"
 
     timeout = llm_cfg.get("timeout", 600.0)
-    thinking_enabled = llm_cfg.get("enable_thinking", True)
-    # Qwen3 thinking models: prepend /no_think to disable chain-of-thought
-    system_suffix = "" if thinking_enabled else " /no_think"
 
     request_body = {
         "model": llm_cfg["model"],
         "messages": [
-            {
-                "role": "system",
-                "content": f"You are a context extraction engine. Return only valid JSON.{system_suffix}",
-            },
+            {"role": "system", "content": system_msg},
             {"role": "user", "content": prompt},
         ],
         "temperature": llm_cfg.get("temperature", 0.1),

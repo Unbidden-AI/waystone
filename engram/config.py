@@ -14,6 +14,7 @@ DEFAULTS = {
         "temperature": 0.1,
         "max_tokens": 4096,
         "timeout": 30.0,
+        "use_native_sdk": False,
     },
     "defaults": {
         "hops": 3,

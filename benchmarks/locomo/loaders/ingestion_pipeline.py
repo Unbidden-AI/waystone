@@ -78,6 +78,9 @@ def ingest_conversation(
     domain_profile = get_domain_profile(config)
     store = GraphStore(db_path, dedup_threshold=dedup_threshold)
 
+    from engram.llm import get_provider as _get_llm_provider
+    _provider = _get_llm_provider(config)
+
     t0 = time.perf_counter()
     errors = []
     total_nodes = 0
@@ -112,6 +115,34 @@ def ingest_conversation(
         """Extract a text chunk, bisecting on output-length truncation."""
         nonlocal total_nodes
         prompt_text = _build_prompt_text(text, prior_tail)
+
+        # Pre-flight token check: if native SDK supports count_tokens, estimate
+        # whether the extraction output will exceed max_tokens before spending an
+        # API call.  Extraction JSON grows roughly 0.8 output tokens per input
+        # token for this task; bisect immediately when the budget is tight.
+        if depth < 4 and _provider is not None and _provider.supports_count_tokens:
+            max_tok = config.get("llm", {}).get("max_tokens", 4096)
+            try:
+                n_input = _provider.count_tokens(prompt_text)
+                if n_input * 0.8 > max_tok * 0.9:
+                    lines = text.splitlines()
+                    if len(lines) >= 2:
+                        mid = len(lines) // 2
+                        if verbose:
+                            print(
+                                f"  [pre-bisect] {session_id}: {n_input} input tokens "
+                                f"exceeds threshold, splitting {len(lines)} lines at "
+                                f"{mid} (depth={depth})"
+                            )
+                        first_half = "\n".join(lines[:mid])
+                        second_half = "\n".join(lines[mid:])
+                        bisect_tail = "\n".join(lines[max(0, mid - CONTEXT_TAIL_LINES):mid])
+                        _extract_chunk(first_half, session_id, depth + 1, prior_tail=prior_tail, occurred_at=occurred_at)
+                        _extract_chunk(second_half, session_id, depth + 1, prior_tail=bisect_tail, occurred_at=occurred_at)
+                        return
+            except Exception:
+                pass  # count_tokens failure is non-fatal — proceed with API call
+
         keywords = extract_keywords(text)  # keywords from main text only
         context_nodes: list[dict] = []
         if keywords:
