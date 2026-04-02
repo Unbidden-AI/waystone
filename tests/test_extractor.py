@@ -1,9 +1,6 @@
 """Tests for the extraction service (JSON parsing, ID assignment)."""
 
 import re
-
-import pytest
-
 from unittest.mock import AsyncMock, patch
 
 import pytest
