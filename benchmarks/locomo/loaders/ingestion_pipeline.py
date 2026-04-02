@@ -85,9 +85,10 @@ def ingest_conversation(
     ctx_k = 30
     ctx_hops = 2
     # Number of lines to carry forward as read-only context across bisection and
-    # session boundaries. Small enough to not bloat the prompt; large enough to
-    # resolve a co-reference ("she finally told me" → entity from prior turns).
-    CONTEXT_TAIL_LINES = 4
+    # session boundaries. 8 lines covers ~4 speaker turns — enough to resolve
+    # most cross-boundary co-references ("she finally told me" → entity from
+    # prior turns) without bloating the prompt significantly (~150–250 tokens).
+    CONTEXT_TAIL_LINES = 8
 
     def _build_prompt_text(main_text: str, prior_tail: str | None) -> str:
         """Prepend a read-only prior-context header when available."""

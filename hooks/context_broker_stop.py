@@ -38,6 +38,13 @@ TRANSCRIPTS_DIR = Path.home() / ".engram" / "transcripts"
 # Number of already-extracted turns to prepend as read-only co-reference context
 PRIOR_CONTEXT_TURNS = 2
 
+# Hard cap on new turns sent per extraction call. Prevents runaway cost if the
+# .state file is lost/corrupted (last_extracted_idx resets to 0). When there
+# are more new turns than this, only the most-recent MAX_DELTA_TURNS are sent
+# and state is advanced to match, so older turns are skipped rather than
+# re-extracted. Default 50 ≈ ~25 back-and-forth exchanges.
+MAX_DELTA_TURNS = 50
+
 # Defaults — overridable via config.yaml under 'maintenance:'
 DEFAULT_RECONCILE_THRESHOLD = 75   # new nodes since last reconcile
 DEFAULT_RECONCILE_MIN_TOTAL = 100  # minimum graph size before reconcile
@@ -103,9 +110,18 @@ def main():
         if last_idx >= len(turns):
             sys.exit(0)  # No new turns to extract
 
+        # Apply hard cap: if state was lost (last_idx=0) and the conversation
+        # is huge, only extract the most-recent MAX_DELTA_TURNS turns. Older
+        # turns are intentionally skipped — stale info is less valuable than
+        # preventing a runaway LLM bill.
+        new_turns = turns[last_idx:]
+        if len(new_turns) > MAX_DELTA_TURNS:
+            skipped = len(new_turns) - MAX_DELTA_TURNS
+            last_idx = last_idx + skipped
+            new_turns = new_turns[skipped:]
+
         # Build delta snippet: 2 prior turns (for co-reference context) + new turns
         prior_turns = turns[max(0, last_idx - PRIOR_CONTEXT_TURNS):last_idx]
-        new_turns = turns[last_idx:]
         snippet = _build_delta_snippet(prior_turns, new_turns)
 
         # Write delta to a temp file for extraction
