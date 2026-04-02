@@ -84,7 +84,9 @@ class TestRetrieve:
         assert "Garmin API" in result
 
     def test_no_matches(self, store):
-        result = retrieve(store, "kubernetes deployment")
+        # Disable semantic to test keyword/BFS path only — semantic finds cosine-similar
+        # nodes for any query, so a "no match" assertion requires keyword-only mode.
+        result = retrieve(store, "kubernetes deployment", strategies={"semantic": False})
         assert "No relevant context found" in result
 
     def test_top_k_limits(self, store):

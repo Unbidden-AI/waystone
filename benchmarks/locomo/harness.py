@@ -371,6 +371,9 @@ def _retrieve_context(
             "relevance_scoring": config.relevance_scoring,
             "resolve_dates": config.resolve_dates,
             "topk_formula": config.topk_formula,
+            "query_expansion": config.query_expansion,
+            "person_anchoring": config.person_anchoring,
+            "temporal_proximity": config.temporal_proximity,
         }
 
         try:
@@ -493,7 +496,9 @@ def main() -> None:
     )
     parser.add_argument(
         "--llm-model", default="gemini-2.5-flash-lite",
-        help="Model for LLM judge (default: gemini-2.5-flash-lite, near-free; "
+        help="Model for LLM judge (default: gemini-2.5-flash-lite; "
+             "use 'local:<model>' for a local LM Studio/Ollama server — free, "
+             "set LOCAL_LLM_BASE_URL env var if not localhost:1234; "
              "use claude-haiku-4-5-20251001 for final paper numbers)",
     )
     parser.add_argument(

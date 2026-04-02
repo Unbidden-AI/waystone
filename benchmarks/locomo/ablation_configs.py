@@ -47,6 +47,10 @@ class AblationConfig:
     # Number of raw conversation turns to append after BFS results as short-term context.
     # 0 = disabled (BFS only). When use_bfs=False, acts as a sliding-window baseline.
     prior_turns_window: int = 0
+    # Accuracy improvement features (LOCOMO plan improvements 1–3)
+    query_expansion: bool = False        # #1: synonym + named-entity keyword expansion
+    person_anchoring: bool = False       # #2: person nodes always become high-confidence BFS seeds
+    temporal_proximity: bool = False     # #3: boost nodes whose occurred_at is near query date
 
 
 # ---------------------------------------------------------------------------
@@ -296,6 +300,76 @@ ABLATION_CONFIGS: dict[str, AblationConfig] = {
         recency_half_life_days=3650,
         domain="episodic_personal_no_dates",
         resolve_dates=False,
+    ),
+    # ---- LOCOMO accuracy improvements 1–3 (ablations) ----
+    "engram_query_expansion": AblationConfig(
+        name="engram_query_expansion",
+        description="Default pipeline + query expansion (#1): synonym dict for common personal-fact "
+                    "verbs (eat→food/meal, visit→trip/came, work→job/career) and named-entity "
+                    "detection from capitalized query tokens. Isolates the lift from broadening "
+                    "the keyword search space.",
+        superseded_pruning=True,
+        confidence_threshold=None,
+        recency_decay=True,
+        top_k=50,
+        token_budget=None,
+        recency_half_life_days=3650,
+        query_expansion=True,
+    ),
+    "engram_person_anchor": AblationConfig(
+        name="engram_person_anchor",
+        description="Default pipeline + person anchoring (#2): person-typed nodes with ≥1 "
+                    "keyword-tag match become automatic high-confidence BFS seeds, ensuring "
+                    "every query that names a person unlocks that person's full fact neighborhood. "
+                    "Isolates the lift from entity-anchored seeding.",
+        superseded_pruning=True,
+        confidence_threshold=None,
+        recency_decay=True,
+        top_k=50,
+        token_budget=None,
+        recency_half_life_days=3650,
+        person_anchoring=True,
+    ),
+    "engram_temporal_boost": AblationConfig(
+        name="engram_temporal_boost",
+        description="Default pipeline + temporal proximity boosting (#3): nodes whose occurred_at "
+                    "is near the query's implied date reference get a score multiplier (half-life "
+                    "180d). Isolates the lift on the 20% temporal QA category.",
+        superseded_pruning=True,
+        confidence_threshold=None,
+        recency_decay=True,
+        top_k=50,
+        token_budget=None,
+        recency_half_life_days=3650,
+        temporal_proximity=True,
+    ),
+    "engram_improvements_1_3": AblationConfig(
+        name="engram_improvements_1_3",
+        description="All three LOCOMO accuracy improvements combined: query expansion (#1) + "
+                    "person anchoring (#2) + temporal proximity boosting (#3). Tests whether "
+                    "the improvements are additive or have diminishing returns when stacked.",
+        superseded_pruning=True,
+        confidence_threshold=None,
+        recency_decay=True,
+        top_k=50,
+        token_budget=None,
+        recency_half_life_days=3650,
+        query_expansion=True,
+        person_anchoring=True,
+        temporal_proximity=True,
+    ),
+    "engram_bm25_rrf": AblationConfig(
+        name="engram_bm25_rrf",
+        description="Default pipeline with BM25 FTS5 + RRF multi-channel retrieval active. "
+                    "BM25 runs on full fact text (porter-stemmed); RRF merges tag-overlap, "
+                    "BM25, and cosine channels without scale calibration. Isolates the lift "
+                    "from full-text retrieval over tag-only matching.",
+        superseded_pruning=True,
+        confidence_threshold=None,
+        recency_decay=True,
+        top_k=50,
+        token_budget=None,
+        recency_half_life_days=3650,
     ),
 }
 

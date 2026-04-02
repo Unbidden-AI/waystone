@@ -203,6 +203,30 @@ class GraphStore:
             except sqlite3.OperationalError:
                 pass  # Column already exists
 
+        # Create FTS5 virtual table for BM25 full-text search on fact text.
+        # Self-contained (no content= link) so rowid alignment isn't required.
+        # Triggers keep the FTS index in sync with the nodes table.
+        self.conn.executescript("""
+            CREATE VIRTUAL TABLE IF NOT EXISTS nodes_fts USING fts5(
+                node_id UNINDEXED,
+                fact,
+                tokenize='porter ascii'
+            );
+            CREATE TRIGGER IF NOT EXISTS nodes_fts_insert AFTER INSERT ON nodes BEGIN
+                INSERT INTO nodes_fts(node_id, fact) VALUES (new.id, new.fact);
+            END;
+            CREATE TRIGGER IF NOT EXISTS nodes_fts_delete AFTER DELETE ON nodes BEGIN
+                DELETE FROM nodes_fts WHERE node_id = old.id;
+            END;
+            CREATE TRIGGER IF NOT EXISTS nodes_fts_update AFTER UPDATE OF fact ON nodes BEGIN
+                DELETE FROM nodes_fts WHERE node_id = old.id;
+                INSERT INTO nodes_fts(node_id, fact) VALUES (new.id, new.fact);
+            END;
+        """)
+        self.conn.commit()
+        # Backfill FTS index for any nodes not yet indexed
+        self._backfill_fts()
+
         # Create vec0 virtual table for semantic search (requires sqlite-vec loaded)
         if self._vec_available:
             from engram.embedder import EMBEDDING_DIM
@@ -1034,6 +1058,45 @@ class GraphStore:
             pairs,
         )
         self.conn.commit()
+
+    def _backfill_fts(self) -> None:
+        """Populate FTS index for any existing nodes not yet covered."""
+        missing = self.conn.execute(
+            """SELECT n.id, n.fact FROM nodes n
+               WHERE NOT EXISTS (SELECT 1 FROM nodes_fts WHERE node_id = n.id)"""
+        ).fetchall()
+        if missing:
+            self.conn.executemany(
+                "INSERT INTO nodes_fts(node_id, fact) VALUES (?, ?)",
+                [(r[0], r[1]) for r in missing],
+            )
+            self.conn.commit()
+            log.debug("FTS backfill: indexed %d nodes", len(missing))
+
+    def search_by_fts(self, query: str, top_k: int = 50) -> list[tuple[str, float]]:
+        """BM25 full-text search on node fact text via FTS5.
+
+        Returns list of (node_id, bm25_score) tuples, ordered by relevance
+        (most relevant first). BM25 scores from FTS5 are negative; we negate
+        them so that higher = more relevant.
+
+        Returns an empty list if no matches or FTS table is unavailable.
+        """
+        if not query.strip():
+            return []
+        try:
+            rows = self.conn.execute(
+                """SELECT node_id, -bm25(nodes_fts) AS score
+                   FROM nodes_fts
+                   WHERE nodes_fts MATCH ?
+                   ORDER BY score DESC
+                   LIMIT ?""",
+                (query, top_k),
+            ).fetchall()
+            return [(r[0], float(r[1])) for r in rows]
+        except Exception as e:
+            log.debug("FTS search failed: %s", e)
+            return []
 
     def search_by_embedding(self, query_blob: bytes, top_k: int = 10) -> list[str]:
         """Return up to top_k node IDs ranked by cosine similarity to query_blob.

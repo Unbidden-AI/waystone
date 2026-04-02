@@ -144,8 +144,11 @@ def score_llm_judge(
     re-evaluation.
 
     Model routing:
-      - "gemini-*"  → Gemini OpenAI-compatible endpoint
-      - "claude-*"  → Anthropic client (use for final paper numbers only)
+      - "gemini-*"       → Gemini OpenAI-compatible endpoint
+      - "claude-*"       → Anthropic client (use for final paper numbers only)
+      - "local:<model>"  → local OpenAI-compatible server (LM Studio / Ollama)
+                           URL from LOCAL_LLM_BASE_URL env var, default http://localhost:1234/v1
+                           e.g. model="local:qwen2.5-7b-instruct"
     """
     import os
     from pathlib import Path
@@ -172,6 +175,19 @@ def score_llm_judge(
         response = client.chat.completions.create(
             model=model,
             max_tokens=16,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = response.choices[0].message.content.strip().upper()
+    elif model.startswith("local:"):
+        # Local OpenAI-compatible server (LM Studio, Ollama, etc.)
+        from openai import OpenAI
+        local_model = model[len("local:"):]
+        base_url = os.environ.get("LOCAL_LLM_BASE_URL", "http://localhost:1234/v1")
+        client = OpenAI(api_key="local", base_url=base_url)
+        response = client.chat.completions.create(
+            model=local_model,
+            max_tokens=16,
+            temperature=0.0,
             messages=[{"role": "user", "content": prompt}],
         )
         raw = response.choices[0].message.content.strip().upper()
