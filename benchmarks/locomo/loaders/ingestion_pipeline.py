@@ -49,7 +49,8 @@ def ingest_conversation(
     db_dir: str | Path | None = None,
     verbose: bool = False,
     domain: str | None = None,
-    dedup_threshold: float = 0.92,
+    dedup_threshold: float = 0.95,
+    llm_override: dict | None = None,
 ) -> tuple[GraphStore, IngestionResult]:
     """
     Ingest a LOCOMO conversation into a fresh GraphStore.
@@ -64,6 +65,9 @@ def ingest_conversation(
         verbose: Print progress.
         domain: Domain profile name (e.g. "episodic_personal"). If None, reads
                 from config.yaml domain.name (default: "software_dev").
+        llm_override: Optional dict to deep-merge into config["llm"], overriding
+                the extraction model. Use to run with a specific model (e.g.
+                gpt-4o-mini) for apples-to-apples comparisons.
 
     Returns:
         (store, result) — caller is responsible for closing store when done.
@@ -75,6 +79,8 @@ def ingest_conversation(
     config = load_config()
     if domain is not None:
         config = {**config, "domain": {"name": domain}}
+    if llm_override:
+        config["llm"] = {**config.get("llm", {}), **llm_override}
     domain_profile = get_domain_profile(config)
     store = GraphStore(db_path, dedup_threshold=dedup_threshold)
 
@@ -152,42 +158,129 @@ def ingest_conversation(
                 context_nodes = bfs_collect(store, entry_nodes, ctx_hops)
                 context_nodes.sort(key=lambda n: n.get("_relevance", 0), reverse=True)
                 context_nodes = context_nodes[:ctx_k]
-        try:
-            extraction = asyncio.run(extract_turn(prompt_text, context_nodes, config, domain_profile))
-            nodes = extraction.get("nodes", [])
-            edges = extraction.get("edges", [])
-            for node in nodes:
-                node["source_transcript"] = f"{source_label}/{session_id}"
-                node.setdefault("created_at", datetime.now(timezone.utc).isoformat())
-                if occurred_at:
-                    node.setdefault("occurred_at", occurred_at)
-            store.merge_extraction(nodes, edges)
-            total_nodes += len(nodes)
-        except ValueError as e:
-            if "finish_reason=length" in str(e) and depth < 4:
-                # Output window exceeded — bisect on a newline boundary and retry.
-                # The second half gets the last few lines of the first half as
-                # prior context so cross-bisection co-references can be resolved.
-                lines = text.splitlines()
-                if len(lines) < 2:
-                    errors.append(f"{session_id}: chunk too small to bisect: {e}")
+
+        # Retry policy for extraction API calls — mirrors GeminiNativeProvider but
+        # also covers the OpenAI-compatible path (gpt-4o-mini, local models).
+        # The native Gemini provider already retries internally; this outer loop
+        # is a safety net for errors that propagate through the async wrapper or
+        # from non-native providers.
+        #
+        # Three error classes:
+        #   transient  (503/500/502): short backoff (5s, 15s, 45s) — server hiccup
+        #   rate_limit (429 RPM/TPM): longer backoff (15s, 30s, 60s) — burst clears
+        #   quota_exhausted (daily/billing cap): fail immediately with clear message
+
+        _QUOTA_PHRASES = (
+            "per day", "daily limit", "monthly", "billing",
+            "quota exceeded", "project quota",
+        )
+        _RATE_PHRASES = (
+            "429", "rate limit", "resource exhausted",
+            "too many requests", "overloaded",
+        )
+        _TRANSIENT_PHRASES = (
+            "503", "502", "500", "service unavailable", "internal server",
+        )
+        _TRANSIENT_BACKOFF = (5, 15, 45)
+        _RATE_LIMIT_BACKOFF = (15, 30, 60)
+
+        def _classify(exc: Exception) -> str:
+            s = str(exc).lower()
+            # quota_exhausted wins — retrying is useless
+            if any(p in s for p in _QUOTA_PHRASES):
+                return "quota_exhausted"
+            if any(p in s for p in _TRANSIENT_PHRASES):
+                return "transient"
+            if any(p in s for p in _RATE_PHRASES):
+                return "rate_limit"
+            return "fatal"
+
+        last_exc: Exception | None = None
+        extraction: dict | None = None
+        _attempt = 0
+        while True:
+            try:
+                extraction = asyncio.run(extract_turn(prompt_text, context_nodes, config, domain_profile))
+                last_exc = None
+                break
+            except ValueError as e:
+                if "finish_reason=length" in str(e) and depth < 4:
+                    # Output window exceeded — bisect on a newline boundary and retry.
+                    lines = text.splitlines()
+                    if len(lines) < 2:
+                        errors.append(f"{session_id}: chunk too small to bisect: {e}")
+                        return
+                    mid = len(lines) // 2
+                    if verbose:
+                        print(f"  [bisect] {session_id}: splitting {len(lines)} lines at {mid} (depth={depth})")
+                    first_half = "\n".join(lines[:mid])
+                    second_half = "\n".join(lines[mid:])
+                    bisect_tail = "\n".join(lines[max(0, mid - CONTEXT_TAIL_LINES):mid])
+                    _extract_chunk(first_half, session_id, depth + 1, prior_tail=prior_tail, occurred_at=occurred_at)
+                    _extract_chunk(second_half, session_id, depth + 1, prior_tail=bisect_tail, occurred_at=occurred_at)
                     return
-                mid = len(lines) // 2
-                if verbose:
-                    print(f"  [bisect] {session_id}: splitting {len(lines)} lines at {mid} (depth={depth})")
-                first_half = "\n".join(lines[:mid])
-                second_half = "\n".join(lines[mid:])
-                bisect_tail = "\n".join(lines[max(0, mid - CONTEXT_TAIL_LINES):mid])
-                _extract_chunk(first_half, session_id, depth + 1, prior_tail=prior_tail, occurred_at=occurred_at)
-                _extract_chunk(second_half, session_id, depth + 1, prior_tail=bisect_tail, occurred_at=occurred_at)
-            else:
-                errors.append(f"{session_id}: {e}")
-                if verbose:
-                    print(f"  [warn] extract_turn failed for {session_id}: {e}")
-        except Exception as e:
-            errors.append(f"{session_id}: {e}")
+                else:
+                    errors.append(f"{session_id}: {e}")
+                    if verbose:
+                        print(f"  [warn] extract_turn failed for {session_id}: {e}")
+                    return
+            except RuntimeError as e:
+                # quota_exhausted is re-raised as RuntimeError by GeminiNativeProvider
+                if "quota exhausted" in str(e).lower():
+                    errors.append(f"{session_id}: {e}")
+                    if verbose:
+                        print(f"  [error] {session_id}: {e}")
+                    return
+                last_exc = e
+                break
+            except Exception as e:
+                kind = _classify(e)
+                if kind == "quota_exhausted":
+                    msg = (
+                        f"{session_id}: API quota exhausted (daily/billing/project cap). "
+                        f"Check your billing console. Original: {e}"
+                    )
+                    errors.append(msg)
+                    if verbose:
+                        print(f"  [error] {msg}")
+                    return
+
+                backoff = _TRANSIENT_BACKOFF if kind == "transient" else (
+                    _RATE_LIMIT_BACKOFF if kind == "rate_limit" else ()
+                )
+                if _attempt < len(backoff):
+                    wait = backoff[_attempt]
+                    if verbose:
+                        print(
+                            f"  [retry] {session_id}: {kind} error "
+                            f"(attempt {_attempt + 1}/{len(backoff)}), "
+                            f"retrying in {wait}s: {type(e).__name__}: {e}"
+                        )
+                    time.sleep(wait)
+                    _attempt += 1
+                    last_exc = e
+                else:
+                    last_exc = e
+                    break
+
+        if last_exc is not None:
+            errors.append(f"{session_id}: {last_exc}")
             if verbose:
-                print(f"  [warn] extract_turn failed for {session_id}: {e}")
+                print(f"  [warn] extract_turn failed for {session_id}: {last_exc}")
+            return
+
+        if extraction is None:
+            return
+
+        nodes = extraction.get("nodes", [])
+        edges = extraction.get("edges", [])
+        for node in nodes:
+            node["source_transcript"] = f"{source_label}/{session_id}"
+            node.setdefault("created_at", datetime.now(timezone.utc).isoformat())
+            if occurred_at:
+                node.setdefault("occurred_at", occurred_at)
+        store.merge_extraction(nodes, edges)
+        total_nodes += len(nodes)
 
     def _session_text(session: Session) -> str:
         """Format a session as a self-contained transcript with date header.
@@ -255,6 +348,11 @@ def ingest_conversation(
                     f"({total_nodes} → {total_nodes - dedup_removed})"
                 )
             total_nodes -= dedup_removed
+
+    # Remove edges whose endpoints were deleted by semantic dedup
+    orphaned = store.vacuum_orphaned_edges()
+    if verbose and orphaned:
+        print(f"  [vacuum] {conv.sample_id}: removed {orphaned} orphaned edges")
 
     elapsed = time.perf_counter() - t0
 

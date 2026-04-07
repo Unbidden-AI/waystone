@@ -31,6 +31,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
+
 # Add project root to path when run as __main__
 if __name__ == "__main__":
     sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -40,8 +41,10 @@ from benchmarks.locomo.loaders.ingestion_pipeline import ingest_conversation, In
 from benchmarks.locomo.evaluation.scoring import (
     score_keyword_recall,
     score_llm_judge,
+    submit_judge_batch,
     aggregate,
     ScoringResult,
+    _judge_cache_key,
 )
 from benchmarks.locomo.evaluation.token_counter import TokenBudget, estimate_tokens
 from benchmarks.locomo.ablation_configs import ABLATION_CONFIGS, PAPER_CONFIGS, AblationConfig
@@ -61,6 +64,7 @@ def run_benchmark(
     verbose: bool = True,
     sample_ids_override: list[str] | None = None,
     conv_workers: int = 4,
+    use_batch: bool = False,
 ) -> dict[str, Any]:
     """
     Run the LOCOMO benchmark for one or more ablation configs.
@@ -124,6 +128,7 @@ def run_benchmark(
             db_dir=db_dir,
             verbose=verbose,
             conv_workers=conv_workers,
+            use_batch=use_batch,
         )
         results["configs"][config_name] = config_results
 
@@ -134,7 +139,8 @@ def run_benchmark(
             print(f"    keyword exact:    {m.get('keyword_exact', 0):.1%}")
             print(f"    avg tokens:       {m.get('avg_tokens', 0):.0f}")
             if "llm_accuracy" in m:
-                print(f"    llm accuracy:     {m['llm_accuracy']:.1%}")
+                llm_n = m.get("llm_n", "?")
+                print(f"    llm accuracy:     {m['llm_accuracy']:.1%}  (n={llm_n})")
             print()
 
     if output_path:
@@ -158,6 +164,7 @@ def _run_config(
     db_dir: str | None,
     verbose: bool,
     conv_workers: int = 4,
+    use_batch: bool = False,
 ) -> dict[str, Any]:
     """Run a single ablation config across all (limited) conversations.
 
@@ -187,11 +194,54 @@ def _run_config(
         else:
             from pathlib import Path as _Path
             from engram.store import GraphStore as _GraphStore
+            import shutil as _shutil
+            import yaml as _yaml
             checkpoint_path = str(_Path(tmp_dir) / f"{conv.sample_id}.db")
+
+            # Load extraction LLM override if the config specifies one
+            _llm_override: dict | None = None
+            if config.extraction_model_config:
+                _mc_path = _Path(config.extraction_model_config)
+                if not _mc_path.is_absolute():
+                    _mc_path = _Path(__file__).parent.parent.parent / _mc_path
+                if _mc_path.exists():
+                    with open(_mc_path) as _f:
+                        _llm_override = _yaml.safe_load(_f).get("llm", {})
+                    if verbose:
+                        print(f"  [{config.name}] extraction model: {_llm_override.get('model', '?')}")
+
             if _Path(checkpoint_path).exists():
                 if verbose:
                     print(f"  [{config.name}] {conv.sample_id}: checkpoint found, skipping extraction")
                 store = _GraphStore(checkpoint_path)
+            elif config.checkpoint_source:
+                # Copy checkpoint from the source config's dir instead of re-extracting
+                source_dir = str(_Path.home() / ".engram" / "locomo_cache" / config.checkpoint_source)
+                source_path = str(_Path(source_dir) / f"{conv.sample_id}.db")
+                if _Path(source_path).exists():
+                    _Path(tmp_dir).mkdir(parents=True, exist_ok=True)
+                    _shutil.copy2(source_path, checkpoint_path)
+                    if verbose:
+                        print(f"  [{config.name}] {conv.sample_id}: copied checkpoint from {config.checkpoint_source}")
+                    store = _GraphStore(checkpoint_path)
+                else:
+                    if verbose:
+                        print(f"  [{config.name}] {conv.sample_id}: source checkpoint not found at {source_path}, extracting")
+                    store, ingestion_result = ingest_conversation(
+                        conv=conv,
+                        db_dir=tmp_dir,
+                        verbose=verbose,
+                        domain=config.domain,
+                        dedup_threshold=config.dedup_threshold,
+                        llm_override=_llm_override,
+                    )
+                    if ingestion_result:
+                        ingestion_entry = {
+                            "sample_id": ingestion_result.sample_id,
+                            "nodes_created": ingestion_result.nodes_created,
+                            "elapsed_seconds": round(ingestion_result.elapsed_seconds, 2),
+                            "errors": ingestion_result.errors,
+                        }
             else:
                 store, ingestion_result = ingest_conversation(
                     conv=conv,
@@ -199,6 +249,7 @@ def _run_config(
                     verbose=verbose,
                     domain=config.domain,
                     dedup_threshold=config.dedup_threshold,
+                    llm_override=_llm_override,
                 )
                 if ingestion_result:
                     ingestion_entry = {
@@ -207,6 +258,15 @@ def _run_config(
                         "elapsed_seconds": round(ingestion_result.elapsed_seconds, 2),
                         "errors": ingestion_result.errors,
                     }
+
+            # Post-hoc edge inference: add missing involves edges from tag overlap
+            if store is not None and config.infer_edges:
+                n_new = store.infer_involves_edges(
+                    weight=config.infer_edges_weight,
+                    name_only=config.infer_edges_name_only,
+                )
+                if verbose:
+                    print(f"  [{config.name}] {conv.sample_id}: inferred {n_new} new involves edges")
 
         # Retrieval pass — sequential (reads SQLite store)
         qa_pairs = conv.qa_pairs
@@ -221,6 +281,7 @@ def _run_config(
                 question=qa.question,
                 store=store,
                 config=config,
+                relevant_session_ids=qa.relevant_session_ids if config.session_scoped else None,
             )
             tokens = estimate_tokens(context)
             tokens_total += tokens
@@ -228,8 +289,9 @@ def _run_config(
             retrieved.append((qa, context, kw_score, matched, missed, tokens, qa.category_label))
 
         # LLM judge pass — concurrent (pure I/O, no shared state)
+        # Skipped in batch mode; batch submission happens after all convs complete.
         llm_scores: dict[int, float | None] = {i: None for i in range(len(retrieved))}
-        if use_llm_judge:
+        if use_llm_judge and not use_batch:
             def _judge(idx_qa_ctx):
                 idx, qa, context = idx_qa_ctx
                 try:
@@ -244,7 +306,11 @@ def _run_config(
                         print(f"    [warn] LLM judge failed for Q{idx}: {e}")
                     return idx, None
 
-            with ThreadPoolExecutor(max_workers=20) as pool:
+            # OpenAI TPM limit (200K/min) can't handle 20 concurrent judge requests
+            # at ~3600 tokens each. Cap to 5 workers for gpt-* models (50 peak concurrent
+            # with conv_workers=5 already saturates TPM; judge cache avoids re-scoring).
+            _judge_workers = 5 if llm_model.startswith("gpt-") else 20
+            with ThreadPoolExecutor(max_workers=_judge_workers) as pool:
                 futures = [
                     pool.submit(_judge, (i, qa, ctx))
                     for i, (qa, ctx, *_) in enumerate(retrieved)
@@ -288,12 +354,39 @@ def _run_config(
             try:
                 conv_outputs[idx] = fut.result()
             except Exception as e:
-                if verbose:
-                    print(f"  [error] conversation {conversations[idx].sample_id} failed: {e}")
+                import traceback
+                print(f"  [error] conversation {conversations[idx].sample_id} failed: {e}", flush=True)
+                traceback.print_exc()
                 conv_outputs[idx] = {
                     "scoring_results": [], "cat_labels": [],
                     "ingestion_entry": None, "tokens_total": 0, "query_count": 0,
                 }
+
+    # Batch judge pass — submit all uncached (q, a, ctx) triples in one API call.
+    # Runs after all retrieval completes so we send a single batch for the whole config.
+    if use_llm_judge and use_batch:
+        all_pairs: list[tuple[str, str, str]] = []
+        for out in conv_outputs:
+            for sr in out["scoring_results"]:
+                all_pairs.append((sr.question, sr.ground_truth_answer, sr.retrieved_context))
+
+        if verbose:
+            print(f"\n  [batch] Submitting {len(all_pairs)} judge requests via Batch API ...")
+
+        key_to_score = submit_judge_batch(
+            requests=all_pairs,
+            model=llm_model,
+            poll_interval=30,
+            verbose=verbose,
+        )
+
+        # Assign scores back by recomputing each result's cache key
+        for out in conv_outputs:
+            for sr in out["scoring_results"]:
+                key = _judge_cache_key(
+                    sr.question, sr.ground_truth_answer, sr.retrieved_context, llm_model
+                )
+                sr.llm_score = key_to_score.get(key)
 
     # Merge results in original conversation order
     all_scoring_results: list[ScoringResult] = []
@@ -343,6 +436,7 @@ def _retrieve_context(
     question: str,
     store,
     config: AblationConfig,
+    relevant_session_ids: list[str] | None = None,
 ) -> str:
     """Retrieve context for a question given the ablation config."""
 
@@ -374,6 +468,11 @@ def _retrieve_context(
             "query_expansion": config.query_expansion,
             "person_anchoring": config.person_anchoring,
             "temporal_proximity": config.temporal_proximity,
+            "query_coreference": config.query_coreference,
+            "allowed_session_ids": relevant_session_ids if config.session_scoped else None,
+            "edge_weight_scoring": config.edge_weight_scoring,
+            "semantic_rerank": config.semantic_rerank,
+            "cross_encoder_rerank": config.cross_encoder_rerank,
         }
 
         try:
@@ -442,10 +541,17 @@ def _preflight_check(
 
         will_extract = []
         will_reuse = []
+        will_copy = []
         for conv in convs:
             cp = Path(db_dir) / f"{conv.sample_id}.db"
             if cp.exists():
                 will_reuse.append(conv.sample_id)
+            elif config.checkpoint_source and not db_dir_override:
+                src = Path.home() / ".engram" / "locomo_cache" / config.checkpoint_source / f"{conv.sample_id}.db"
+                if src.exists():
+                    will_copy.append(conv.sample_id)
+                else:
+                    will_extract.append(conv.sample_id)
             else:
                 will_extract.append(conv.sample_id)
 
@@ -453,6 +559,8 @@ def _preflight_check(
         print(f"    db_dir: {db_dir}")
         if will_reuse:
             print(f"    Checkpoint found (skip extraction) : {will_reuse}")
+        if will_copy:
+            print(f"    Will copy from {config.checkpoint_source}  : {will_copy}")
         if will_extract:
             print(f"    *** NO checkpoint — WILL EXTRACT  : {will_extract}")
         if not will_extract:
@@ -502,9 +610,10 @@ def main() -> None:
              "use claude-haiku-4-5-20251001 for final paper numbers)",
     )
     parser.add_argument(
-        "--categories", nargs="+", type=int,
+        "--categories", nargs="+", type=int, default=[1, 2, 3, 4],
         help="Filter to QA categories (1=single_hop, 2=temporal, 3=open_domain, "
-             "4=multi_hop, 5=adversarial). Official protocol: use 1 2 3 4 (exclude cat 5).",
+             "4=multi_hop, 5=adversarial). Default: 1 2 3 4 (official protocol, excludes cat 5). "
+             "Pass --categories 1 2 3 4 5 to include adversarial.",
     )
     parser.add_argument(
         "--output", default=None,
@@ -533,6 +642,12 @@ def main() -> None:
     parser.add_argument(
         "--conv-workers", type=int, default=4, dest="conv_workers",
         help="Number of conversations to process in parallel (default: 4).",
+    )
+    parser.add_argument(
+        "--use-batch", action="store_true", dest="use_batch",
+        help="Use OpenAI Batch API for judging (separate RPD quota, 50%% cheaper, 24h SLA). "
+             "Retrieval runs first across all convs, then a single batch is submitted. "
+             "Requires OPENAI_API_KEY. Only applies when --llm-judge is also set.",
     )
     args = parser.parse_args()
 
@@ -576,6 +691,7 @@ def main() -> None:
         verbose=not args.quiet,
         sample_ids_override=sample_ids_override,
         conv_workers=args.conv_workers,
+        use_batch=args.use_batch,
     )
 
 

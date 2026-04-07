@@ -196,6 +196,7 @@ def main():
     prompt = hook_input.get("prompt", "").strip()
     cwd = hook_input.get("cwd", ".")
     transcript_path = hook_input.get("transcript_path", "")
+    session_id = hook_input.get("session_id", "")
 
     if not prompt:
         sys.exit(0)
@@ -233,6 +234,7 @@ def main():
                     _spawn_extraction(
                         assistant_text, project, db_path, source="assistant",
                         hints_path=session_state_path if heuristic else None,
+                        session_id=session_id,
                     )
 
             # --- Buffer user prompt; spawn extraction when threshold met ---
@@ -249,7 +251,7 @@ def main():
             if should_flush:
                 flushed_text = buffer.flush()
                 store.clear_buffer()
-                _spawn_extraction(flushed_text, project, db_path, source="live")
+                _spawn_extraction(flushed_text, project, db_path, source="live", session_id=session_id)
             else:
                 store.save_buffer(buffer._turns)
         else:
@@ -275,7 +277,7 @@ def main():
                 "project": project,
                 "status": "buffering" if not paused else "paused",
                 "buffered_turns": len(buffer._turns),
-            })
+            }, session_id=session_id)
             sys.exit(0)
 
         store = GraphStore(db_path)
@@ -302,7 +304,7 @@ def main():
             "tokens_filtered": max(0, tokens_in_graph - retrieval.tokens_estimated),
             "elapsed_ms": elapsed_ms,
             "timestamp": time.time(),
-        })
+        }, session_id=session_id)
 
         project_dir = get_db_path(config, project).parent
         last_context_path = project_dir / "last_context.md"
@@ -339,12 +341,13 @@ def main():
         print(json.dumps(output))
 
     except Exception as e:
-        _write_state({"status": "error", "error": str(e)})
+        _write_state({"status": "error", "error": str(e)}, session_id=session_id)
         sys.exit(0)
 
 
 def _spawn_extraction(
-    text: str, project: str, db_path: Path, source: str, hints_path: Path | None = None
+    text: str, project: str, db_path: Path, source: str, hints_path: Path | None = None,
+    session_id: str = "",
 ) -> None:
     """Fire-and-forget: spawn the extraction worker as a detached subprocess."""
     try:
@@ -354,6 +357,8 @@ def _spawn_extraction(
                "--source", source]
         if hints_path is not None and hints_path.exists():
             cmd += ["--hints-path", str(hints_path)]
+        if session_id:
+            cmd += ["--session-id", session_id]
         proc = subprocess.Popen(
             cmd,
             stdin=subprocess.PIPE,
@@ -466,11 +471,15 @@ def _detect_project(cwd: str) -> str:
     return cwd_path.name
 
 
-def _write_state(state: dict) -> None:
+def _write_state(state: dict, session_id: str = "") -> None:
     try:
         # Preserve extracting flag written by worker
         existing = {}
-        p = STATE_DIR / "state.json"
+        if session_id:
+            p = STATE_DIR / "state" / f"{session_id}.json"
+            p.parent.mkdir(parents=True, exist_ok=True)
+        else:
+            p = STATE_DIR / "state.json"
         if p.exists():
             try:
                 existing = json.loads(p.read_text())

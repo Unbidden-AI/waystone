@@ -23,7 +23,7 @@ import sys
 import time
 from pathlib import Path
 
-STATE_PATH = Path.home() / ".engram" / "state.json"
+STATE_DIR = Path.home() / ".engram"
 STATE_MAX_AGE_SECS = 300  # Don't show stale CB state after 5 min
 
 
@@ -40,7 +40,8 @@ def main():
     used_pct = ctx.get("used_percentage") or 0
     ctx_size = ctx.get("context_window_size") or 0
 
-    cb = _load_cb_state()
+    session_id = session.get("session_id", "")
+    cb = _load_cb_state(session_id)
 
     parts = []
 
@@ -60,14 +61,18 @@ def main():
     print(" │ ".join(parts))
 
 
-def _load_cb_state() -> dict:
+def _load_cb_state(session_id: str = "") -> dict:
     try:
-        if not STATE_PATH.exists():
+        if session_id:
+            p = STATE_DIR / "state" / f"{session_id}.json"
+        else:
+            p = STATE_DIR / "state.json"
+        if not p.exists():
             return {}
-        age = time.time() - STATE_PATH.stat().st_mtime
+        age = time.time() - p.stat().st_mtime
         if age > STATE_MAX_AGE_SECS:
             return {}
-        return json.loads(STATE_PATH.read_text())
+        return json.loads(p.read_text())
     except Exception:
         return {}
 

@@ -35,6 +35,8 @@ def main():
     parser.add_argument("--source", default="live")
     parser.add_argument("--hints-path", default=None,
                         help="Path to session_state.md; bullets used to guide verification pass")
+    parser.add_argument("--session-id", default="",
+                        help="Claude Code session ID for per-session state files")
     args = parser.parse_args()
 
     text = sys.stdin.read().strip()
@@ -48,7 +50,7 @@ def main():
         "extracting": True,
         "extract_started_at": time.time(),
         "extract_source": args.source,
-    })
+    }, session_id=args.session_id)
 
     try:
         from engram.config import load_config
@@ -114,7 +116,7 @@ def main():
         stats = store.get_stats()
         store.close()
 
-        elapsed_ms = int((time.time() - _load_state().get("extract_started_at", time.time())) * 1000)
+        elapsed_ms = int((time.time() - _load_state(args.session_id).get("extract_started_at", time.time())) * 1000)
         completed_at = time.time()
         _merge_state({
             "extracting": False,
@@ -122,7 +124,7 @@ def main():
             "last_extract_nodes": len(nodes),
             "last_extract_ms": elapsed_ms,
             "nodes_total": stats["node_count"],
-        })
+        }, session_id=args.session_id)
         # Write per-project extraction timestamp so the hook can expire session state entries
         try:
             (db_path.parent / "last_extract_at").write_text(str(completed_at))
@@ -134,13 +136,19 @@ def main():
             "extracting": False,
             "extract_started_at": None,
             "extract_error": str(e),
-        })
+        }, session_id=args.session_id)
         sys.exit(1)
 
 
-def _load_state() -> dict:
+def _state_path(session_id: str = "") -> Path:
+    if session_id:
+        return STATE_DIR / "state" / f"{session_id}.json"
+    return STATE_DIR / "state.json"
+
+
+def _load_state(session_id: str = "") -> dict:
     try:
-        p = STATE_DIR / "state.json"
+        p = _state_path(session_id)
         if p.exists():
             return json.loads(p.read_text())
     except Exception:
@@ -148,12 +156,14 @@ def _load_state() -> dict:
     return {}
 
 
-def _merge_state(updates: dict) -> None:
-    """Merge updates into state.json without overwriting unrelated keys."""
+def _merge_state(updates: dict, session_id: str = "") -> None:
+    """Merge updates into state file without overwriting unrelated keys."""
     try:
-        state = _load_state()
+        p = _state_path(session_id)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        state = _load_state(session_id)
         state.update(updates)
-        (STATE_DIR / "state.json").write_text(json.dumps(state))
+        p.write_text(json.dumps(state))
     except Exception:
         pass
 

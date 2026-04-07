@@ -42,8 +42,8 @@ class AblationConfig:
     # Dynamic top_k scaling formula when top_k=None: "sqrt" or "log2"
     topk_formula: str = "sqrt"
     # Semantic dedup threshold at ingest time (per-insert cosine sim, Python 3.13 path)
-    # Default 0.92 merges paraphrases; raise to 0.95-0.97 to reduce over-pruning with bge-small
-    dedup_threshold: float = 0.92
+    # 0.95 is optimal for bge-small — reduces over-pruning vs 0.92 without accumulating noise at 0.97
+    dedup_threshold: float = 0.95
     # Number of raw conversation turns to append after BFS results as short-term context.
     # 0 = disabled (BFS only). When use_bfs=False, acts as a sliding-window baseline.
     prior_turns_window: int = 0
@@ -51,6 +51,26 @@ class AblationConfig:
     query_expansion: bool = False        # #1: synonym + named-entity keyword expansion
     person_anchoring: bool = False       # #2: person nodes always become high-confidence BFS seeds
     temporal_proximity: bool = False     # #3: boost nodes whose occurred_at is near query date
+    # Accuracy improvement features (LOCOMO plan improvements 4, 6)
+    query_coreference: bool = False      # #4: resolve relationship terms → person names via graph lookup
+    session_scoped: bool = False         # #6: restrict entry nodes to evidence sessions for each QA pair
+    # Post-hoc edge inference: scan graph and add missing `involves` edges
+    infer_edges: bool = False            # #7: infer involves edges from person-tag overlap
+    infer_edges_weight: float = 1.0      # weight assigned to inferred edges (< 1.0 = deprioritized)
+    infer_edges_name_only: bool = False  # if True, match only on person's first name, not all tags
+    # Edge-weight scoring: penalize nodes reached only via low-weight (inferred) edges
+    edge_weight_scoring: bool = False    # multiply _score by _max_edge_weight after recency_decay
+    # Post-BFS semantic re-ranking: multiply _score by cosine similarity to query embedding
+    semantic_rerank: bool = False        # re-rank BFS-collected nodes by embedding similarity to query
+    # Post-BFS cross-encoder re-ranking: score (query, fact) pairs via cross-encoder
+    cross_encoder_rerank: bool = False   # re-rank BFS-collected nodes via cross-encoder relevance scores
+    # Optional: copy checkpoint DB from another config's dir instead of re-extracting
+    checkpoint_source: str | None = None  # config name whose checkpoint dir to copy from
+    # Optional: path to a model config YAML (e.g. benchmarks/model_configs/gpt_4o_mini.yaml)
+    # to override the extraction LLM for this config. When set, fresh extraction (no checkpoint
+    # available) uses this model instead of the system config.yaml LLM. Enables apples-to-apples
+    # comparison against Zep/Mem0 which use gpt-4o-mini for extraction.
+    extraction_model_config: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -358,6 +378,20 @@ ABLATION_CONFIGS: dict[str, AblationConfig] = {
         person_anchoring=True,
         temporal_proximity=True,
     ),
+    "engram_person_temporal": AblationConfig(
+        name="engram_person_temporal",
+        description="Person anchoring (#2) + temporal proximity boosting (#3), without query "
+                    "expansion (#1). Tests whether the 2-feature stack outperforms the 3-way "
+                    "stack by dropping the noisy synonym expansion.",
+        superseded_pruning=True,
+        confidence_threshold=None,
+        recency_decay=True,
+        top_k=50,
+        token_budget=None,
+        recency_half_life_days=3650,
+        person_anchoring=True,
+        temporal_proximity=True,
+    ),
     "engram_bm25_rrf": AblationConfig(
         name="engram_bm25_rrf",
         description="Default pipeline with BM25 FTS5 + RRF multi-channel retrieval active. "
@@ -370,6 +404,224 @@ ABLATION_CONFIGS: dict[str, AblationConfig] = {
         top_k=50,
         token_budget=None,
         recency_half_life_days=3650,
+    ),
+    # ---- LOCOMO accuracy improvements 4, 6 ----
+    "engram_coreference": AblationConfig(
+        name="engram_coreference",
+        description="Default pipeline + query coreference resolution (#4): relationship terms "
+                    "(sister, husband, colleague, etc.) in the query trigger a graph lookup that "
+                    "resolves the referent person's name and adds it to the keyword set. Isolates "
+                    "the lift from resolving 'her sister' → 'Sarah' without re-extraction.",
+        superseded_pruning=True,
+        confidence_threshold=None,
+        recency_decay=True,
+        top_k=50,
+        token_budget=None,
+        recency_half_life_days=3650,
+        query_coreference=True,
+    ),
+    "engram_session_scoped": AblationConfig(
+        name="engram_session_scoped",
+        description="Default pipeline + session-scoped filtering (#6): entry node candidates are "
+                    "restricted to the LOCOMO sessions cited in each QA pair's evidence field. "
+                    "Reduces cross-session noise for questions with a known temporal anchor. "
+                    "Isolates the precision lift from evidence-aware scoping.",
+        superseded_pruning=True,
+        confidence_threshold=None,
+        recency_decay=True,
+        top_k=50,
+        token_budget=None,
+        recency_half_life_days=3650,
+        session_scoped=True,
+    ),
+    "engram_coreference_temporal": AblationConfig(
+        name="engram_coreference_temporal",
+        description="Query coreference (#4) + temporal proximity boosting (#3) on the default "
+                    "pipeline. Tests whether resolving person referents and boosting by date "
+                    "proximity are additive — coreference helps person-scoped queries, temporal "
+                    "boost helps time-anchored queries, so they should not conflict.",
+        superseded_pruning=True,
+        confidence_threshold=None,
+        recency_decay=True,
+        top_k=50,
+        token_budget=None,
+        recency_half_life_days=3650,
+        query_coreference=True,
+        temporal_proximity=True,
+    ),
+    "engram_improvements_4_6": AblationConfig(
+        name="engram_improvements_4_6",
+        description="Query coreference (#4) + session-scoped filtering (#6) combined. Tests "
+                    "whether orthogonal precision improvements (resolving person referents, "
+                    "restricting to evidence sessions) are additive.",
+        superseded_pruning=True,
+        confidence_threshold=None,
+        recency_decay=True,
+        top_k=50,
+        token_budget=None,
+        recency_half_life_days=3650,
+        query_coreference=True,
+        session_scoped=True,
+    ),
+    # ---- Budget ablation ----
+    "engram_default_topk100": AblationConfig(
+        name="engram_default_topk100",
+        description="Default pipeline with top_k raised to 100 but NO edge inference. "
+                    "Isolation ablation for engram_edge_infer_topk100: separates the "
+                    "accuracy gain from budget increase vs. inferred edges.",
+        superseded_pruning=True,
+        confidence_threshold=None,
+        recency_decay=True,
+        top_k=100,
+        token_budget=None,
+        recency_half_life_days=3650,
+        checkpoint_source="engram_dedup95",
+    ),
+    "engram_semantic_rerank_topk100": AblationConfig(
+        name="engram_semantic_rerank_topk100",
+        description="Post-BFS semantic re-ranking with top_k=100. After BFS collects up to 100 "
+                    "nodes, each node's _score is multiplied by 0.5 + 0.5*cos(query, node_emb). "
+                    "Tests whether embedding-based re-ranking recovers precision lost from the "
+                    "larger budget without discarding recall. Comparable to engram_default_topk100.",
+        superseded_pruning=True,
+        confidence_threshold=None,
+        recency_decay=True,
+        top_k=100,
+        token_budget=None,
+        recency_half_life_days=3650,
+        semantic_rerank=True,
+        checkpoint_source="engram_dedup95",
+    ),
+    "engram_cross_encoder_topk100": AblationConfig(
+        name="engram_cross_encoder_topk100",
+        description="Post-BFS cross-encoder re-ranking with top_k=100. After BFS collects up to "
+                    "100 nodes, each (query, fact) pair is scored by cross-encoder/ms-marco-MiniLM-L-6-v2. "
+                    "Cross-encoder sees query+fact jointly (vs. bi-encoder cosine which scores them "
+                    "independently), providing interaction-aware relevance. Speculative decoding "
+                    "analog: BFS = draft stage, cross-encoder = verify stage.",
+        superseded_pruning=True,
+        confidence_threshold=None,
+        recency_decay=True,
+        top_k=100,
+        token_budget=None,
+        recency_half_life_days=3650,
+        cross_encoder_rerank=True,
+        checkpoint_source="engram_dedup95",
+    ),
+
+    # ---- Post-hoc edge inference (#7) ----
+    "engram_edge_infer": AblationConfig(
+        name="engram_edge_infer",
+        description="Default pipeline + post-hoc edge inference (#7): scans the extracted graph "
+                    "and adds missing `involves` edges wherever a fact node's tags overlap with "
+                    "a person anchor node's tags. Repairs extractor omissions without re-extraction. "
+                    "Improves BFS reachability for multi-hop person-scoped questions.",
+        superseded_pruning=True,
+        confidence_threshold=None,
+        recency_decay=True,
+        top_k=50,
+        token_budget=None,
+        recency_half_life_days=3650,
+        infer_edges=True,
+        checkpoint_source="engram_dedup95",
+    ),
+    "engram_edge_infer_anchored": AblationConfig(
+        name="engram_edge_infer_anchored",
+        description="Post-hoc edge inference (#7) + person anchoring (#2). Tests whether the "
+                    "denser involves-edge graph amplifies the benefit of person-anchor seeding: "
+                    "anchored seeds now have more neighbors reachable in BFS.",
+        superseded_pruning=True,
+        confidence_threshold=None,
+        recency_decay=True,
+        top_k=50,
+        token_budget=None,
+        recency_half_life_days=3650,
+        person_anchoring=True,
+        infer_edges=True,
+        checkpoint_source="engram_dedup95",
+    ),
+    "engram_edge_infer_nameonly": AblationConfig(
+        name="engram_edge_infer_nameonly",
+        description="Post-hoc edge inference with name-only matching (#7b): instead of matching "
+                    "on all person-node tags (which caused BFS flooding), infers `involves` edges "
+                    "only when a fact node's tags contain the person's first name. Reduces false "
+                    "positive edges from relationship terms (sister, friend) shared across people.",
+        superseded_pruning=True,
+        confidence_threshold=None,
+        recency_decay=True,
+        top_k=50,
+        token_budget=None,
+        recency_half_life_days=3650,
+        infer_edges=True,
+        infer_edges_name_only=True,
+        checkpoint_source="engram_dedup95",
+    ),
+    "engram_edge_infer_topk100": AblationConfig(
+        name="engram_edge_infer_topk100",
+        description="Post-hoc edge inference (#7) with top_k raised to 100. Addresses BFS "
+                    "flooding from 14k inferred edges by providing a larger result budget so "
+                    "signal nodes aren't crowded out. Tests whether a bigger retrieval window "
+                    "recovers accuracy lost to inference noise.",
+        superseded_pruning=True,
+        confidence_threshold=None,
+        recency_decay=True,
+        top_k=100,
+        token_budget=None,
+        recency_half_life_days=3650,
+        infer_edges=True,
+        checkpoint_source="engram_dedup95",
+    ),
+    "engram_edge_infer_weighted": AblationConfig(
+        name="engram_edge_infer_weighted",
+        description="Post-hoc edge inference (#7) with weighted edges + score penalty. Inferred "
+                    "`involves` edges are stored at weight=0.3. BFS tracks the max edge weight "
+                    "on the path to each node (_max_edge_weight). After recency_decay, "
+                    "edge_weight_scoring multiplies each node's _score by its _max_edge_weight, "
+                    "causing nodes reachable only via inferred edges to rank below natively-linked "
+                    "nodes. Preserves graph connectivity while deprioritizing inference noise.",
+        superseded_pruning=True,
+        confidence_threshold=None,
+        recency_decay=True,
+        top_k=50,
+        token_budget=None,
+        recency_half_life_days=3650,
+        infer_edges=True,
+        infer_edges_weight=0.3,
+        edge_weight_scoring=True,
+        checkpoint_source="engram_dedup95",
+    ),
+
+    # ---- Apples-to-apples comparison against Zep/Mem0 (gpt-4o-mini extraction) ----
+    "engram_gpt4o_mini_extraction": AblationConfig(
+        name="engram_gpt4o_mini_extraction",
+        description="Baseline extraction config using gpt-4o-mini as the extraction LLM — "
+                    "the same model used by Zep and Mem0 in their LOCOMO evaluations. "
+                    "Matches engram_dedup95 in all other respects (dedup_threshold=0.95, "
+                    "domain=episodic_personal). Checkpoint source for apples-to-apples configs.",
+        superseded_pruning=True,
+        confidence_threshold=None,
+        recency_decay=True,
+        top_k=50,
+        token_budget=None,
+        recency_half_life_days=3650,
+        extraction_model_config="benchmarks/model_configs/gpt_4o_mini.yaml",
+    ),
+    "engram_semantic_rerank_gpt4omini": AblationConfig(
+        name="engram_semantic_rerank_gpt4omini",
+        description="Semantic re-ranking with gpt-4o-mini extraction — apples-to-apples comparison "
+                    "against Zep/Mem0 which use gpt-4o-mini for their memory systems. Identical "
+                    "retrieval pipeline to engram_semantic_rerank_topk100 (top_k=100, semantic "
+                    "rerank) but with gpt-4o-mini-extracted checkpoints instead of "
+                    "gemini-2.5-flash-lite. The delta between this and engram_semantic_rerank_topk100 "
+                    "isolates the extraction model contribution vs architectural contribution.",
+        superseded_pruning=True,
+        confidence_threshold=None,
+        recency_decay=True,
+        top_k=100,
+        token_budget=None,
+        recency_half_life_days=3650,
+        semantic_rerank=True,
+        checkpoint_source="engram_gpt4o_mini_extraction",
     ),
 }
 

@@ -76,6 +76,19 @@ LOCOMO_VERB_SYNONYMS: dict[str, list[str]] = {
     "adopt":        ["adopted", "adoption", "child"],
 }
 
+# Relationship terms used for query coreference resolution (#4).
+# When a query mentions a relationship term (e.g. "sister") and we have a person
+# node tagged with that term + another named keyword, we resolve the referent's
+# name and add it to the keyword set so BFS can find that person's fact neighborhood.
+RELATIONSHIP_TERMS = {
+    "sister", "brother", "mother", "father", "mom", "dad", "parents",
+    "husband", "wife", "spouse", "partner", "boyfriend", "girlfriend",
+    "friend", "colleague", "coworker", "boss", "manager", "mentor",
+    "aunt", "uncle", "cousin", "grandmother", "grandfather", "grandma",
+    "grandpa", "daughter", "son", "child", "children", "kid", "kids",
+    "roommate", "neighbor", "classmate", "teammate",
+}
+
 # Common sentence-starter / question words to exclude from named-entity detection
 _QUERY_START_WORDS = {
     "what", "when", "where", "who", "why", "how", "did", "does", "has",
@@ -115,6 +128,8 @@ DEFAULT_STRATEGIES = {
     "recency_half_life_days": 30,
     "token_budget": 0,
     "relevance_scoring": False,
+    "semantic_rerank": False,  # Post-BFS re-ranking: multiply _score by cosine similarity to query
+    "cross_encoder_rerank": False,  # Post-BFS re-ranking: score (query, fact) pairs via cross-encoder
 }
 
 
@@ -212,6 +227,8 @@ def retrieve_with_stats(
     keywords = extract_keywords(task_description)
     if strats.get("query_expansion"):
         keywords = expand_keywords(task_description, keywords)
+    if strats.get("query_coreference"):
+        keywords = resolve_coreferences(store, keywords)
     log.debug("Retrieval: task=%r keywords=%s hops=%d top_k=%d pinned=%d", task_description[:80], keywords, hops, top_k, len(pinned_nodes))
     if not keywords and not pinned_nodes:
         log.debug("No keywords extracted and no pinned nodes — returning empty result")
@@ -239,9 +256,11 @@ def retrieve_with_stats(
 
     # Channel 3: Semantic embedding (cosine via sqlite-vec)
     sem_ranked: list[str] = []
+    query_blob: bytes | None = None
     from engram import embedder
-    if strats["semantic"] and embedder.is_available() and store._vec_available:
+    if (strats["semantic"] or strats.get("semantic_rerank")) and embedder.is_available() and store._vec_available:
         query_blob = embedder.embed_text(task_description)
+    if strats["semantic"] and query_blob is not None:
         sem_ranked = [nid for nid in store.search_by_embedding(query_blob, top_k=top_k)
                       if nid not in pinned_ids]
         log.debug("Semantic: %d hits", len(sem_ranked))
@@ -271,6 +290,22 @@ def retrieve_with_stats(
     # Attach RRF score as _rrf for downstream use
     for n in entry_nodes:
         n["_rrf"] = rrf_score_map.get(n["id"], 0.0)
+
+    # Session-scoped filtering (#6): restrict entry nodes to sessions that contain
+    # evidence for this question. source_transcript stores "conv-XX/session_N" —
+    # extract the session part and match against allowed_session_ids.
+    allowed_sessions = strats.get("allowed_session_ids")
+    if allowed_sessions:
+        allowed_set = set(allowed_sessions)
+        before_filter = len(entry_nodes)
+        entry_nodes = [
+            n for n in entry_nodes
+            if n.get("source_transcript", "").split("/")[-1] in allowed_set
+        ]
+        log.debug(
+            "Session filter: %d → %d entry nodes (allowed: %s)",
+            before_filter, len(entry_nodes), sorted(allowed_set),
+        )
 
     if not entry_nodes:
         return RetrievalResult(markdown="No relevant context found.", nodes_before_strategies=0, nodes_after_strategies=0)
@@ -378,6 +413,41 @@ def retrieve_with_stats(
     if strats.get("temporal_proximity"):
         collected_nodes = apply_temporal_proximity(collected_nodes, task_description)
         applied.append("temporal_proximity")
+
+    if strats.get("edge_weight_scoring"):
+        for node in collected_nodes:
+            w = node.get("_max_edge_weight", 1.0)
+            if w < 1.0:
+                node["_score"] = node.get("_score", node.get("confidence", 0.0)) * w
+        applied.append("edge_weight_scoring")
+
+    if strats.get("semantic_rerank") and query_blob is not None:
+        # Fetch stored embeddings for all collected nodes in one batch query
+        node_ids = [n["id"] for n in collected_nodes]
+        if node_ids:
+            placeholders = ",".join("?" * len(node_ids))
+            rows = store.conn.execute(
+                f"SELECT node_id, embedding FROM node_embeddings WHERE node_id IN ({placeholders})",
+                node_ids,
+            ).fetchall()
+            emb_map = {r[0]: bytes(r[1]) for r in rows}
+            for node in collected_nodes:
+                emb = emb_map.get(node["id"])
+                if emb is not None:
+                    sim = embedder.cosine_similarity(query_blob, emb)
+                    # Clamp to [0, 1]: cosine can be negative, treat negatives as 0
+                    sim = max(0.0, sim)
+                    node["_score"] = node.get("_score", node.get("confidence", 0.0)) * (0.5 + 0.5 * sim)
+            applied.append("semantic_rerank")
+
+    if strats.get("cross_encoder_rerank") and collected_nodes:
+        # Score each (query, fact) pair via cross-encoder — replaces _score entirely
+        # since cross-encoder logits are on a different scale than confidence [0,1].
+        facts = [n["fact"] for n in collected_nodes]
+        ce_scores = embedder.cross_encode_scores(task_description, facts)
+        for node, score in zip(collected_nodes, ce_scores):
+            node["_score"] = score
+        applied.append("cross_encoder_rerank")
 
     # Sort by confidence (possibly decayed) descending, then BFS depth ascending
     # as a tiebreaker so nodes closer to entry points rank higher when scores are equal.
@@ -618,12 +688,12 @@ def bfs_collect(store: GraphStore, entry_nodes: list[dict], hops: int) -> list[d
     visited_ids: set[str] = set()
     collected: list[dict] = []
 
-    # Seed layer 0
+    # Seed layer 0 — seed nodes are always natively matched (weight=1.0)
     current_layer_ids: list[str] = []
     for node in entry_nodes:
         if node["id"] not in visited_ids:
             visited_ids.add(node["id"])
-            node = {**node, "_bfs_depth": 0}
+            node = {**node, "_bfs_depth": 0, "_max_edge_weight": 1.0}
             collected.append(node)
             current_layer_ids.append(node["id"])
 
@@ -634,15 +704,16 @@ def bfs_collect(store: GraphStore, entry_nodes: list[dict], hops: int) -> list[d
         # Batch-fetch all edges touching this layer (1 query for the whole layer)
         all_edges = store.get_edges_for_nodes(current_layer_ids)
 
-        # Collect unvisited neighbor IDs (deduplicated, preserving first-seen order)
-        seen_this_pass: set[str] = set()
-        neighbor_ids: list[str] = []
+        # Build neighbor_id → max edge weight map (best path quality wins)
+        neighbor_max_weight: dict[str, float] = {}
         for edge in all_edges:
+            w = edge.get("weight", 1.0)
             for nid in (edge["to_id"], edge["from_id"]):
-                if nid not in visited_ids and nid not in seen_this_pass:
-                    seen_this_pass.add(nid)
-                    neighbor_ids.append(nid)
+                if nid not in visited_ids:
+                    if nid not in neighbor_max_weight or w > neighbor_max_weight[nid]:
+                        neighbor_max_weight[nid] = w
 
+        neighbor_ids = list(neighbor_max_weight.keys())
         if not neighbor_ids:
             break
 
@@ -652,7 +723,8 @@ def bfs_collect(store: GraphStore, entry_nodes: list[dict], hops: int) -> list[d
             nid = node["id"]
             if nid not in visited_ids:
                 visited_ids.add(nid)
-                node = {**node, "_bfs_depth": depth + 1}
+                w = neighbor_max_weight.get(nid, 1.0)
+                node = {**node, "_bfs_depth": depth + 1, "_max_edge_weight": w}
                 collected.append(node)
                 next_layer_ids.append(nid)
 
@@ -702,14 +774,70 @@ def expand_keywords(text: str, base_keywords: list[str]) -> list[str]:
             seen.add(entity)
             result.append(entity)
 
-    # Verb synonym expansion (iterate over a snapshot to avoid infinite loop)
-    for kw in list(result):
+    # Verb synonym expansion — only expand the original base keywords, not
+    # named entities. Expanding entities causes cascades when common words
+    # like "live" or "work" appear as entity matches.
+    for kw in base_keywords:
         for syn in LOCOMO_VERB_SYNONYMS.get(kw, []):
             if syn not in seen:
                 seen.add(syn)
                 result.append(syn)
 
     return result
+
+
+def resolve_coreferences(store: "GraphStore", keywords: list[str]) -> list[str]:
+    """Expand keywords by resolving relationship-term coreferences.
+
+    When the query contains a relationship term (e.g. "sister") alongside a
+    named keyword, look for person nodes whose tags include both that relationship
+    term and the other keyword. Extract the person's name tags and add them to
+    the keyword set so BFS traversal can find that person's full fact neighborhood.
+
+    Example: query "where does [name]'s sister live?" → keywords ["sister", "live"].
+    If a person node is tagged ["sister", "Sarah"] we add "Sarah" to keywords.
+
+    This is a pure graph lookup — no extra extraction, works on cached DBs.
+    """
+    kw_set = set(keywords)
+    relationship_matches = kw_set & RELATIONSHIP_TERMS
+    if not relationship_matches:
+        return keywords
+
+    # Find person-typed nodes tagged with at least one relationship term
+    # and at least one non-relationship keyword
+    other_keywords = [kw for kw in keywords if kw not in RELATIONSHIP_TERMS]
+    if not other_keywords:
+        return keywords
+
+    new_terms: list[str] = []
+    seen = set(keywords)
+
+    for rel_term in relationship_matches:
+        # Get nodes tagged with this relationship term
+        candidate_nodes = store.get_nodes_by_tags([rel_term])
+        for node in candidate_nodes:
+            if node.get("type") != "person":
+                continue
+            node_tags = {t.lower() for t in node.get("tags", [])}
+            # Node must also match at least one of the other query keywords
+            if not (node_tags & set(other_keywords)):
+                continue
+            # Extract name-like tags: tags that aren't relationship terms or stop words
+            name_tags = [
+                t for t in node_tags
+                if t not in RELATIONSHIP_TERMS
+                and t not in STOP_WORDS
+                and t not in kw_set
+                and len(t) >= 2
+            ]
+            for name in name_tags:
+                if name not in seen:
+                    seen.add(name)
+                    new_terms.append(name)
+                    log.debug("Coreference: resolved '%s' → '%s' via node %s", rel_term, name, node["id"])
+
+    return keywords + new_terms
 
 
 def _extract_query_dates(query: str) -> list[datetime]:
@@ -786,9 +914,14 @@ def apply_temporal_proximity(nodes: list[dict], query: str, half_life_days: floa
                 abs((node_dt - ref_dt).total_seconds() / 86400)
                 for ref_dt in date_refs
             )
-            proximity_bonus = math.pow(2, -min_days / max(half_life_days, 1))
-            base = node.get("_score", node.get("confidence", 0.5))
-            node["_score"] = base * (1.0 + proximity_bonus)
+            # Use raw confidence as bonus base — not the already-decayed _score.
+            # Recency decay may have crushed _score to near-zero; multiplying
+            # by (1 + bonus) can't rescue it. Instead compute an additive bonus
+            # proportional to confidence and add it to whatever score exists.
+            confidence = node.get("confidence", 0.5)
+            proximity_bonus = confidence * math.pow(2, -min_days / max(half_life_days, 1))
+            existing_score = node.get("_score", confidence)
+            node["_score"] = existing_score + proximity_bonus
         except (ValueError, TypeError):
             pass
 

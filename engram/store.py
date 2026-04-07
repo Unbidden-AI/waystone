@@ -67,7 +67,7 @@ def _chunk(lst: list, size: int):
 class GraphStore:
     """DAG storage using SQLite with nodes and edges tables."""
 
-    def __init__(self, db_path: str | Path, dedup_threshold: float = 0.92):
+    def __init__(self, db_path: str | Path, dedup_threshold: float = 0.95):
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(str(self.db_path))
@@ -395,6 +395,26 @@ class GraphStore:
             self.conn.executemany("DELETE FROM nodes WHERE id = ?", [(nid,) for nid in ids])
             self.conn.commit()
         return ids
+
+    def vacuum_orphaned_edges(self, dry_run: bool = False) -> int:
+        """Delete edges whose from_id or to_id no longer exists in the nodes table.
+
+        Returns the number of orphaned edges deleted (or would-delete count in dry_run).
+        """
+        rows = self.conn.execute(
+            """SELECT COUNT(*) FROM edges
+               WHERE from_id NOT IN (SELECT id FROM nodes)
+                  OR to_id   NOT IN (SELECT id FROM nodes)"""
+        ).fetchone()
+        count = rows[0] if rows else 0
+        if not dry_run and count:
+            self.conn.execute(
+                """DELETE FROM edges
+                   WHERE from_id NOT IN (SELECT id FROM nodes)
+                      OR to_id   NOT IN (SELECT id FROM nodes)"""
+            )
+            self.conn.commit()
+        return count
 
     def find_semantic_duplicates(
         self, threshold: float = 0.92, top_k: int = 5, limit: int = 0
@@ -765,6 +785,89 @@ class GraphStore:
                     (json.dumps(sorted(new_tags)), nid),
                 )
         self.conn.commit()
+
+    def infer_involves_edges(
+        self,
+        weight: float = 1.0,
+        name_only: bool = False,
+    ) -> int:
+        """Post-hoc inference: add `involves` edges from fact nodes to person anchors.
+
+        Scans all person-type nodes and all non-person nodes. For each person,
+        any fact node whose tags contain at least one matching tag gets an
+        `involves` edge added if one doesn't already exist.
+
+        Args:
+            weight: Edge weight for inferred edges (< 1.0 to deprioritize vs
+                    extractor-native edges that start at 1.0).
+            name_only: When True, only match on the person's primary name (first
+                       alphabetic word in their fact text), not all tags. Reduces
+                       false positives from shared relationship/attribute tags.
+
+        Returns the number of new edges added.
+        """
+        # Load all person-type anchor nodes
+        person_rows = self.conn.execute(
+            "SELECT id, fact, tags FROM nodes WHERE type = 'person'"
+        ).fetchall()
+        if not person_rows:
+            return 0
+
+        # Build inverted index: tag -> [person_ids]
+        tag_to_persons: dict[str, list[str]] = {}
+        for row in person_rows:
+            pid, fact, tags_json = row[0], row[1], row[2]
+            if name_only:
+                # Extract the primary name: first alphabetic word of the fact text
+                name = next(
+                    (w.lower() for w in re.split(r"\W+", fact) if w.isalpha() and len(w) >= 2),
+                    None,
+                )
+                match_tags = [name] if name else []
+            else:
+                match_tags = [t.lower() for t in json.loads(tags_json)]
+            for tag in match_tags:
+                tag_to_persons.setdefault(tag, []).append(pid)
+
+        if not tag_to_persons:
+            return 0
+
+        # Load existing involves edges to avoid duplicates
+        existing = set(
+            (r[0], r[1])
+            for r in self.conn.execute(
+                "SELECT from_id, to_id FROM edges WHERE relation = 'involves'"
+            ).fetchall()
+        )
+
+        # Scan non-person nodes; add missing involves edges
+        non_person_rows = self.conn.execute(
+            "SELECT id, tags FROM nodes WHERE type != 'person'"
+        ).fetchall()
+
+        new_edges: list[tuple[str, str]] = []
+        for row in non_person_rows:
+            nid = row[0]
+            node_tag_set = {t.lower() for t in json.loads(row[1])}
+            seen_persons: set[str] = set()
+            for tag in node_tag_set:
+                for pid in tag_to_persons.get(tag, []):
+                    if pid not in seen_persons and (nid, pid) not in existing:
+                        new_edges.append((nid, pid))
+                        existing.add((nid, pid))
+                        seen_persons.add(pid)
+
+        for from_id, to_id in new_edges:
+            self.conn.execute(
+                """INSERT INTO edges (from_id, to_id, relation, weight)
+                   VALUES (?, ?, 'involves', ?)
+                   ON CONFLICT (from_id, to_id, relation) DO NOTHING""",
+                (from_id, to_id, weight),
+            )
+        self.conn.commit()
+        log.info("infer_involves_edges: added %d new involves edges (weight=%.2f, name_only=%s)",
+                 len(new_edges), weight, name_only)
+        return len(new_edges)
 
     def delete_nodes_by_source(self, source_transcript: str) -> int:
         """Delete all nodes (and their edges) with the given source_transcript value.

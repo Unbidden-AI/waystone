@@ -1,6 +1,6 @@
 llm:
   base_url: "https://generativelanguage.googleapis.com/v1beta/openai"
-  model: "gemini-2.5-flash"
+  model: "gemini-2.5-flash-lite"
   api_key: "AIzaSyAJ4IV6n97UUaoy5MjDkY1_M-JOzD7cc50"
   timeout: 120.0
   temperature: 0.0

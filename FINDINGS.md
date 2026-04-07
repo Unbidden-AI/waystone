@@ -1497,3 +1497,328 @@ The combined config (+5pp vs engram_semantic on the same graph) confirms that `r
 The bge-small checkpoint has 30% fewer nodes (712 vs 1017). More aggressive semantic dedup removed 305 nodes that contain answer keywords. The accuracy gap is likely driven by **dedup recall loss**, not the retrieval strategy. bge-small's higher MTEB Retrieval score means it correctly identifies more pairs as semantically equivalent — but on this corpus that appears to over-prune.
 
 **Next step**: Run `engram_combined` (or `engram_dynamic_topk_log`) on the all-MiniLM checkpoint to cleanly isolate retrieval strategy vs dedup quality. Also: fix the sqlite-vec Python 3.14 incompatibility to make semantic retrieval actually work at query time.
+
+---
+
+## Phase 1 LOCOMO Retrieval Improvements — conv-26 ablation (2026-04-03)
+
+### Overview
+
+Full ablation of 6 retrieval-layer improvements on conv-26 (19 sessions, 199 QA pairs, quick mode). No extraction needed — all configs share `dedup_threshold=0.95, domain="episodic_personal"` so conv-26 checkpoints were reused. LLM judge: `local:qwen/qwen3-8b`.
+
+**Baseline**: `engram_dedup95` — 67.8% keyword accuracy, 62.1% LLM accuracy.  
+**Zep target**: 73% LLM accuracy on LOCOMO.
+
+### Results (all 10 configs)
+
+| Config | Features | kw_accuracy | kw_exact | llm_accuracy | avg_tokens |
+|--------|----------|-------------|----------|--------------|------------|
+| engram_dedup95 (baseline) | — | 67.8% | 52.3% | 62.1% | ~730 |
+| engram_query_expansion | #1 only | 53.3% | 47.2% | 57.8% | 730 |
+| engram_person_anchor | #2 only | 61.3% | 51.3% | 64.3% | 742 |
+| engram_temporal_boost | #3 only | 55.3% | 46.7% | **71.4%** | 764 |
+| engram_bm25_rrf | BM25+RRF | 64.3% | 53.8% | 60.8% | 738 |
+| engram_person_temporal | #2 + #3 | 56.3% | 50.2% | 64.8% | 726 |
+| engram_improvements_1_3 | #1 + #2 + #3 | 60.3% | 51.8% | 70.3% | 757 |
+| engram_coreference | #4 only | 57.3% | 48.2% | 58.3% | 746 |
+| engram_session_scoped | #6 only | **67.8%** | **52.8%** | **74.9%** | 732 |
+| engram_coreference_temporal | #4 + #3 | 57.3% | 48.7% | 64.3% | 746 |
+| **engram_improvements_4_6** | **#4 + #6** | **67.8%** | **52.8%** | **74.9%** | 732 |
+
+### Key findings
+
+1. **#6 (session_scoped) is the dominant feature** — +12.8pp LLM lift over baseline (74.9% vs 62.1%). Restricting BFS entry candidates to evidence sessions (oracle signal from the dataset) eliminates cross-session noise. This is the single most impactful change.
+
+2. **Coreference (#4) adds nothing on top of session_scoped** — `engram_improvements_4_6` and `engram_session_scoped` produce identical results (67.8% kw, 74.9% LLM). The session filter already scopes the evidence tightly enough that referent resolution doesn't help further.
+
+3. **Temporal boost (#3) is the strongest blind feature** — 71.4% LLM with no oracle signal, above the 70.3% of the full 3-way stack (#1+#2+#3). Combining #3 with person anchoring (#2) drops to 64.8%, suggesting #2 and #3 retrieve overlapping content and the addition adds noise.
+
+4. **Query expansion (#1) hurts** — 57.8% LLM vs 62.1% baseline. The synonym dict (eat→food/meal, work→job/career, etc.) broadens the keyword set into irrelevant territory on this conversation corpus.
+
+5. **BM25+RRF underperforms** — 60.8% LLM, slightly below baseline (62.1%). Adding a full-text BM25 channel to the RRF fusion doesn't improve over tag-overlap seeding at this graph scale.
+
+6. **Feature interactions are mostly negative** — The 3-way stack (#1+#2+#3) at 70.3% is weaker than #3 alone (71.4%). Coreference (#4) at 58.3% alone is below baseline. Adding features does not compound cleanly.
+
+### Recommendation
+
+`engram_session_scoped` beats Zep's 73% target and represents the retrieval ceiling for the current graph (oracle sessions). In production (no oracle signal), `engram_temporal_boost` (#3 alone at 71.4%) is the best deployable single improvement.
+
+**Caveat**: session_scoped uses oracle `evidence_session_ids` from the LOCOMO dataset — not available at query time in production. The 74.9% result is a retrieval upper bound, not a deployable system number. Temporal boost (71.4%) is the realistic ceiling for blind retrieval improvements.
+
+---
+
+## Official Dev Split Results — Semantic Rerank vs Cross-Encoder (2026-04-07)
+
+### Protocol
+
+**Split**: dev (5 conversations: conv-26, 30, 41, 42, 43)  
+**QA pairs**: 762 (categories 1–4 only; category 5 adversarial excluded per official LOCOMO protocol)  
+**Judge**: gpt-4o-mini (sync)  
+**Extraction model**: gemini-2.5-flash-lite, `max_tokens=4096`, domain=`episodic_personal`, semantic dedup threshold=0.95
+
+> **Critical note**: All prior LOCOMO runs before 2026-04-07 included category 5 (adversarial) questions, which inflated the denominator and depressed scores by ~10pp. Category 5 uses `adversarial_answer` (not `answer`) and scores ~41% binary LLM — including it conflates the adversarial-robustness task with the memory-retrieval task. The `--categories` default is now `[1, 2, 3, 4]` in harness.py.
+
+### Results (dev split, official protocol)
+
+| Config | kw_accuracy | kw_exact | llm_accuracy | avg_tokens | n |
+|--------|-------------|----------|--------------|------------|---|
+| **engram_semantic_rerank_topk100** | 72.6% | 63.8% | **85.7%** | 1439 | 762 |
+| engram_cross_encoder_topk100 | 75.2% | 65.5% | 84.1% | 1471 | 762 |
+
+**Primary config: `engram_semantic_rerank_topk100`** — highest LLM accuracy (85.7%).
+
+Cross-encoder achieves higher keyword accuracy (75.2% vs 72.6%) but lower LLM accuracy (84.1%). The cross-encoder (`ms-marco-MiniLM-L-6-v2`) is trained on web document retrieval (MS-MARCO), creating a domain mismatch with LOCOMO's conversational personal-memory corpus. The `all-MiniLM` bi-encoder used in semantic rerank is better calibrated for Q&A/conversational similarity.
+
+### Comparison to prior state of the art
+
+| System | LLM accuracy | Notes |
+|--------|-------------|-------|
+| **Engram (semantic_rerank_topk100)** | **85.7%** | Dev split, cats 1–4, 762 QA pairs |
+| Zep | 73% | Published target |
+| Mem0 | 88% | Published target (full test set) |
+
+Engram's 85.7% exceeds Zep (73%) and approaches Mem0 (88%) on the dev split with official protocol scoring.
+
+### Next: Full LOCOMO Run
+
+5 test conversations (conv-44, 47, 48, 49, 50) are not yet extracted. Full official run requires:
+1. Extract test split → stored in `engram_dedup95` checkpoint dir (source for `semantic_rerank_topk100`)
+2. Run retrieval + batch judge on all 10 conversations (~778 new QA pairs)
+3. Report combined score as the paper number
+
+See "Full LOCOMO Run Plan" below.
+
+---
+
+## Full LOCOMO Run Plan (10 conversations)
+
+**Goal**: Run all 10 LOCOMO conversations under the official evaluation protocol to produce a citable benchmark number that is directly comparable to Zep (73%) and Mem0 (88%).
+
+Both Zep and Mem0 report a single score over the full 10-conversation dataset. Our dev-split result (85.7% over 5 conversations) is promising but not a like-for-like comparison — the full 10-conversation run is required to make the claim rigorous.
+
+### Configurations
+
+Two configs are planned. Both use identical retrieval pipelines; the only variable is the extraction model:
+
+| Config | Extraction model | Retrieval | Purpose |
+|--------|-----------------|-----------|---------|
+| `engram_semantic_rerank_topk100` | gemini-2.5-flash-lite | top_k=100, semantic rerank | **Primary result** — best Engram pipeline |
+| `engram_semantic_rerank_gpt4omini` | gpt-4o-mini | top_k=100, semantic rerank | **Apples-to-apples** — same extraction model as Zep/Mem0 |
+
+The delta between the two configs isolates how much of Engram's performance comes from the extraction model vs. the graph retrieval architecture.
+
+### Dataset
+
+- **Conversations**: all 10 (conv-26, 30, 41, 42, 43 = dev; conv-44, 47, 48, 49, 50 = test)
+- **QA pairs**: ~1,540 total (762 dev + ~778 test), categories 1–4 only (adversarial cat 5 excluded)
+- **Judge**: gpt-4o-mini (sync or batch)
+
+### Checkpoints
+
+| Config | Dev split | Test split |
+|--------|-----------|------------|
+| `engram_dedup95` (source for semantic_rerank) | ✅ done (5 convs) | ⬜ pending |
+| `engram_gpt4o_mini_extraction` (source for gpt4omini config) | ⬜ pending | ⬜ pending |
+
+The dev-split checkpoints for `engram_dedup95` are already stored and reused — no re-extraction needed for the primary config's dev portion. Only the 5 test conversations need fresh extraction.
+
+### Execution
+
+```bash
+python -m benchmarks.locomo.harness \
+  --split all \
+  --configs engram_semantic_rerank_topk100 engram_semantic_rerank_gpt4omini \
+  --conv-workers 2 \
+  --use-batch \
+  --verbose
+```
+
+`--conv-workers 2` is recommended over the default 4 to avoid concurrent Gemini calls triggering rate limit backoff. The 503/429 retry logic now handles transient failures, but reducing concurrency minimizes wasted retries on the test split's fresh extraction.
+
+### Expected output
+
+Results written to `benchmarks/locomo/results/all_<date>.json`. The aggregate section of each config provides the citable number.
+
+### Reporting
+
+Once the full run completes, update this section with the final table:
+
+| System | LLM accuracy | Extraction model | Notes |
+|--------|-------------|-----------------|-------|
+| **Engram (`semantic_rerank_topk100`)** | _TBD_ | gemini-2.5-flash-lite | All 10 convs, cats 1–4 |
+| **Engram (`semantic_rerank_gpt4omini`)** | _TBD_ | gpt-4o-mini | Apples-to-apples vs Zep/Mem0 |
+| Zep | 73% | gpt-4o-mini | Published, full test set |
+| Mem0 | 88% | gpt-4o-mini | Published, full test set |
+
+The gpt4omini config is the controlled comparison: same extraction model, same judge, same dataset, different memory architecture. That delta is the cleanest evidence of Engram's architectural contribution.
+
+---
+
+## LongMemEval Benchmark Plan
+
+**Goal**: Run Engram against LongMemEval — a Microsoft Research benchmark for long-term memory in LLM assistants — to validate performance on question types that directly target Engram's architectural differentiators: knowledge update (supersedes), multi-session aggregation (graph BFS), and temporal reasoning.
+
+### Dataset
+
+**HuggingFace**: `xiaowu0162/longmemeval-cleaned` ⚠️ (the original `longmemeval` is deprecated as of Sep 2025 — use the cleaned version, which removes noisy history sessions that interfere with answer correctness)
+
+Two variants:
+| Variant | Description | Sessions per question |
+|---------|-------------|----------------------|
+| `LongMemEval_S` | Single-session — one long conversation per question | 1 (very long) |
+| `LongMemEval_M` | Multi-session — multiple shorter sessions per question | varies |
+
+- **500 questions** total per variant
+- **No official train/test split**; run all 500
+- **Judge**: The original paper uses GPT-4o (not mini). We will use **gpt-4o-mini** for cost reasons, same as LOCOMO. This means our absolute scores will not be directly comparable to published paper numbers. The meaningful comparison is Engram vs other systems run under the same judge — not Engram vs the paper's table.
+
+### Question categories
+
+| Category | Count (approx) | Engram relevance |
+|----------|---------------|-----------------|
+| Single-session fact recall | ~150 | Baseline — tag matching, BFS |
+| Temporal reasoning | ~100 | `occurred_at` field + temporal prompt rules |
+| **Knowledge update** | ~100 | **Engram's key differentiator** — supersedes mechanism tracks old→new directly |
+| Multi-session aggregation | ~100 | Graph BFS collects distributed facts across sessions |
+| Absent information | ~50 | Requires confident "I don't know" — retrieval precision matters |
+
+Knowledge update is the category most likely to produce a meaningful delta over flat-memory systems (Zep, Mem0). Engram's `supersedes` edge means the graph already encodes "X was replaced by Y"; retrieval for Y also surfaces the old value for context. Flat systems must either overwrite the old value (and lose temporal context) or store both and let the LLM sort it out (retrieval noise).
+
+### How the data maps to Engram's ingestion model
+
+LongMemEval sessions are conversation turns, same as LOCOMO. The ingestion pipeline maps cleanly:
+
+```
+LongMemEval session  →  engram Session (session_id, datetime_str, turns)
+LongMemEval subject  →  engram Conversation (sample_id, sessions[])
+```
+
+For `LongMemEval_S`, each question's single long conversation is bisected into sessions by the harness (the ingestion pipeline already handles bisection on output-length truncation). For `LongMemEval_M`, sessions arrive pre-segmented.
+
+The "absent information" category needs one additional harness feature: if the retrieved context is empty or entirely low-confidence, the answer should be "I don't know" rather than a hallucinated response. The LOCOMO harness currently always sends retrieved context to the judge. This needs a `min_retrieval_confidence` threshold or a `no_context_response` override for absent-information questions.
+
+### Infrastructure plan
+
+```
+benchmarks/
+  longmemeval/
+    __init__.py
+    loaders/
+      longmemeval_dataset.py    # load_dataset("xiaowu0162/longmemeval")
+                                # → list[LongMemEvalSample] with sessions + question + answer
+      ingestion_pipeline.py     # thin wrapper: convert LongMemEvalSample → Conversation,
+                                # call locomo's ingest_conversation() directly
+    evaluation/
+      scoring.py                # reuse locomo scoring.py; add absent-info handling
+    harness.py                  # top-level runner, same structure as locomo/harness.py
+    ablation_configs.py         # same config pattern as locomo
+    results/                    # output JSON + summary tables
+```
+
+**Reuse strategy**: `benchmarks/locomo/loaders/ingestion_pipeline.py` is imported directly — there is nothing LOCOMO-specific in it, it only depends on `Conversation` / `Session` types and `ingest_conversation()`. The longmemeval dataset loader converts to those types and then delegates to the existing pipeline. Same for scoring: `score_llm_judge()`, `submit_judge_batch()`, and `judge_answer_sync()` all accept generic `(question, context, reference_answer)` tuples and need no changes.
+
+### Absent information handling
+
+The absent-info category requires a retrieval precision signal that LOCOMO didn't need. Two options:
+
+1. **Threshold-based**: if top retrieved node confidence < `absent_threshold` (e.g. 0.3), return the fixed string `"I don't know"` instead of sending to the LLM judge.
+2. **LLM-with-empty-context**: send the question with empty context; if the LLM responds "the information is not available" or similar, score as correct.
+
+Option 2 is simpler and avoids introducing a new hyperparameter. The judge prompt should instruct the LLM to say "not enough information" when context is empty. LOCOMO's judge prompt already handles this implicitly (GPT-4o-mini correctly says "I can't determine" when given no relevant context).
+
+### Ablation configs
+
+| Config | Purpose |
+|--------|---------|
+| `engram_lme_gemini` | Primary — gemini-2.5-flash-lite extraction, semantic rerank top_k=100 |
+| `engram_lme_gpt4omini` | Apples-to-apples — gpt-4o-mini extraction (matches paper's model family) |
+
+These mirror the two LOCOMO configs. Same domain profile (`episodic_personal`), same retrieval pipeline.
+
+### Expected advantages by category
+
+| Category | Why Engram should win |
+|----------|----------------------|
+| Knowledge update | `supersedes` edge explicitly models old→new. Query for "current job" retrieves the latest node AND the superseded node (for context), giving the LLM everything it needs. Flat memory systems either overwrite (lose history) or store both unlinked (retrieval lottery). |
+| Multi-session aggregation | BFS traversal across graph edges collects facts distributed across many sessions. Flat vector search returns top-K chunks by similarity; aggregation questions often require low-similarity nodes that happen to be connected. |
+| Temporal reasoning | `occurred_at` timestamps on nodes + temporal resolution rules in the extraction prompt let the model answer "what did X say in January" vs "what does X say now" with precision. |
+| Absent information | High-precision retrieval (semantic rerank + cross-encoder) returns fewer false positives than flat vector search, making "nothing retrieved" a more reliable signal. |
+
+### Implementation order
+
+1. **Dataset loader** (`longmemeval_dataset.py`): download via `datasets` library, parse into `Conversation`/`Session` types. Map the `sessions` field to individual sessions; map `question` + `answer` to QA pairs. Verify the field names match the HuggingFace schema.
+
+2. **Ingestion wrapper** (`loaders/ingestion_pipeline.py`): one-liner delegating to `locomo.loaders.ingestion_pipeline.ingest_conversation()`. Add domain override: `episodic_personal` is the right profile for personal-memory conversations.
+
+3. **Harness** (`harness.py`): port the LOCOMO harness structure. Key difference: the absent-info category must be identified and handled separately (either by category label in the dataset or by the "none of the above" retrieval fallback).
+
+4. **Ablation configs** (`ablation_configs.py`): copy the LOCOMO `engram_semantic_rerank_topk100` config; rename; point `db_dir` to a longmemeval-specific cache directory.
+
+5. **Scoring** (`evaluation/scoring.py`): import and re-export `score_llm_judge`, `submit_judge_batch` from the LOCOMO path. Add absent-info override: if `retrieved_context` is empty, map answer to `"I don't know"` before judging.
+
+6. **Run and report**: execute on `LongMemEval_M` first (multi-session is the harder variant and better showcases graph memory). Compare per-category scores against the paper's published numbers for GPT-4o + retrieval baselines.
+
+### Comparison targets
+
+The LongMemEval paper reports results for several retrieval-augmented memory systems. The relevant published baselines are:
+
+| System | Overall accuracy | Notes |
+|--------|-----------------|-------|
+| GPT-4o (no memory) | ~30% | Upper-bound ceiling without persistent memory |
+| Full context (oracle) | ~70% | All sessions concatenated into context window |
+| MemoryBank | ~40–50% | Flat retrieval baseline |
+| ReadAgent | ~55–60% | Summarization-based compression |
+| **Engram (target)** | _TBD_ | Graph retrieval with supersedes |
+
+Note: exact published numbers vary by variant (S vs M) and question category. The paper's Table 2 is the reference.
+
+### Cost and time estimate
+
+These are rough estimates pending actually loading the dataset to measure conversation lengths.
+
+**Scale comparison vs LOCOMO:**
+- LOCOMO: 10 conversations to ingest, ~5,882 turns total, 1,986 QA pairs to judge
+- LongMemEval_M: 500 conversations to ingest (one per question), 500 QA pairs to judge
+
+LOCOMO has 4× more judging work than LongMemEval but 50× fewer conversations to extract. Extraction dominates cost.
+
+**Extraction cost (gemini-2.5-flash-lite):**
+
+Gemini 2.5 Flash Lite pricing: $0.075/1M input tokens, $0.30/1M output tokens.
+
+LOCOMO extraction (10 conversations, ~220 sessions total) costs roughly $0.10–$0.50. LongMemEval_M has 500 conversations, but each may be shorter per conversation than LOCOMO's (~22 sessions avg). If each LongMemEval instance averages 30–50 sessions:
+- 500 × 40 sessions × ~1,500 input tokens = 30M input tokens → ~**$2.25**
+- 500 × 40 sessions × ~750 output tokens = 15M output tokens → ~**$4.50**
+- **Total extraction: ~$7–15** depending on conversation lengths
+
+**Judging cost (gpt-4o-mini):**
+- 500 questions × ~1,500 tokens context = 750K input tokens at $0.15/1M → **< $0.15**
+- Judging is essentially free at this scale.
+
+**Total estimated cost: $8–20 for the M variant.** The main uncertainty is conversation length — load the dataset and check `sum(len(s.turns) for q in dataset for s in q.sessions)` before committing to a run.
+
+**Time estimate:**
+- At 300 RPM (gemini Tier 1 floor), 500 × 40 = 20,000 extraction API calls → 67 minutes wall-clock minimum
+- With conv-workers=4 and bisection overhead, budget **2–4 hours** for M variant
+- The 503/429 retry logic will handle rate bursts; this is not a LOCOMO-style all-day run
+
+### Anticipated issues
+
+1. **Dataset schema is unknown until loaded.** The LongMemEval format may not have `datetime_str` fields (LOCOMO's sessions have explicit timestamps; LongMemEval's may not). Temporal reasoning questions are answered by the model's internal knowledge of conversation order, not absolute dates. The loader needs to synthesize plausible `occurred_at` values (sequential session numbers, or skip entirely for sessions without dates — the ingestion pipeline handles `None` gracefully).
+
+2. **500 independent GraphStores, no cross-conversation checkpointing.** LOCOMO has 10 conversations; we can reuse all 10 checkpoint DBs. LongMemEval has 500. If a run is interrupted partway, already-completed conversations are checkpointed individually. The harness checkpoint logic (one DB per `sample_id`) already handles this correctly.
+
+3. **Judge model mismatch.** The paper reports scores with GPT-4o. Our gpt-4o-mini scores will be systematically lower (gpt-4o-mini is a stricter judge in some categories). To interpret results: compare Engram vs other systems that have been run under gpt-4o-mini judging, not the paper's absolute numbers. If we want apples-to-apples with the paper, one calibration run on a 50-question subset with both judges would establish the offset.
+
+4. **Abstention category requires retrieval confidence signal.** When Engram retrieves nothing above the relevance threshold, the answer should be "I don't know." LOCOMO never tests this. The harness needs to detect empty/low-confidence retrieval and short-circuit to "the information is not available in the conversation history" before calling the judge.
+
+5. **`longmemeval` (original) is deprecated.** Use `longmemeval-cleaned` — the original had noisy sessions that made some questions unanswerable, biasing scores downward for memory systems that actually retrieved the right facts.
+
+### Prerequisites
+
+```bash
+pip install datasets  # HuggingFace datasets library (likely already installed)
+```
+
+No new model dependencies — the existing `sentence-transformers` install covers the semantic reranker, and `google-genai` / OpenAI client cover extraction and judging.
+

@@ -13,7 +13,9 @@ log = logging.getLogger(__name__)
 
 EMBEDDING_DIM = 384  # bge-small-en-v1.5 output dimension (retrieval-tuned, same dim as all-MiniLM-L6-v2)
 _MODEL_NAME = "BAAI/bge-small-en-v1.5"
+_CROSS_ENCODER_MODEL_NAME = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 _model = None
+_cross_encoder = None
 
 
 def is_available() -> bool:
@@ -51,6 +53,29 @@ def embed_texts(texts: list[str]) -> list[bytes]:
 def embed_text(text: str) -> bytes:
     """Return embedding as float32 bytes for a single text."""
     return embed_texts([text])[0]
+
+
+def _get_cross_encoder():
+    global _cross_encoder
+    if _cross_encoder is None:
+        from sentence_transformers import CrossEncoder
+        log.info("Loading cross-encoder model %s (first use)", _CROSS_ENCODER_MODEL_NAME)
+        _cross_encoder = CrossEncoder(_CROSS_ENCODER_MODEL_NAME, local_files_only=True)
+    return _cross_encoder
+
+
+def cross_encode_scores(query: str, facts: list[str]) -> list[float]:
+    """Score each (query, fact) pair using a cross-encoder for relevance.
+
+    Returns a list of float scores parallel to `facts`. Higher = more relevant.
+    Scores are raw logits from ms-marco-MiniLM-L-6-v2 (not calibrated probabilities).
+    """
+    if not facts:
+        return []
+    model = _get_cross_encoder()
+    pairs = [(query, fact) for fact in facts]
+    scores = model.predict(pairs, batch_size=32, show_progress_bar=False)
+    return [float(s) for s in scores]
 
 
 def cosine_similarity(blob_a: bytes, blob_b: bytes) -> float:

@@ -52,8 +52,30 @@ DEFAULT_RECONCILE_MIN_TOTAL = 100  # minimum graph size before reconcile
 
 def main():
     try:
-        hook_input = json.loads(sys.stdin.read())
+        hook_input_raw = sys.stdin.read()
+        hook_input = json.loads(hook_input_raw)
     except Exception:
+        sys.exit(0)
+
+    # Re-spawn ourselves as a detached background process so the UI is never
+    # blocked by transcript saving, DB stats, or extraction spawning.
+    # The child sets ENGRAM_STOP_BG=1 so it skips this block and does the work.
+    import os
+    if not os.environ.get("ENGRAM_STOP_BG"):
+        env = {**os.environ, "ENGRAM_STOP_BG": "1"}
+        try:
+            proc = subprocess.Popen(
+                [sys.executable, str(Path(__file__).resolve())],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+                env=env,
+            )
+            proc.stdin.write(hook_input_raw.encode())
+            proc.stdin.close()
+        except Exception:
+            pass
         sys.exit(0)
 
     transcript_path = hook_input.get("transcript_path", "")

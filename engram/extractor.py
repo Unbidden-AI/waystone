@@ -95,6 +95,15 @@ async def _call_llm(prompt: str, config: dict, domain_profile=None) -> str:
         max_tok = llm_cfg.get("max_tokens", 4096)
         temp = llm_cfg.get("temperature", 0.1)
         _MAX_RETRIES = 6
+        # Pass thinking_config when reasoning_effort="none" so thinking tokens
+        # don't consume the max_tokens budget on Gemini 2.5 Flash Lite.
+        _native_extra: dict = {}
+        if llm_cfg.get("reasoning_effort") == "none":
+            try:
+                from google.genai import types as _gt
+                _native_extra["thinking_config"] = _gt.ThinkingConfig(thinking_budget=0)
+            except (ImportError, AttributeError):
+                pass
         for attempt in range(_MAX_RETRIES):
             try:
                 return await _native.complete_async(
@@ -102,6 +111,7 @@ async def _call_llm(prompt: str, config: dict, domain_profile=None) -> str:
                     max_tokens=max_tok,
                     system=system_msg,
                     temperature=temp,
+                    **_native_extra,
                 )
             except Exception as exc:
                 exc_str = str(exc)

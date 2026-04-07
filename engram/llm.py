@@ -153,30 +153,152 @@ class GeminiNativeProvider(LLMProvider):
 
     async def complete_async(self, prompt: str, *, max_tokens: int, **kwargs) -> str:
         import asyncio
-        return await asyncio.get_event_loop().run_in_executor(
+        loop = asyncio.get_event_loop()
+        future = loop.run_in_executor(
             None, lambda: self.complete_sync(prompt, max_tokens=max_tokens, **kwargs)
         )
+        return await asyncio.wait_for(future, timeout=300)  # 5 min hard cap — prevents indefinite hangs
+
+    @staticmethod
+    def _classify_error(e: Exception) -> str:
+        """Classify an API exception for retry policy.
+
+        Returns one of:
+          'transient'        — 503/500/502; short backoff, retry
+          'rate_limit'       — 429 RPM/TPM burst; longer backoff, retry
+          'quota_exhausted'  — 429 daily/billing/project hard cap; fail fast
+          'fatal'            — non-retryable (auth, bad request, etc.)
+        """
+        err_lower = str(e).lower()
+
+        # Check google-api-core exception hierarchy first (most reliable)
+        try:
+            from google.api_core import exceptions as _gexc
+            if isinstance(e, _gexc.ResourceExhausted):
+                # Distinguish hard quota (per-day / billing) from burst RPM/TPM.
+                # Hard-quota messages typically contain "per day", "daily", or
+                # "quota exceeded" while RPM/TPM messages say "rate limit exceeded"
+                # or "too many requests".
+                if any(phrase in err_lower for phrase in (
+                    "per day", "daily limit", "monthly", "billing",
+                    "quota exceeded", "project quota",
+                )):
+                    return "quota_exhausted"
+                return "rate_limit"
+            if isinstance(e, (_gexc.ServiceUnavailable, _gexc.InternalServerError)):
+                return "transient"
+        except ImportError:
+            pass
+
+        # Fall back to string matching for non-google-api-core wrappers
+        if any(s in err_lower for s in ("503", "502", "service unavailable",
+                                         "500", "internal server")):
+            return "transient"
+        if any(s in err_lower for s in ("per day", "daily limit", "monthly",
+                                         "billing", "quota exceeded",
+                                         "project quota")):
+            return "quota_exhausted"
+        if any(s in err_lower for s in ("429", "rate limit", "resource exhausted",
+                                         "too many requests", "overloaded")):
+            return "rate_limit"
+        return "fatal"
+
+    @staticmethod
+    def _extract_retry_after(e: Exception) -> float | None:
+        """Try to parse a suggested retry delay from the exception.
+
+        Checks (in order):
+          1. trailing_metadata retry-after header (google-api-core)
+          2. RetryInfo.retry_delay in error details (google-api-core)
+          3. "try again in Xs" / "retry after Xs" substring in error message
+        """
+        import re as _re
+        try:
+            from google.api_core import exceptions as _gexc
+            if hasattr(e, "trailing_metadata") and e.trailing_metadata:
+                for key, value in e.trailing_metadata:
+                    if key.lower() == "retry-after":
+                        return float(value) + 0.5
+            if hasattr(e, "details") and e.details:
+                for detail in e.details:
+                    if hasattr(detail, "retry_delay"):
+                        d = detail.retry_delay
+                        seconds = getattr(d, "seconds", 0) + getattr(d, "nanos", 0) / 1e9
+                        if seconds > 0:
+                            return seconds + 0.5
+        except (ImportError, Exception):
+            pass
+        m = _re.search(r"(?:retry after|try again in)\s+(\d+(?:\.\d+)?)\s*s",
+                        str(e).lower())
+        if m:
+            return float(m.group(1)) + 1.0
+        return None
 
     def complete_sync(self, prompt: str, *, max_tokens: int, system: str | None = None, **kwargs) -> str:
+        import time as _time
         config_kwargs = dict(max_output_tokens=max_tokens, temperature=0.1)
         if system:
             config_kwargs["system_instruction"] = system
         config_kwargs.update(kwargs)
         gen_cfg = self._types.GenerateContentConfig(**config_kwargs)
 
-        if self._cached_content:
-            response = self._client.models.generate_content(
-                model=self._model,
-                contents=prompt,
-                config=gen_cfg,
-                cached_content=self._cached_content.name,
-            )
-        else:
-            response = self._client.models.generate_content(
-                model=self._model,
-                contents=prompt,
-                config=gen_cfg,
-            )
+        # Retry policy by error class:
+        #   transient  (503/500): short backoff — server hiccup, usually clears fast
+        #   rate_limit (429 RPM/TPM): longer backoff — with 300–1000 RPM / 2–4M TPM
+        #     on Tier 1, a burst should clear within 15–60s; respect Retry-After
+        #     header when present
+        #   quota_exhausted (daily/billing cap): fail immediately — retrying in
+        #     seconds is useless; the caller must know to pause or check billing
+        _TRANSIENT_BACKOFF = (5, 15, 45)       # up to 3 retries
+        _RATE_LIMIT_BACKOFF = (15, 30, 60)     # up to 3 retries
+
+        response = None
+        attempt = 0
+        while True:
+            try:
+                if self._cached_content:
+                    response = self._client.models.generate_content(
+                        model=self._model,
+                        contents=prompt,
+                        config=gen_cfg,
+                        cached_content=self._cached_content.name,
+                    )
+                else:
+                    response = self._client.models.generate_content(
+                        model=self._model,
+                        contents=prompt,
+                        config=gen_cfg,
+                    )
+                break  # success
+            except Exception as e:
+                kind = self._classify_error(e)
+
+                if kind == "quota_exhausted":
+                    raise RuntimeError(
+                        f"Gemini quota exhausted (daily/billing/project hard cap). "
+                        f"Check https://aistudio.google.com/app/usage or your GCP "
+                        f"billing console. Original error: {e}"
+                    ) from e
+
+                if kind == "transient":
+                    backoff = _TRANSIENT_BACKOFF
+                elif kind == "rate_limit":
+                    backoff = _RATE_LIMIT_BACKOFF
+                else:
+                    raise  # fatal / auth / bad request — don't retry
+
+                if attempt >= len(backoff):
+                    raise  # max retries exceeded
+
+                # Prefer API-supplied retry delay; fall back to schedule
+                suggested = self._extract_retry_after(e)
+                wait = suggested if suggested is not None else backoff[attempt]
+                log.warning(
+                    "Gemini %s (attempt %d/%d), retrying in %.0fs: %s",
+                    kind, attempt + 1, len(backoff), wait, e,
+                )
+                _time.sleep(wait)
+                attempt += 1
 
         # Check finish reason
         candidate = response.candidates[0]
