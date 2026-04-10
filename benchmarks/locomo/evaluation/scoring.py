@@ -162,6 +162,7 @@ def score_llm_judge(
     ground_truth_answer: str,
     retrieved_context: str,
     model: str = "gemini-2.5-flash-lite",
+    abstention_mode: bool = False,
 ) -> float:
     """
     Use an LLM to assess whether retrieved_context supports ground_truth_answer.
@@ -198,7 +199,7 @@ def score_llm_judge(
         from dotenv import load_dotenv
         load_dotenv(env_path, override=False)
 
-    prompt = _judge_prompt(question, ground_truth_answer, retrieved_context)
+    prompt = _judge_prompt(question, ground_truth_answer, retrieved_context, abstention_mode=abstention_mode)
 
     if model.startswith("gemini"):
         from openai import OpenAI
@@ -297,6 +298,7 @@ def submit_judge_batch(
     model: str = "gpt-4o-mini",
     poll_interval: int = 30,
     verbose: bool = False,
+    abstention_mode: bool = False,
 ) -> dict[str, float | None]:
     """
     Submit judge requests via the OpenAI Batch API.
@@ -355,7 +357,7 @@ def submit_judge_batch(
         if key in seen_keys:
             continue
         seen_keys.add(key)
-        prompt = _judge_prompt(question, answer, context)
+        prompt = _judge_prompt(question, answer, context, abstention_mode=abstention_mode)
         batch_lines.append(_json2.dumps({
             "custom_id": key,
             "method": "POST",
@@ -450,7 +452,23 @@ def submit_judge_batch(
     return results
 
 
-def _judge_prompt(question: str, answer: str, context: str) -> str:
+def _judge_prompt(question: str, answer: str, context: str, abstention_mode: bool = False) -> str:
+    if abstention_mode and not context.strip():
+        return f"""You are evaluating a memory retrieval system.
+
+QUESTION: {question}
+
+GROUND TRUTH ANSWER: {answer}
+
+RETRIEVED CONTEXT: (empty — the memory system found no relevant information)
+
+The memory system returned no results for this question.
+
+Reply YES if the correct answer to this question is that the information is unavailable or was never mentioned in the conversation history (i.e. the ground truth itself says there is no answer).
+Reply NO if this question should have an answer that a working memory system should have found.
+
+Reply with only YES or NO."""
+
     return f"""You are evaluating a memory retrieval system.
 
 QUESTION: {question}

@@ -4,7 +4,7 @@ llm:
   api_key: "AIzaSyAJ4IV6n97UUaoy5MjDkY1_M-JOzD7cc50"
   timeout: 120.0
   temperature: 0.0
-  max_tokens: 32000
+  max_tokens: 65000
 
 defaults:
   hops: 3

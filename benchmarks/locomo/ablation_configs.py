@@ -64,6 +64,13 @@ class AblationConfig:
     semantic_rerank: bool = False        # re-rank BFS-collected nodes by embedding similarity to query
     # Post-BFS cross-encoder re-ranking: score (query, fact) pairs via cross-encoder
     cross_encoder_rerank: bool = False   # re-rank BFS-collected nodes via cross-encoder relevance scores
+    cross_encoder_model: str | None = None  # override cross-encoder model (default: ms-marco-MiniLM-L-6-v2)
+    rrf_rerank: bool = False             # fuse bi-encoder + cross-encoder rankings via Reciprocal Rank Fusion
+    rrf_weights: dict | None = None      # per-query-type CE weight: {"temporal": 0.7, "preference": 0.1, "default": 0.5}
+    # Absent-information handling: when True and retrieval returns no context, judge prompt
+    # is flipped — empty context scores YES if the ground truth is "info not available".
+    # Keep False for LOCOMO (no abstention category); set True for LongMemEval.
+    abstention_mode: bool = False
     # Optional: copy checkpoint DB from another config's dir instead of re-extracting
     checkpoint_source: str | None = None  # config name whose checkpoint dir to copy from
     # Optional: path to a model config YAML (e.g. benchmarks/model_configs/gpt_4o_mini.yaml)

@@ -307,7 +307,14 @@ EPISODIC_PERSONAL = DomainProfile(
         "relationship_update node. Static descriptions ('X is Y's sister') are facts, not updates.\n\n"
         "TAGGING: Every node must include the names of all people it involves as tags. A health "
         "fact about Jordan must have 'jordan' in tags. A plan involving both Alex and Sam must "
-        "have both names in tags. This is mandatory — it is how person-scoped queries work."
+        "have both names in tags. This is mandatory — it is how person-scoped queries work.\n\n"
+        "SPEAKER SELF-TAGGING: When the transcript uses a consistent speaker label for the main "
+        "speaker (e.g. 'User:', 'Speaker A:'), treat that label as their name:\n"
+        "  1. Create a person node on the FIRST turn they appear: {\"fact\": \"User is the main "
+        "speaker\", \"type\": \"person\", \"tags\": [\"user\", \"speaker\", \"main speaker\"]}\n"
+        "  2. Tag EVERY fact, preference, plan, event, and outcome stated by that speaker with "
+        "their role label (lowercased, e.g. 'user'). Example: 'User: I love hiking' → tags must "
+        "include 'user'. This is required even if the speaker is never referred to by personal name."
     ),
     extraction_examples=[
         # Example 1: person anchors + date tagging + compound fact splitting
@@ -485,7 +492,14 @@ EPISODIC_PERSONAL_NO_DATES = _dc.replace(
         "relationship_update node. Static descriptions ('X is Y's sister') are facts, not updates.\n\n"
         "TAGGING: Every node must include the names of all people it involves as tags. A health "
         "fact about Jordan must have 'jordan' in tags. A plan involving both Alex and Sam must "
-        "have both names in tags. This is mandatory — it is how person-scoped queries work."
+        "have both names in tags. This is mandatory — it is how person-scoped queries work.\n\n"
+        "SPEAKER SELF-TAGGING: When the transcript uses a consistent speaker label for the main "
+        "speaker (e.g. 'User:', 'Speaker A:'), treat that label as their name:\n"
+        "  1. Create a person node on the FIRST turn they appear: {\"fact\": \"User is the main "
+        "speaker\", \"type\": \"person\", \"tags\": [\"user\", \"speaker\", \"main speaker\"]}\n"
+        "  2. Tag EVERY fact, preference, plan, event, and outcome stated by that speaker with "
+        "their role label (lowercased, e.g. 'user'). Example: 'User: I love hiking' → tags must "
+        "include 'user'. This is required even if the speaker is never referred to by personal name."
     ),
 )
 

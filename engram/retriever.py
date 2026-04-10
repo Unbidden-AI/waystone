@@ -74,6 +74,11 @@ LOCOMO_VERB_SYNONYMS: dict[str, list[str]] = {
     "break":        ["broke", "broken", "breakup", "separated", "split"],
     "broke":        ["break", "breakup", "separated"],
     "adopt":        ["adopted", "adoption", "child"],
+    # Speaker-role synonyms — for episodic memory where the main speaker is labeled
+    # "User" in the transcript. Ensures "user" queries also match "speaker"-tagged nodes
+    # and vice versa when query_expansion is enabled.
+    "user":         ["speaker", "main speaker"],
+    "speaker":      ["user", "main speaker"],
 }
 
 # Relationship terms used for query coreference resolution (#4).
@@ -444,10 +449,61 @@ def retrieve_with_stats(
         # Score each (query, fact) pair via cross-encoder — replaces _score entirely
         # since cross-encoder logits are on a different scale than confidence [0,1].
         facts = [n["fact"] for n in collected_nodes]
-        ce_scores = embedder.cross_encode_scores(task_description, facts)
+        ce_model = strats.get("cross_encoder_model") or None
+        ce_kwargs = {"model_name": ce_model} if ce_model else {}
+        ce_scores = embedder.cross_encode_scores(task_description, facts, **ce_kwargs)
         for node, score in zip(collected_nodes, ce_scores):
             node["_score"] = score
         applied.append("cross_encoder_rerank")
+
+    if strats.get("rrf_rerank") and query_blob is not None and collected_nodes:
+        # Reciprocal Rank Fusion of bi-encoder (semantic) and cross-encoder signals.
+        # Neither score replaces the existing _score — both are converted to ranks and fused.
+        # RRF constant k=60 (standard; higher k reduces the influence of top-rank gaps).
+        rrf_k = strats.get("rrf_k", 60)
+
+        # --- semantic rank list ---
+        node_ids = [n["id"] for n in collected_nodes]
+        placeholders = ",".join("?" * len(node_ids))
+        rows = store.conn.execute(
+            f"SELECT node_id, embedding FROM node_embeddings WHERE node_id IN ({placeholders})",
+            node_ids,
+        ).fetchall()
+        emb_map = {r[0]: bytes(r[1]) for r in rows}
+        sem_scores = []
+        for node in collected_nodes:
+            emb = emb_map.get(node["id"])
+            sim = max(0.0, embedder.cosine_similarity(query_blob, emb)) if emb else 0.0
+            sem_scores.append(sim)
+        # rank sem descending (rank 0 = best)
+        sem_order = sorted(range(len(collected_nodes)), key=lambda i: sem_scores[i], reverse=True)
+        sem_rank = [0] * len(collected_nodes)
+        for rank, idx in enumerate(sem_order):
+            sem_rank[idx] = rank
+
+        # --- cross-encoder rank list ---
+        facts = [n["fact"] for n in collected_nodes]
+        ce_model = strats.get("cross_encoder_model") or None
+        ce_kwargs = {"model_name": ce_model} if ce_model else {}
+        ce_scores_list = embedder.cross_encode_scores(task_description, facts, **ce_kwargs)
+        ce_order = sorted(range(len(collected_nodes)), key=lambda i: ce_scores_list[i], reverse=True)
+        ce_rank = [0] * len(collected_nodes)
+        for rank, idx in enumerate(ce_order):
+            ce_rank[idx] = rank
+
+        # --- dynamic per-query-type weights ---
+        rrf_weights = strats.get("rrf_weights") or {}
+        if rrf_weights:
+            query_type = _classify_query_type(task_description)
+            alpha_ce = rrf_weights.get(query_type, rrf_weights.get("default", 0.5))
+        else:
+            alpha_ce = 0.5  # 50/50 balanced
+        alpha_sem = 1.0 - alpha_ce
+
+        # --- fuse ---
+        for i, node in enumerate(collected_nodes):
+            node["_score"] = alpha_sem / (rrf_k + sem_rank[i]) + alpha_ce / (rrf_k + ce_rank[i])
+        applied.append("rrf_rerank")
 
     # Sort by confidence (possibly decayed) descending, then BFS depth ascending
     # as a tiebreaker so nodes closer to entry points rank higher when scores are equal.
@@ -508,6 +564,31 @@ def retrieve_with_stats(
 # ---------------------------------------------------------------------------
 # Strategy implementations
 # ---------------------------------------------------------------------------
+
+_TEMPORAL_TOKENS = frozenset({
+    "when", "first", "last", "before", "after", "how long", "how many times",
+    "what time", "what date", "how old", "how often", "since", "ago", "recently",
+    "latest", "earliest", "start", "began", "ended", "duration",
+})
+_PREFERENCE_TOKENS = frozenset({
+    "would", "suit", "like", "prefer", "recommend", "enjoy", "interest",
+    "favorite", "favourite", "might like", "could enjoy", "want",
+})
+
+
+def _classify_query_type(query: str) -> str:
+    """Classify a retrieval query as 'temporal', 'preference', or 'default'.
+
+    Used by dynamic-weight RRF to adjust the CE/semantic balance per query type.
+    Keyword heuristics; no model required.
+    """
+    q = query.lower()
+    if any(tok in q for tok in _TEMPORAL_TOKENS):
+        return "temporal"
+    if any(tok in q for tok in _PREFERENCE_TOKENS):
+        return "preference"
+    return "default"
+
 
 def _stem(word: str) -> str:
     """Minimal suffix-stripping for English words.

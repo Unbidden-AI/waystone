@@ -825,13 +825,21 @@ def export(ctx, project, output, enable, disable, confidence, token_budget):
 @click.option("--dry-run", is_flag=True, help="Show supersedes pairs without writing to graph")
 @click.option("--max-cluster-size", default=20, type=int, show_default=True,
               help="Max nodes per LLM call")
+@click.option("--semantic-dedup/--no-semantic-dedup", default=True, show_default=True,
+              help="After LLM reconcile, merge paraphrase duplicates via embedding cosine similarity")
+@click.option("--dedup-threshold", default=0.93, type=float, show_default=True,
+              help="Cosine similarity threshold for semantic dedup (0.93 recommended)")
 @click.pass_context
-def reconcile_cmd(ctx, project, dry_run, max_cluster_size):
+def reconcile_cmd(ctx, project, dry_run, max_cluster_size, semantic_dedup, dedup_threshold):
     """Aggressively find and record supersedes relationships across all graph nodes.
 
     Clusters nodes by tag overlap, sends each cluster to the LLM asking
     "which of these are superseded by others?", and writes the resulting
     supersedes edges back into the graph.
+
+    Optionally follows the LLM pass with a semantic dedup step that finds
+    paraphrase duplicates via embedding cosine similarity and merges them.
+    Use --no-semantic-dedup to skip or --dry-run to preview without writing.
 
     Use this after bulk imports or long sessions to clean up stale nodes.
     """
@@ -908,6 +916,45 @@ def reconcile_cmd(ctx, project, dry_run, max_cluster_size):
                     total_written += 1
 
     asyncio.run(run_all())
+
+    # --- Semantic dedup pass (embedding-based paraphrase merging) ---
+    if semantic_dedup:
+        from engram import embedder as _embedder
+        if not store._vec_available or not _embedder.is_available():
+            click.echo("\nSemantic dedup skipped — sqlite-vec or sentence-transformers unavailable.")
+        else:
+            click.echo(f"\nSemantic dedup pass (threshold={dedup_threshold})...")
+            embedded = store.embed_missing_nodes()
+            if embedded:
+                click.echo(f"  Embedded {embedded} unindexed node(s).")
+            pairs_dedup = store.find_semantic_duplicates(threshold=dedup_threshold, top_k=5)
+            if not pairs_dedup:
+                click.echo("  No paraphrase duplicates found.")
+            else:
+                click.echo(f"  Found {len(pairs_dedup)} paraphrase duplicate pair(s):")
+                for keep_id, drop_id, sim in pairs_dedup[:20]:
+                    keep_row = store.conn.execute(
+                        "SELECT fact FROM nodes WHERE id = ?", (keep_id,)
+                    ).fetchone()
+                    drop_row = store.conn.execute(
+                        "SELECT fact FROM nodes WHERE id = ?", (drop_id,)
+                    ).fetchone()
+                    if keep_row and drop_row:
+                        keep_fact = (keep_row[0][:60] + "...") if len(keep_row[0]) > 63 else keep_row[0]
+                        drop_fact = (drop_row[0][:60] + "...") if len(drop_row[0]) > 63 else drop_row[0]
+                        click.echo(f"    sim={sim:.3f}  KEEP [{keep_id}] {keep_fact}")
+                        click.echo(f"           DROP [{drop_id}] {drop_fact}")
+                if len(pairs_dedup) > 20:
+                    click.echo(f"  ... and {len(pairs_dedup) - 20} more.")
+                if dry_run:
+                    click.echo(f"  Dry run: would merge {len(pairs_dedup)} pair(s).")
+                else:
+                    merged = sum(
+                        1 for keep_id, drop_id, _ in pairs_dedup
+                        if store.merge_node_into(keep_id, drop_id)
+                    )
+                    click.echo(f"  Merged {merged} paraphrase duplicate(s).")
+
     store.close()
 
     if dry_run:

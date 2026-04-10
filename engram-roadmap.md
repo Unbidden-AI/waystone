@@ -73,6 +73,9 @@ Engram is an AI context middleware layer that extracts structured facts from con
 - [ ] Sentiment and tone tracking — adapt communication style per agent
 - [ ] Multi-turn threading — understand conversation arc, not just isolated messages
 - [ ] Fact deduplication — recognize when new facts restate existing ones
+  - **Semantic dedup pass (priority — graph is at 24K+ nodes):** Extend `engram reconcile` (or add `engram deduplicate`) to scan for paraphrase duplicates using embedding cosine similarity. SHA-256 hashing catches exact duplicates at insert time, but paraphrased restatements accumulate undetected over many sessions. At 24K+ nodes, even a 5% duplicate rate is ~1,200 redundant nodes competing for top_k retrieval slots — causing retrieval dilution, not broken retrieval.
+  - **Mechanism:** Pull pairs of nodes with cosine similarity above a threshold (e.g. 0.93+). Auto-merge the lower-confidence node into the higher-confidence one (or mark it superseded). Run threshold-gated in the background, same pattern as reconcile.
+  - **Note:** The 30-node context injection at extraction time is a partial mitigation but has coverage gaps — old nodes on tangential topics may not surface in a session's top 30, so the LLM re-extracts the same fact without knowing it already exists.
 
 ---
 

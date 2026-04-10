@@ -300,6 +300,7 @@ def _run_config(
                         ground_truth_answer=qa.answer,
                         retrieved_context=context,
                         model=llm_model,
+                        abstention_mode=config.abstention_mode,
                     )
                 except Exception as e:
                     if verbose:
@@ -378,6 +379,7 @@ def _run_config(
             model=llm_model,
             poll_interval=30,
             verbose=verbose,
+            abstention_mode=config.abstention_mode,
         )
 
         # Assign scores back by recomputing each result's cache key
@@ -473,6 +475,9 @@ def _retrieve_context(
             "edge_weight_scoring": config.edge_weight_scoring,
             "semantic_rerank": config.semantic_rerank,
             "cross_encoder_rerank": config.cross_encoder_rerank,
+            "cross_encoder_model": config.cross_encoder_model,
+            "rrf_rerank": config.rrf_rerank,
+            "rrf_weights": config.rrf_weights,
         }
 
         try:
@@ -650,6 +655,14 @@ def main() -> None:
              "Requires OPENAI_API_KEY. Only applies when --llm-judge is also set.",
     )
     args = parser.parse_args()
+
+    # Load .env so API keys (OPENAI_API_KEY, GOOGLE_API_KEY, etc.) are available
+    # for both extraction and judging — extractor.py reads os.environ directly.
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except ImportError:
+        pass  # python-dotenv not installed; keys must be set in environment
 
     # Resolve config names
     config_names = args.configs

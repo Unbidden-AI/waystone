@@ -435,6 +435,21 @@ For a 5-person team on GPT-4o: $182/month savings on a 50-turn average session.
 
 ---
 
+### 21st.dev — Integration Partnership
+
+**What they are:** YC W26 company (1.4M developers, 200K MAU) building agent infrastructure — a React component registry, a Magic MCP server for UI generation in IDEs (Cursor, Windsurf, Cline), and an agent SDK with built-in memory, observability, and sandboxed execution.
+
+**Why Engram fits:** Their agent SDK includes session-scoped memory, but no persistent cross-session fact graph. Engram is the layer underneath — long-term structured memory that survives across sessions. Their observability captures traces and token cost; Engram makes those traces semantically queryable. The audiences are identical: developers building production AI agents.
+
+**How to pursue:**
+1. **MCP integration first** — add Engram as a supported memory backend example in their agent SDK docs or as a companion MCP server in their Magic MCP ecosystem. Low friction, high visibility.
+2. **Blog post / co-marketing** — a technical post on "short-term vs long-term agent memory" written jointly or cross-promoted. Reaches their 200K MAU directly.
+3. **Direct outreach** — Serafim Korablev (CEO) or Sergey Bunas (CTO). Frame as: "your SDK ships session memory; Engram is the persistent layer for users who need facts to survive across sessions."
+
+**Distribution value:** 21st.dev has the developer audience Engram needs. A listing or integration mention in their ecosystem is worth more than a Product Hunt launch.
+
+---
+
 ### dev.to / Hashnode
 
 **When:** Alongside or after Reddit posts. Repurpose the same content.

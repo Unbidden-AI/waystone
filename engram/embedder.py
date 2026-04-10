@@ -15,7 +15,7 @@ EMBEDDING_DIM = 384  # bge-small-en-v1.5 output dimension (retrieval-tuned, same
 _MODEL_NAME = "BAAI/bge-small-en-v1.5"
 _CROSS_ENCODER_MODEL_NAME = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 _model = None
-_cross_encoder = None
+_cross_encoder: dict = {}  # model_name → CrossEncoder instance
 
 
 def is_available() -> bool:
@@ -55,24 +55,27 @@ def embed_text(text: str) -> bytes:
     return embed_texts([text])[0]
 
 
-def _get_cross_encoder():
-    global _cross_encoder
-    if _cross_encoder is None:
+def _get_cross_encoder(model_name: str = _CROSS_ENCODER_MODEL_NAME):
+    if model_name not in _cross_encoder:
         from sentence_transformers import CrossEncoder
-        log.info("Loading cross-encoder model %s (first use)", _CROSS_ENCODER_MODEL_NAME)
-        _cross_encoder = CrossEncoder(_CROSS_ENCODER_MODEL_NAME, local_files_only=True)
-    return _cross_encoder
+        log.info("Loading cross-encoder model %s (first use)", model_name)
+        _cross_encoder[model_name] = CrossEncoder(model_name, local_files_only=True)
+    return _cross_encoder[model_name]
 
 
-def cross_encode_scores(query: str, facts: list[str]) -> list[float]:
+def cross_encode_scores(
+    query: str,
+    facts: list[str],
+    model_name: str = _CROSS_ENCODER_MODEL_NAME,
+) -> list[float]:
     """Score each (query, fact) pair using a cross-encoder for relevance.
 
     Returns a list of float scores parallel to `facts`. Higher = more relevant.
-    Scores are raw logits from ms-marco-MiniLM-L-6-v2 (not calibrated probabilities).
+    Scores are raw logits (not calibrated probabilities); scale varies by model.
     """
     if not facts:
         return []
-    model = _get_cross_encoder()
+    model = _get_cross_encoder(model_name)
     pairs = [(query, fact) for fact in facts]
     scores = model.predict(pairs, batch_size=32, show_progress_bar=False)
     return [float(s) for s in scores]

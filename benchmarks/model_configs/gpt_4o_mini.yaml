@@ -5,3 +5,5 @@ llm:
   max_tokens: 16384
   api_key_env: "OPENAI_API_KEY"
   timeout: 180.0
+  reasoning_effort: ~   # null — clears inherited Gemini setting; gpt-4o-mini rejects this param
+  enable_thinking: ~    # null — clears inherited Qwen/LM Studio setting

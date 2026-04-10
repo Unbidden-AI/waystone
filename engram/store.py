@@ -568,35 +568,63 @@ class GraphStore:
         """Find nodes whose tags overlap with the given list.
 
         Falls back to fact-text search if tag matching returns no results.
+        Batches queries into chunks of 200 to avoid SQLite's expression-tree
+        depth limit (1000) when the tag list is very large.
         """
         if not tags:
             return []
-        conditions = " OR ".join(["tags LIKE ?" for _ in tags])
-        params = [f'%{tag}%' for tag in tags]
-        rows = self.conn.execute(
-            f"SELECT * FROM nodes WHERE {conditions}", params
-        ).fetchall()
-        if rows:
-            return [self._row_to_node(r) for r in rows]
+        _CHUNK = 200
+        seen_ids: set[str] = set()
+        result_rows: list = []
+        for i in range(0, len(tags), _CHUNK):
+            chunk = tags[i : i + _CHUNK]
+            conditions = " OR ".join(["tags LIKE ?" for _ in chunk])
+            params = [f'%{tag}%' for tag in chunk]
+            rows = self.conn.execute(
+                f"SELECT * FROM nodes WHERE {conditions}", params
+            ).fetchall()
+            for row in rows:
+                if row[0] not in seen_ids:
+                    seen_ids.add(row[0])
+                    result_rows.append(row)
+        if result_rows:
+            return [self._row_to_node(r) for r in result_rows]
 
         # Fallback: search fact text when no tag matches found
-        fact_conditions = " OR ".join(["fact LIKE ?" for _ in tags])
-        fact_params = [f"%{tag}%" for tag in tags]
-        rows = self.conn.execute(
-            f"SELECT * FROM nodes WHERE {fact_conditions}", fact_params
-        ).fetchall()
-        return [self._row_to_node(r) for r in rows]
+        seen_ids = set()
+        result_rows = []
+        for i in range(0, len(tags), _CHUNK):
+            chunk = tags[i : i + _CHUNK]
+            fact_conditions = " OR ".join(["fact LIKE ?" for _ in chunk])
+            fact_params = [f"%{tag}%" for tag in chunk]
+            rows = self.conn.execute(
+                f"SELECT * FROM nodes WHERE {fact_conditions}", fact_params
+            ).fetchall()
+            for row in rows:
+                if row[0] not in seen_ids:
+                    seen_ids.add(row[0])
+                    result_rows.append(row)
+        return [self._row_to_node(r) for r in result_rows]
 
     def get_nodes_by_fact_text(self, keywords: list[str]) -> list[dict]:
         """Find nodes whose fact text contains any of the given keywords."""
         if not keywords:
             return []
-        conditions = " OR ".join(["fact LIKE ?" for _ in keywords])
-        params = [f"%{kw}%" for kw in keywords]
-        rows = self.conn.execute(
-            f"SELECT * FROM nodes WHERE {conditions}", params
-        ).fetchall()
-        return [self._row_to_node(r) for r in rows]
+        _CHUNK = 200
+        seen_ids: set[str] = set()
+        result_rows: list = []
+        for i in range(0, len(keywords), _CHUNK):
+            chunk = keywords[i : i + _CHUNK]
+            conditions = " OR ".join(["fact LIKE ?" for _ in chunk])
+            params = [f"%{kw}%" for kw in chunk]
+            rows = self.conn.execute(
+                f"SELECT * FROM nodes WHERE {conditions}", params
+            ).fetchall()
+            for row in rows:
+                if row[0] not in seen_ids:
+                    seen_ids.add(row[0])
+                    result_rows.append(row)
+        return [self._row_to_node(r) for r in result_rows]
 
     def get_nodes_by_ids(self, node_ids: list[str]) -> list[dict]:
         """Fetch multiple nodes by ID, chunked to stay within SQLite variable limits."""

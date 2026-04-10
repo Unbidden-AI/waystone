@@ -158,11 +158,13 @@ async def _call_llm(prompt: str, config: dict, domain_profile=None) -> str:
     }
 
     # Pass enable_thinking to LM Studio / vLLM if supported
-    if "enable_thinking" in llm_cfg:
+    if llm_cfg.get("enable_thinking") is not None:
         request_body["chat_template_kwargs"] = {"enable_thinking": thinking_enabled}
 
-    # reasoning_effort controls thinking depth on supported models (e.g. Gemini 3)
-    if "reasoning_effort" in llm_cfg:
+    # reasoning_effort controls thinking depth on supported models (e.g. Gemini 3, o-series).
+    # Use get() with None check so inherited values from a base config don't bleed into
+    # models that don't support this parameter (e.g. gpt-4o-mini → 400 Bad Request).
+    if llm_cfg.get("reasoning_effort") is not None:
         request_body["reasoning_effort"] = llm_cfg["reasoning_effort"]
 
     # Structured outputs: enforce the extraction JSON schema at the API level.
