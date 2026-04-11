@@ -290,9 +290,11 @@ class GeminiNativeProvider(LLMProvider):
                 if attempt >= len(backoff):
                     raise  # max retries exceeded
 
-                # Prefer API-supplied retry delay; fall back to schedule
+                # Prefer API-supplied retry delay; fall back to schedule.
+                # Cap at 120s — server sometimes suggests hours (e.g. RetryInfo.retry_delay=3600s)
+                # which would block extraction indefinitely.
                 suggested = self._extract_retry_after(e)
-                wait = suggested if suggested is not None else backoff[attempt]
+                wait = min(suggested, 120) if suggested is not None else backoff[attempt]
                 log.warning(
                     "Gemini %s (attempt %d/%d), retrying in %.0fs: %s",
                     kind, attempt + 1, len(backoff), wait, e,

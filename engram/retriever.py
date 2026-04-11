@@ -296,6 +296,33 @@ def retrieve_with_stats(
     for n in entry_nodes:
         n["_rrf"] = rrf_score_map.get(n["id"], 0.0)
 
+    # Raw sentence fallback (#sentence_index): when the primary BFS entry-node pool
+    # is sparse (< fallback_threshold), search the raw_sentences vector table for
+    # semantically similar utterances.  Results are appended to the output markdown
+    # as a separate section — they are raw transcript snippets, not graph nodes,
+    # so they bypass BFS and strategy filtering entirely.
+    raw_sentence_snippets: list[dict] = []
+    if (
+        strats.get("sentence_index")
+        and query_blob is not None
+        and store.has_raw_sentences()
+    ):
+        fallback_threshold = strats.get("sentence_fallback_threshold", 3)
+        if len(entry_nodes) < fallback_threshold:
+            earlier_n = strats.get("sentence_earlier_neighbors", 2)
+            later_n = strats.get("sentence_later_neighbors", 2)
+            sent_top_k = strats.get("sentence_top_k", 10)
+            raw_sentence_snippets = store.semantic_search_raw_sentences(
+                query_blob,
+                top_k=sent_top_k,
+                earlier_neighbors=earlier_n,
+                later_neighbors=later_n,
+            )
+            log.debug(
+                "Raw sentence fallback: %d snippets (entry_nodes=%d < threshold=%d)",
+                len(raw_sentence_snippets), len(entry_nodes), fallback_threshold,
+            )
+
     # Session-scoped filtering (#6): restrict entry nodes to sessions that contain
     # evidence for this question. source_transcript stores "conv-XX/session_N" —
     # extract the session part and match against allowed_session_ids.
@@ -353,6 +380,7 @@ def retrieve_with_stats(
 
     # Person anchoring: person nodes with ≥1 keyword-tag match are automatic high-confidence
     # seeds because they gate all person-scoped facts downstream in the BFS graph.
+    _person_anchor_tags: list[str] = []  # names to use for exhaustive tag-scan after BFS
     if strats.get("person_anchoring"):
         high_overlap_ids = {n["id"] for n in high_overlap}
         person_anchors = [
@@ -363,6 +391,9 @@ def retrieve_with_stats(
         ]
         if person_anchors:
             log.debug("Person anchoring: promoting %d person nodes to high-overlap seeds", len(person_anchors))
+            # Collect person name tags for exhaustive fan-out after BFS
+            for pa in person_anchors:
+                _person_anchor_tags.extend(pa.get("tags", []))
         high_overlap = high_overlap + person_anchors
 
     low_overlap_ids = {n["id"] for n in high_overlap}
@@ -512,17 +543,45 @@ def retrieve_with_stats(
         reverse=True,
     )
 
+    # Person-scoped exhaustive fan-out: when person_anchoring identified person anchors,
+    # fetch ALL nodes tagged with the person's name and inject any that BFS missed.
+    # These aggregative queries ("What activities has Melanie done?") need full coverage
+    # of person-tagged facts, not just what BFS happened to traverse.
+    if _person_anchor_tags:
+        collected_ids = {n["id"] for n in collected_nodes}
+        person_hub_nodes: list[dict] = []
+        for tag in set(_person_anchor_tags):
+            for n in store.get_nodes_by_tags([tag]):
+                if n["id"] not in collected_ids and n["id"] not in pinned_ids:
+                    n["_person_hub"] = True
+                    person_hub_nodes.append(n)
+                    collected_ids.add(n["id"])
+                elif n["id"] in collected_ids:
+                    # Mark already-collected person-tagged nodes for top_k protection
+                    for cn in collected_nodes:
+                        if cn["id"] == n["id"]:
+                            cn["_person_hub"] = True
+                            break
+        if person_hub_nodes:
+            log.debug("Person hub fan-out: injected %d additional person-tagged nodes", len(person_hub_nodes))
+        collected_nodes = collected_nodes + person_hub_nodes
+
     # Seed preservation: ensure directly query-matched seed nodes (depth=0) are not
     # completely displaced by recency-biased BFS-expanded nodes. Reserve up to 40% of
     # top_k slots for seeds, filling remaining slots with the highest-scoring non-seeds.
     # This prevents stable early-conversation facts (allergies, hobbies) from being
     # buried by recent-session nodes when recency decay is active.
+    # Person-hub nodes (from exhaustive fan-out) bypass the top_k cut but remain subject
+    # to token_budget — they are the primary retrieval target for aggregative queries.
+    person_hub_nodes_in_collected = [n for n in collected_nodes if n.get("_person_hub")]
+    non_hub_collected = [n for n in collected_nodes if not n.get("_person_hub")]
     seed_ids = {n["id"] for n in entry_nodes}
-    seeds_in_collected = [n for n in collected_nodes if n["id"] in seed_ids]
-    non_seeds_in_collected = [n for n in collected_nodes if n["id"] not in seed_ids]
+    seeds_in_collected = [n for n in non_hub_collected if n["id"] in seed_ids]
+    non_seeds_in_collected = [n for n in non_hub_collected if n["id"] not in seed_ids]
     seed_reserve = min(len(seeds_in_collected), top_k * 2 // 5)  # up to 40% reserved for seeds
     collected_nodes = (
-        seeds_in_collected[:seed_reserve]
+        person_hub_nodes_in_collected
+        + seeds_in_collected[:seed_reserve]
         + non_seeds_in_collected[:top_k - seed_reserve]
     )
     # Re-sort the final set by score so output is coherently ordered
@@ -549,7 +608,10 @@ def retrieve_with_stats(
         collected_nodes, task_description, applied,
         pinned_nodes=pinned_nodes,
         resolve_dates=strats.get("resolve_dates", True),
+        temporal_sort=strats.get("temporal_sort", False),
     )
+    if raw_sentence_snippets:
+        markdown = markdown + "\n\n" + _format_raw_sentence_snippets(raw_sentence_snippets)
     tokens_est = estimate_tokens(markdown)
 
     return RetrievalResult(
@@ -1140,14 +1202,48 @@ def _resolve_relative_dates(fact: str, occurred_at: str | None) -> str:
         return fact
 
 
+def _format_raw_sentence_snippets(snippets: list[dict]) -> str:
+    """Format raw sentence search results as a markdown section.
+
+    Each snippet includes the matched sentence and its neighbor context window.
+    Used as a semantic fallback when primary BFS retrieval is sparse.
+    """
+    lines = ["## Raw Transcript Matches", ""]
+    seen_texts: set[str] = set()
+    for s in snippets:
+        # Deduplicate by matched text — same sentence can appear at different distances
+        if s["text"] in seen_texts:
+            continue
+        seen_texts.add(s["text"])
+
+        session_info = f" ({s['session_id']})" if s.get("session_id") else ""
+        lines.append(f"**Match{session_info}:**")
+        for before in s.get("context_before", []):
+            lines.append(f"> {before}")
+        speaker_prefix = f"**{s['speaker']}**: " if s.get("speaker") else ""
+        lines.append(f"> {speaker_prefix}_{s['text']}_")
+        for after in s.get("context_after", []):
+            lines.append(f"> {after}")
+        lines.append("")
+    return "\n".join(lines)
+
+
 def assemble_markdown(
     nodes: list[dict],
     task: str,
     strategies_applied: list[str] | None = None,
     pinned_nodes: list[dict] | None = None,
     resolve_dates: bool = True,
+    temporal_sort: bool = False,
 ) -> str:
-    """Assemble nodes into a formatted markdown context block."""
+    """Assemble nodes into a formatted markdown context block.
+
+    When temporal_sort=True and nodes have occurred_at values, a "## Timeline"
+    section is prepended listing all dated nodes in chronological order. This
+    helps temporal QA where the answer is a date — facts surface prominently
+    with their dates rather than buried inside type-grouped sections.
+    Undated nodes fall through to the usual type-grouped sections below.
+    """
     pinned_nodes = pinned_nodes or []
     if not nodes and not pinned_nodes:
         return "No relevant context found."
@@ -1174,9 +1270,42 @@ def assemble_markdown(
             lines.append(f"- {node['fact']}")
         lines.append("")
 
-    # Group by type
+    # Timeline section: when temporal_sort is active, emit all dated nodes in
+    # chronological order before the type-grouped sections. This surfaces
+    # date-bearing facts prominently for temporal QA categories.
+    undated_nodes = list(nodes)
+    if temporal_sort:
+        dated: list[tuple[datetime, dict]] = []
+        undated_nodes = []
+        for node in nodes:
+            ts = node.get("occurred_at")
+            if ts:
+                try:
+                    dt = datetime.fromisoformat(ts)
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    dated.append((dt, node))
+                except (ValueError, TypeError):
+                    undated_nodes.append(node)
+            else:
+                undated_nodes.append(node)
+
+        if dated:
+            dated.sort(key=lambda x: x[0])
+            lines.append("## Timeline")
+            lines.append("")
+            for dt, node in dated:
+                date_label = dt.strftime("%B %-d, %Y")
+                resolved_fact = (
+                    _resolve_relative_dates(node["fact"], node.get("occurred_at"))
+                    if resolve_dates else node["fact"]
+                )
+                lines.append(f"- **{date_label}** — {resolved_fact}")
+            lines.append("")
+
+    # Group remaining nodes by type
     by_type: dict[str, list[dict]] = {}
-    for node in nodes:
+    for node in undated_nodes:
         by_type.setdefault(node["type"], []).append(node)
 
     # Order: decisions first, then constraints, implementations, resolved, lessons, preferences, others
@@ -1197,7 +1326,6 @@ def assemble_markdown(
             date_str = ""
             if node.get("occurred_at"):
                 try:
-                    from datetime import datetime, timezone
                     dt = datetime.fromisoformat(node["occurred_at"])
                     date_str = f" [date: {dt.strftime('%B %-d, %Y')}]"
                 except (ValueError, TypeError):

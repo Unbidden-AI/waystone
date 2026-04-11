@@ -249,6 +249,85 @@ This is already partially specified in Phase 3 (`engram onboard`). The delta her
 
 This is a trust signal. Mem0's cloud is a black box. "You own your memory" is a real differentiator for privacy-conscious developers and enterprises.
 
+### 4f: Process Knowledge — `reflect`, `survey`, and the `process` Node Type
+
+**Problem**: `engram extract` captures facts declared in a single conversation turn. It cannot capture implicit process knowledge — the pattern that emerges when you try A, try B, try C, and B wins. These convergent conclusions are never *declared*; they're *discovered* across a conversation arc. Without capturing them, teams repeat the same experiments every session.
+
+This is especially acute in software development workflows: "we always use the failure analysis script before tweaking the retriever" or "LLM judge runs are only needed for production benchmarks, not retrieval tuning" are process facts that are obvious in hindsight but never written down.
+
+**Design**
+
+Three interlocking pieces:
+
+**1. `process` node type** (software_dev domain only initially)
+
+A new node type that captures emergent workflows, protocols, and team conventions. Unlike `decision` (a single choice at a point in time), a `process` node describes a *repeatable pattern* that applies across multiple sessions.
+
+```
+type: process
+fact: "When tuning retriever parameters, use keyword scorer (failure_analysis.py) for rapid iteration; reserve LLM judge runs for validating final configs before committing results."
+tags: ["retrieval", "benchmark", "process", "scorer", "locomo"]
+confidence: 0.9
+domain: software_dev
+```
+
+Process nodes are:
+- Tagged with `domain: software_dev` and `type: process` for type-filtered retrieval
+- Supersedeable — when a process changes, the new `process` node supersedes the old one via the standard `supersedes` edge
+- Injected as pinned context in software_dev domain sessions (always surfaced regardless of query)
+
+**2. `engram reflect` command** — conversation-arc synthesis
+
+```bash
+engram reflect <project> <transcript> [--since-turn N] [--domain software_dev]
+```
+
+Unlike `engram extract` (turn-by-turn fact capture), `reflect` reads the *full arc* of a conversation (or a window of it) and asks the LLM: "What processes, protocols, or convergent conclusions emerged from this work session?" It outputs `process` nodes and high-level `decision` nodes that span multiple turns.
+
+The extraction prompt for `reflect` focuses on:
+- Patterns discovered through iteration ("we tried X, Y, Z — Z worked because...")
+- Implicit protocols established mid-session ("going forward we will...")
+- Negatives worth preserving ("we ruled out X because...", "do not combine Y and Z")
+
+**3. `engram survey` command** (rename from `engram synthesize`)
+
+The existing `engram synthesize` command does graph-to-graph cross-cutting synthesis (reads existing nodes, produces comparative summary nodes). It is renamed to `engram survey` to avoid collision with `reflect` and better describe its role: surveying the accumulated graph for patterns.
+
+```bash
+engram survey <project> [--type process] [--domain software_dev] [--output summary_nodes]
+```
+
+**In-session hook trigger**
+
+`reflect` should fire automatically during a session, not just at session end (which is often systematic rather than intentional). The hook tracks a `_reflect_watermark` — the last transcript offset where `reflect` ran. When `(current_offset - _reflect_watermark) >= N turns` (default: N=20), the hook fires `engram reflect` in the background against the transcript window since the watermark.
+
+This is agnostic of the orchestrator. The hook reads a neutral transcript format:
+
+```jsonl
+{"role": "user", "content": "...", "ts": "2026-04-11T10:00:00Z"}
+{"role": "assistant", "content": "...", "ts": "2026-04-11T10:00:05Z"}
+```
+
+Claude JSONL sessions are converted to this format by the existing Stop hook before being passed to `reflect`. Any orchestrator that produces `{role, content}` pairs is compatible.
+
+**Implementation steps**
+
+1. Add `process` to the node type enum in `store.py` and `extractor.py`
+2. Add `domain` column to `nodes` table (nullable; existing nodes are unaffected)
+3. Write `REFLECT_PROMPT` in `prompts.py` focused on arc-level process discovery
+4. Add `reflect_extraction()` in `extractor.py` (separate from `extract()` and `verify_extraction()`)
+5. Add `engram reflect` CLI command in `cli.py`
+6. Rename `engram synthesize` → `engram survey` in `cli.py` (keep old name as deprecated alias)
+7. Add `_reflect_watermark` tracking to `hooks/context_broker_stop.py` and `hooks/context_broker_submit.py`
+8. Update `engram_sentence_index` and `software_dev` domain profiles to pin `process` nodes
+9. Update `retriever.py` type_order to place `process` nodes at the top of the output (alongside `decision`)
+
+**Why this matters competitively**
+
+No existing memory tool attempts to capture process knowledge. Mem0 stores facts. Zep stores facts. Both miss the convergent conclusions that emerge from multi-turn iteration. This is the class of knowledge that most determines whether a team gets faster or slower over time.
+
+The combination of `process` nodes + `reflect` + in-session triggering makes Context Broker the first tool that captures *how a team works*, not just *what a team decided*.
+
 ---
 
 ## Phase 5: Distribution & Growth (ongoing)
@@ -281,6 +360,7 @@ Lean into this in marketing: **"Shared memory for your entire engineering team."
 | Zero per-query LLM cost | Medium | Retrieval is pure graph traversal; Mem0 runs LLM on every search call |
 | Data portability | Medium | SQLite export = you own your graph; Mem0 cloud is a black box |
 | Graph synthesis (Phase 4c) | Medium | L1/L2 summary nodes enable high-level queries; Mem0 flat cards never get synthesized |
+| Process knowledge (`reflect`) | High | Captures emergent team protocols and convergent conclusions across conversation arcs; no equivalent in Mem0, Zep, or any other memory tool |
 | Native MCP integration | Medium | First-mover advantage; other tools will follow |
 | Switching costs (accumulated graph) | Medium | A 6-month-old graph with 5,000 nodes is hard to abandon |
 | Integration breadth | Low | Cursor, Windsurf, Zed integrations require maintenance; anyone can copy |

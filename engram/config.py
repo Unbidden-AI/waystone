@@ -52,6 +52,21 @@ from the graph; use it to answer questions about this project accurately.""",
         "short_turn_words": 20, # turns shorter than this don't count toward min_words
         "prior_turns_window": 0, # raw turns to append to retrieval context (0 = disabled)
     },
+    "sentence_index": {
+        # Per-sentence raw transcript indexing for semantic fallback retrieval.
+        # When enabled, every sentence from ingested transcripts is stored in a
+        # separate raw_sentences table with a vector embedding.  At query time,
+        # if the primary BFS retrieval returns fewer than sentence_fallback_threshold
+        # entry nodes, semantic search over raw sentences is used as a fallback —
+        # catching queries like "What degree did I graduate with?" that have no
+        # matching graph tags but do semantically match raw utterances.
+        "enabled": False,
+        "min_length": 0,          # min chars per sentence (0 = no filter)
+        "earlier_neighbors": 2,   # sentences of prior context to include around each hit
+        "later_neighbors": 2,     # sentences of following context to include
+        "fallback_threshold": 3,  # use fallback when BFS entry_nodes < this count
+        "top_k": 10,              # max raw-sentence hits to retrieve
+    },
 }
 
 CONFIG_SEARCH_PATHS = [

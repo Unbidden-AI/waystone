@@ -19,6 +19,7 @@ are reproducible and parallel-safe.
 from __future__ import annotations
 
 import asyncio
+import re
 import tempfile
 import time
 from dataclasses import dataclass, field
@@ -51,6 +52,7 @@ def ingest_conversation(
     domain: str | None = None,
     dedup_threshold: float = 0.95,
     llm_override: dict | None = None,
+    config_override: dict | None = None,
 ) -> tuple[GraphStore, IngestionResult]:
     """
     Ingest a LOCOMO conversation into a fresh GraphStore.
@@ -68,6 +70,9 @@ def ingest_conversation(
         llm_override: Optional dict to deep-merge into config["llm"], overriding
                 the extraction model. Use to run with a specific model (e.g.
                 gpt-4o-mini) for apples-to-apples comparisons.
+        config_override: Optional dict to deep-merge into the loaded config at
+                the top level. Use to enable feature flags (e.g.
+                {"sentence_index": {"enabled": True}}) without modifying config.yaml.
 
     Returns:
         (store, result) — caller is responsible for closing store when done.
@@ -81,6 +86,12 @@ def ingest_conversation(
         config = {**config, "domain": {"name": domain}}
     if llm_override:
         config["llm"] = {**config.get("llm", {}), **llm_override}
+    if config_override:
+        for k, v in config_override.items():
+            if isinstance(v, dict) and isinstance(config.get(k), dict):
+                config[k] = {**config[k], **v}
+            else:
+                config[k] = v
     domain_profile = get_domain_profile(config)
     store = GraphStore(db_path, dedup_threshold=dedup_threshold)
 
@@ -204,7 +215,7 @@ def ingest_conversation(
                 last_exc = None
                 break
             except ValueError as e:
-                if "finish_reason=length" in str(e) and depth < 4:
+                if ("finish_reason=length" in str(e) or "finish_reason=MAX_TOKENS" in str(e)) and depth < 4:
                     # Output window exceeded — bisect on a newline boundary and retry.
                     lines = text.splitlines()
                     if len(lines) < 2:
@@ -318,6 +329,17 @@ def ingest_conversation(
                 continue
         return None
 
+    # Sentence index config — controls the raw_sentences table population.
+    # Disabled by default; enabled via sentence_index.enabled in config.yaml.
+    si_cfg = config.get("sentence_index", {})
+    si_enabled = si_cfg.get("enabled", False)
+    si_min_length = si_cfg.get("min_length", 0)
+
+    # Sentence boundary regex: split on .!? followed by whitespace.
+    # Does not split on abbreviations (e.g. "Dr.") because those are
+    # rarely followed by a capital letter in conversation transcripts.
+    _SENT_SPLIT = re.compile(r'(?<=[.!?])\s+')
+
     prev_session_tail: str | None = None
     for i, session in enumerate(conv.sessions):
         text = _session_text(session)
@@ -328,12 +350,40 @@ def ingest_conversation(
         # for the next session to use as co-reference context.
         session_lines = [f"{t.speaker}: {t.text}" for t in session.turns]
         prev_session_tail = "\n".join(session_lines[-CONTEXT_TAIL_LINES:])
+
+        # Raw sentence indexing: store per-sentence embeddings for semantic fallback.
+        # sequence_num is global within the session so neighbor queries are ordered.
+        if si_enabled:
+            seq = 0
+            for turn in session.turns:
+                sentences = _SENT_SPLIT.split(turn.text.strip())
+                for sent in sentences:
+                    sent = sent.strip()
+                    if not sent:
+                        continue
+                    if si_min_length > 0 and len(sent) < si_min_length:
+                        continue
+                    store.add_raw_sentence(
+                        speaker=turn.speaker,
+                        session_id=session.session_id,
+                        occurred_at=session_occurred_at,
+                        sequence_num=seq,
+                        text=sent,
+                    )
+                    seq += 1
+
         if verbose:
             print(f"  [ingest] {conv.sample_id} session {i+1}/{len(conv.sessions)} "
                   f"({session.session_id}): {total_nodes} nodes so far")
 
     # Embed all nodes for semantic retrieval
     store.embed_missing_nodes()
+
+    # Embed raw sentences when sentence_index is enabled
+    if si_enabled:
+        n_embedded = store.embed_raw_sentences()
+        if verbose and n_embedded:
+            print(f"  [sentence_index] {conv.sample_id}: embedded {n_embedded} raw sentences")
 
     # When sqlite-vec is unavailable (e.g. Python 3.14 macOS), the per-insert
     # semantic dedup is skipped, causing paraphrase variants to accumulate as

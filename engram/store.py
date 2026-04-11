@@ -236,6 +236,33 @@ class GraphStore:
             )
             self.conn.commit()
 
+        # Raw sentence index: per-sentence transcript storage for semantic fallback.
+        # Populated by ingestion when sentence_index.enabled=True in config.
+        # Intentionally separated from the nodes/edges graph so it can be toggled
+        # independently and does not affect existing retrieval paths.
+        self.conn.execute("""
+            CREATE TABLE IF NOT EXISTS raw_sentences (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                speaker      TEXT,
+                session_id   TEXT,
+                occurred_at  TEXT,
+                sequence_num INTEGER NOT NULL,
+                text         TEXT    NOT NULL
+            )
+        """)
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_raw_sentences_session_seq "
+            "ON raw_sentences(session_id, sequence_num)"
+        )
+        self.conn.commit()
+        if self._vec_available:
+            from engram.embedder import EMBEDDING_DIM
+            self.conn.execute(
+                f"CREATE VIRTUAL TABLE IF NOT EXISTS vec_raw_sentences USING vec0("
+                f"sentence_id INTEGER PRIMARY KEY, embedding float[{EMBEDDING_DIM}])"
+            )
+            self.conn.commit()
+
     def add_node(self, node: dict) -> str:
         """Insert a node, deduplicating by fact text hash.
 
@@ -1189,6 +1216,129 @@ class GraphStore:
             pairs,
         )
         self.conn.commit()
+
+    # ------------------------------------------------------------------
+    # Raw sentence index (sentence_index feature)
+    # ------------------------------------------------------------------
+
+    def add_raw_sentence(
+        self,
+        speaker: str | None,
+        session_id: str | None,
+        occurred_at: str | None,
+        sequence_num: int,
+        text: str,
+    ) -> int:
+        """Insert a raw sentence and return its auto-assigned row ID."""
+        cursor = self.conn.execute(
+            "INSERT INTO raw_sentences "
+            "(speaker, session_id, occurred_at, sequence_num, text) VALUES (?, ?, ?, ?, ?)",
+            (speaker, session_id, occurred_at, sequence_num, text),
+        )
+        self.conn.commit()
+        return cursor.lastrowid  # type: ignore[return-value]
+
+    def embed_raw_sentences(self) -> int:
+        """Embed all raw sentences that don't yet have a vector entry.
+
+        Returns number embedded. No-op if sqlite-vec or sentence-transformers
+        are unavailable.
+        """
+        if not self._vec_available:
+            return 0
+        from engram import embedder
+        if not embedder.is_available():
+            return 0
+        rows = self.conn.execute(
+            "SELECT rs.id, rs.text FROM raw_sentences rs "
+            "WHERE NOT EXISTS "
+            "  (SELECT 1 FROM vec_raw_sentences vrs WHERE vrs.sentence_id = rs.id)"
+        ).fetchall()
+        if not rows:
+            return 0
+        ids = [r[0] for r in rows]
+        texts = [r[1] for r in rows]
+        blobs = embedder.embed_texts(texts)
+        self.conn.executemany(
+            "INSERT OR IGNORE INTO vec_raw_sentences(sentence_id, embedding) VALUES (?, ?)",
+            list(zip(ids, blobs)),
+        )
+        self.conn.commit()
+        log.debug("Embedded %d raw sentences", len(ids))
+        return len(ids)
+
+    def has_raw_sentences(self) -> bool:
+        """Return True if the raw_sentences table contains any rows."""
+        try:
+            row = self.conn.execute("SELECT COUNT(*) FROM raw_sentences").fetchone()
+            return bool(row and row[0] > 0)
+        except Exception:
+            return False
+
+    def semantic_search_raw_sentences(
+        self,
+        query_blob: bytes,
+        top_k: int = 10,
+        earlier_neighbors: int = 2,
+        later_neighbors: int = 2,
+    ) -> list[dict]:
+        """Find raw sentences semantically similar to query_blob.
+
+        Returns list of dicts with keys: id, speaker, session_id, occurred_at,
+        sequence_num, text, context_before (list[str]), context_after (list[str]),
+        distance.
+
+        Falls back gracefully if sqlite-vec is unavailable or the table is empty.
+        """
+        if not self._vec_available:
+            return []
+        try:
+            rows = self.conn.execute(
+                "SELECT sentence_id, distance FROM vec_raw_sentences "
+                "WHERE embedding MATCH ? ORDER BY distance LIMIT ?",
+                (query_blob, top_k),
+            ).fetchall()
+        except Exception:
+            log.debug("vec_raw_sentences search failed", exc_info=True)
+            return []
+
+        results: list[dict] = []
+        for row in rows:
+            sid, distance = row[0], row[1]
+            rs = self.conn.execute(
+                "SELECT id, speaker, session_id, occurred_at, sequence_num, text "
+                "FROM raw_sentences WHERE id = ?",
+                (sid,),
+            ).fetchone()
+            if not rs:
+                continue
+            _, speaker, session_id, occurred_at, seq, text = rs
+
+            before_rows = self.conn.execute(
+                "SELECT text FROM raw_sentences "
+                "WHERE session_id = ? AND sequence_num < ? "
+                "ORDER BY sequence_num DESC LIMIT ?",
+                (session_id, seq, earlier_neighbors),
+            ).fetchall()
+            after_rows = self.conn.execute(
+                "SELECT text FROM raw_sentences "
+                "WHERE session_id = ? AND sequence_num > ? "
+                "ORDER BY sequence_num ASC LIMIT ?",
+                (session_id, seq, later_neighbors),
+            ).fetchall()
+
+            results.append({
+                "id": sid,
+                "speaker": speaker,
+                "session_id": session_id,
+                "occurred_at": occurred_at,
+                "sequence_num": seq,
+                "text": text,
+                "context_before": [r[0] for r in reversed(before_rows)],
+                "context_after": [r[0] for r in after_rows],
+                "distance": distance,
+            })
+        return results
 
     def _backfill_fts(self) -> None:
         """Populate FTS index for any existing nodes not yet covered."""

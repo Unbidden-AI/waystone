@@ -234,6 +234,7 @@ def _run_config(
                         domain=config.domain,
                         dedup_threshold=config.dedup_threshold,
                         llm_override=_llm_override,
+                        config_override={"sentence_index": {"enabled": True}} if config.sentence_index else None,
                     )
                     if ingestion_result:
                         ingestion_entry = {
@@ -250,6 +251,7 @@ def _run_config(
                     domain=config.domain,
                     dedup_threshold=config.dedup_threshold,
                     llm_override=_llm_override,
+                    config_override={"sentence_index": {"enabled": True}} if config.sentence_index else None,
                 )
                 if ingestion_result:
                     ingestion_entry = {
@@ -470,6 +472,7 @@ def _retrieve_context(
             "query_expansion": config.query_expansion,
             "person_anchoring": config.person_anchoring,
             "temporal_proximity": config.temporal_proximity,
+            "temporal_sort": config.temporal_sort,
             "query_coreference": config.query_coreference,
             "allowed_session_ids": relevant_session_ids if config.session_scoped else None,
             "edge_weight_scoring": config.edge_weight_scoring,
@@ -478,6 +481,7 @@ def _retrieve_context(
             "cross_encoder_model": config.cross_encoder_model,
             "rrf_rerank": config.rrf_rerank,
             "rrf_weights": config.rrf_weights,
+            "sentence_index": config.sentence_index,
         }
 
         try:

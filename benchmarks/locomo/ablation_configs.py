@@ -54,6 +54,10 @@ class AblationConfig:
     # Accuracy improvement features (LOCOMO plan improvements 4, 6)
     query_coreference: bool = False      # #4: resolve relationship terms → person names via graph lookup
     session_scoped: bool = False         # #6: restrict entry nodes to evidence sessions for each QA pair
+    # Temporal output ordering: prepend a chronological "Timeline" section to retrieval output.
+    # All nodes with occurred_at are sorted by date and listed first before type-grouped sections.
+    # Targets temporal QA category where answers are dates — surfaces the date-bearing fact prominently.
+    temporal_sort: bool = False
     # Post-hoc edge inference: scan graph and add missing `involves` edges
     infer_edges: bool = False            # #7: infer involves edges from person-tag overlap
     infer_edges_weight: float = 1.0      # weight assigned to inferred edges (< 1.0 = deprioritized)
@@ -78,6 +82,10 @@ class AblationConfig:
     # available) uses this model instead of the system config.yaml LLM. Enables apples-to-apples
     # comparison against Zep/Mem0 which use gpt-4o-mini for extraction.
     extraction_model_config: str | None = None
+    # Sentence index: raw per-sentence transcript vectors for semantic fallback retrieval.
+    # When True, config.sentence_index.enabled is set before ingestion, and the retriever
+    # uses raw_sentences as a fallback when BFS entry_nodes < sentence_fallback_threshold.
+    sentence_index: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -629,6 +637,67 @@ ABLATION_CONFIGS: dict[str, AblationConfig] = {
         recency_half_life_days=3650,
         semantic_rerank=True,
         checkpoint_source="engram_gpt4o_mini_extraction",
+    ),
+    # Sentence index: raw per-sentence vectors as semantic fallback when BFS entry_nodes < 3.
+    # Requires fresh extraction (builds raw_sentences at ingest time).
+    # Reuses engram_semantic_rerank_topk100 retrieval settings to isolate sentence_index impact.
+    "engram_sentence_index": AblationConfig(
+        name="engram_sentence_index",
+        description=(
+            "Sentence index — raw per-sentence vectors as semantic fallback when "
+            "BFS entry_nodes < 3. Gemini extraction, semantic rerank top_k=100, "
+            "person_anchoring=True. Requires fresh extraction."
+        ),
+        superseded_pruning=True,
+        recency_decay=True,
+        top_k=100,
+        recency_half_life_days=3650,
+        semantic_rerank=True,
+        person_anchoring=True,
+        sentence_index=True,
+    ),
+    # Sentence index + temporal proximity: adds temporal_proximity boosting (#3) on top of
+    # engram_sentence_index. Reuses the existing sentence_index checkpoint — no re-extraction.
+    # Isolates the lift from temporal proximity scoring over person_anchoring+sentence_index baseline.
+    "engram_sentence_temporal": AblationConfig(
+        name="engram_sentence_temporal",
+        description=(
+            "Sentence index + temporal proximity (#3). Reuses engram_sentence_index checkpoint "
+            "(sentence_index=True, person_anchoring=True, semantic rerank top_k=100) and adds "
+            "temporal_proximity boosting: nodes whose occurred_at is near the query date get a "
+            "score bonus (half-life 180d). Tests the additive lift on temporal QA category."
+        ),
+        superseded_pruning=True,
+        recency_decay=True,
+        top_k=100,
+        recency_half_life_days=3650,
+        semantic_rerank=True,
+        person_anchoring=True,
+        temporal_proximity=True,
+        sentence_index=True,
+        checkpoint_source="engram_sentence_index",
+    ),
+    # Sentence index + temporal sort: chronological "Timeline" section prepended to retrieval output.
+    # All dated nodes (occurred_at set) sorted by date appear first; undated nodes follow in type groups.
+    # Tests whether surfacing the date-bearing fact prominently lifts temporal QA category recall.
+    # Reuses engram_sentence_index checkpoint — no re-extraction needed.
+    "engram_sentence_timeline": AblationConfig(
+        name="engram_sentence_timeline",
+        description=(
+            "Sentence index + timeline output ordering. Reuses engram_sentence_index checkpoint "
+            "(sentence_index=True, person_anchoring=True, semantic rerank top_k=100) and prepends "
+            "a chronological Timeline section: all nodes with occurred_at are sorted by date and "
+            "listed first. Targets temporal QA by surfacing the date-bearing fact at the top."
+        ),
+        superseded_pruning=True,
+        recency_decay=True,
+        top_k=100,
+        recency_half_life_days=3650,
+        semantic_rerank=True,
+        person_anchoring=True,
+        temporal_sort=True,
+        sentence_index=True,
+        checkpoint_source="engram_sentence_index",
     ),
 }
 

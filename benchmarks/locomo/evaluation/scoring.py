@@ -106,8 +106,10 @@ def score_keyword_recall(
 
 
 def _tokenize(text: str) -> list[str]:
-    """Extract meaningful words (3+ chars, alpha) from text."""
-    words = re.findall(r"\b[a-z]{3,}\b", text.lower())
+    """Extract meaningful words (3+ chars, alpha) and 4-digit years from text."""
+    alpha_words = re.findall(r"\b[a-z]{3,}\b", text.lower())
+    year_tokens = re.findall(r"\b\d{4}\b", text)
+    words = alpha_words + year_tokens
     # Remove very common stop words that don't discriminate
     stopwords = {
         "the", "and", "was", "for", "that", "this", "with", "from",
