@@ -43,6 +43,7 @@ class DomainProfile:
 SOFTWARE_DEV = DomainProfile(
     name="software_dev",
     node_types={
+        "process": "a pattern, protocol, or iterative procedure that the team converged on through trying approaches",
         "decision": "a choice between alternatives that was made",
         "constraint": "a limitation, requirement, or non-negotiable",
         "implementation": "a concrete technical detail that was established",

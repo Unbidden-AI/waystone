@@ -896,6 +896,91 @@ def build_synthesis_prompt(existing_nodes: list[dict]) -> str:
     return SYNTHESIS_PROMPT.replace("{existing_nodes}", nodes_block)
 
 
+REFLECT_PROMPT = """You are a process discovery engine. Your task is to find PATTERNS and PROTOCOLS that emerged from iteration in the conversation below.
+
+A "process" node captures something the team converged on through trying multiple approaches — not a single decision, but a repeatable procedure, implicit protocol, or hard-won insight about workflow.
+
+Return ONLY a valid JSON object — no markdown fences, no commentary, no preamble. Start your response with { and end with }.
+
+Schema:
+{
+  "nodes": [
+    {
+      "id": "n1",
+      "fact": "When X, do Y because Z (imperative-style description of the process)",
+      "type": "process",
+      "confidence": 0.7,
+      "source_message": 0,
+      "supersedes": [],
+      "tags": ["keyword1", "keyword2"]
+    }
+  ],
+  "edges": [
+    {
+      "from": "n1",
+      "to": "n_existingid",
+      "relation": "relates_to"
+    }
+  ]
+}
+
+EXISTING PROCESS NODES (do NOT re-extract these):
+{existing_process_nodes}
+
+CONVERSATION WINDOW:
+{transcript_window}
+
+HUNT for these patterns:
+
+1. ITERATIVE CONVERGENCE: "We tried X, Y, Z — Z worked best because..." → extract the final Z procedure
+2. IMPLICIT PROTOCOLS: "Going forward we will..." or "From now on we use..." → capture the established workflow
+3. USEFUL NEGATIVES: "Don't combine X and Y" or "Avoid X when doing Y" → document anti-patterns that guide future work
+4. HARD-WON INSIGHTS: Insights that span multiple turns and represent something the team settled on after exploration
+5. WORKFLOW OPTIMIZATIONS: Steps or checks the team agreed to add to their process to avoid recurring problems
+
+RULES:
+
+1. Confidence range: 0.7-0.95. Processes are inferred patterns, not explicit declarations, so confidence is lower than decisions.
+2. Fact text MUST be imperative and actionable: "When X, do Y" not "We should X" or "X is important"
+3. Tags must be specific enough for retrieval. Include the action verb, the scenario, and key nouns.
+4. SPLIT facts: If a node describes multiple steps or decisions, split into separate nodes with relates_to edges.
+5. AVOID re-extracting decisions/constraints/implementations — focus only on PROCEDURAL PATTERNS that emerged through iteration.
+6. DO NOT invent processes — only extract patterns explicitly discussed or strongly implied by the conversation.
+"""
+
+
+def build_reflect_prompt(
+    transcript_window: str, existing_process_nodes: list[dict] | None = None, domain: str = "software_dev"
+) -> str:
+    """Format the reflect prompt with existing process nodes and transcript window.
+
+    Args:
+        transcript_window: multi-turn conversation text
+        existing_process_nodes: list of already-extracted process nodes (for dedup)
+        domain: domain name (for future use in parameterization)
+
+    Returns:
+        formatted prompt string
+    """
+    if existing_process_nodes is None:
+        existing_process_nodes = []
+
+    lines = []
+    for node in existing_process_nodes:
+        fact = node["fact"]
+        if len(fact) > 120:
+            fact = fact[:117] + "..."
+        tags_str = ", ".join(node.get("tags", [])[:6])
+        lines.append(
+            f'[{node["id"]}] (conf={node.get("confidence", 0.5):.1f}) "{fact}" tags:[{tags_str}]'
+        )
+    existing_block = "\n".join(lines) if lines else "(none)"
+
+    prompt = REFLECT_PROMPT.replace("{existing_process_nodes}", existing_block)
+    prompt = prompt.replace("{transcript_window}", transcript_window)
+    return prompt
+
+
 CONFIG_EXTRACTION_PROMPT = """\
 You are extracting instructions and rules from a configuration file into a structured knowledge graph.
 

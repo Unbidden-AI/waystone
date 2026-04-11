@@ -443,15 +443,15 @@ def extract_config_cmd(ctx, project, config_file, dry_run, source, dedup_thresho
     )
 
 
-@cli.command("synthesize")
+@cli.command("survey")
 @click.argument("project")
-@click.option("--dry-run", is_flag=True, help="Print synthesis nodes without storing them")
+@click.option("--dry-run", is_flag=True, help="Print survey nodes without storing them")
 @click.option("--max-nodes", type=int, default=1000, show_default=True,
               help="Max nodes to send to LLM (sorted by confidence desc); use 0 for no limit")
 @click.option("--tags", multiple=True, metavar="TAG",
               help="Only include nodes tagged with at least one of these tags (e.g. --tags benchmark --tags model)")
 @click.pass_context
-def synthesize_cmd(ctx, project, dry_run, max_nodes, tags):
+def survey_cmd(ctx, project, dry_run, max_nodes, tags):
     """Create cross-cutting summary nodes from all nodes in the project graph.
 
     Scans the full graph for clusters of parallel facts (3+ nodes sharing the
@@ -489,17 +489,17 @@ def synthesize_cmd(ctx, project, dry_run, max_nodes, tags):
         candidate_nodes = candidate_nodes[:max_nodes]
 
     click.echo(
-        f"Running synthesis over {len(candidate_nodes)} candidate nodes "
+        f"Running survey over {len(candidate_nodes)} candidate nodes "
         f"({len(all_graph_nodes)} total) in '{project}'..."
     )
     try:
         sr = asyncio.run(synthesize_extraction(candidate_nodes, config))
     except Exception as e:
-        click.echo(f"Error: Synthesis failed: {e}", err=True)
+        click.echo(f"Error: Survey failed: {e}", err=True)
         sys.exit(1)
 
     if not sr["nodes"]:
-        click.echo("No synthesis clusters found (need ≥3 parallel nodes on same metric).")
+        click.echo("No survey clusters found (need ≥3 parallel nodes on same metric).")
         return
 
     click.echo(f"Found {len(sr['nodes'])} summary node(s), {len(sr['edges'])} edge(s):")
@@ -510,7 +510,7 @@ def synthesize_cmd(ctx, project, dry_run, max_nodes, tags):
         click.echo("(dry-run: not stored)")
         return
 
-    _SYNTHESIS_SOURCE = "__synthesis__"
+    _SYNTHESIS_SOURCE = "__survey__"
     for sn in sr["nodes"]:
         sn["source_transcript"] = _SYNTHESIS_SOURCE
         sn.setdefault("created_at", datetime.now(timezone.utc).isoformat())
@@ -519,6 +519,146 @@ def synthesize_cmd(ctx, project, dry_run, max_nodes, tags):
     store.merge_extraction(sr["nodes"], sr["edges"])
     store.close()
     click.echo(f"Stored {len(sr['nodes'])} summary node(s).")
+
+
+@cli.command("synthesize")
+@click.argument("project")
+@click.option("--dry-run", is_flag=True, help="Print survey nodes without storing them")
+@click.option("--max-nodes", type=int, default=1000, show_default=True,
+              help="Max nodes to send to LLM (sorted by confidence desc); use 0 for no limit")
+@click.option("--tags", multiple=True, metavar="TAG",
+              help="Only include nodes tagged with at least one of these tags (e.g. --tags benchmark --tags model)")
+@click.pass_context
+def synthesize_cmd(ctx, project, dry_run, max_nodes, tags):
+    """Deprecated: Use 'engram survey' instead.
+
+    This command is an alias for backward compatibility. It forwards all arguments
+    to the survey command.
+    """
+    click.echo("Warning: `engram synthesize` is deprecated. Use `engram survey` instead.", err=True)
+    # Forward to survey_cmd with the same context and arguments
+    ctx.invoke(survey_cmd, project=project, dry_run=dry_run, max_nodes=max_nodes, tags=tags)
+
+
+@cli.command("reflect")
+@click.argument("project")
+@click.argument("transcript", type=click.Path(exists=True))
+@click.option("--since-turn", type=int, default=None, help="Start from conversation turn N (0-indexed)")
+@click.option("--domain", default="software_dev", help="Domain label for extracted process nodes")
+@click.option("--chunk-size", type=int, default=200, show_default=True,
+              help="Max utterances per LLM call; sessions longer than this are processed in windows")
+@click.pass_context
+def reflect_cmd(ctx, project, transcript, since_turn, domain, chunk_size):
+    """Extract process patterns and protocols from a transcript window.
+
+    Discovers procedural patterns and workflows that emerged through iteration,
+    as opposed to explicit decisions or constraints.
+
+    TRANSCRIPT can be a .jsonl file (Claude Code session) or plain text
+    (Human:/Assistant: format). Long sessions are automatically chunked into
+    windows of --chunk-size turns so LLM output stays within token limits.
+    """
+    from .transcript import from_claude_jsonl, from_plain_text, slice_since, to_prompt_text
+    from .extractor import reflect_extraction
+
+    config = _load_cfg(ctx.obj["config_path"])
+    db_path = get_db_path(config, project)
+
+    if not db_path.parent.exists():
+        click.echo(f"Error: Project '{project}' not found. Run 'engram init {project}' first.", err=True)
+        sys.exit(1)
+
+    transcript_path = Path(transcript)
+
+    # Detect format and load
+    if transcript_path.suffix.lower() == ".jsonl":
+        utterances = from_claude_jsonl(transcript_path)
+    else:
+        text = transcript_path.read_text()
+        utterances = from_plain_text(text)
+
+    if not utterances:
+        click.echo("Error: No utterances found in transcript.", err=True)
+        sys.exit(1)
+
+    # Slice if requested
+    if since_turn is not None:
+        if since_turn < 0 or since_turn >= len(utterances):
+            click.echo(
+                f"Error: --since-turn {since_turn} out of range (0-{len(utterances) - 1})",
+                err=True,
+            )
+            sys.exit(1)
+        utterances = slice_since(utterances, since_turn)
+
+    total = len(utterances)
+    n_chunks = (total + chunk_size - 1) // chunk_size
+
+    click.echo(
+        f"Reflecting on {total} turn(s) from {transcript_path.name} "
+        f"(domain={domain}, chunk_size={chunk_size}, {n_chunks} chunk(s))..."
+    )
+
+    store = GraphStore(db_path)
+    existing_process_nodes = [n for n in store.get_all_nodes() if n.get("type") == "process"]
+    store.close()
+
+    all_nodes: list[dict] = []
+    all_edges: list[dict] = []
+
+    for chunk_idx in range(n_chunks):
+        start = chunk_idx * chunk_size
+        end = min(start + chunk_size, total)
+        chunk = utterances[start:end]
+        transcript_window = to_prompt_text(chunk)
+
+        if n_chunks > 1:
+            click.echo(f"  Chunk {chunk_idx + 1}/{n_chunks}: turns {start}–{end - 1}...")
+
+        # Pass previously extracted process nodes so each chunk can dedup against them
+        dedup_nodes = existing_process_nodes + all_nodes
+
+        try:
+            result = asyncio.run(
+                reflect_extraction(
+                    transcript_window,
+                    project,
+                    existing_process_nodes=dedup_nodes,
+                    domain=domain,
+                    config=config,
+                )
+            )
+        except Exception as e:
+            click.echo(f"Error: Reflection failed on chunk {chunk_idx + 1}: {e}", err=True)
+            sys.exit(1)
+
+        chunk_nodes = result.get("nodes", [])
+        chunk_edges = result.get("edges", [])
+        for node in chunk_nodes:
+            node["source_transcript"] = transcript_path.name
+            node.setdefault("created_at", datetime.now(timezone.utc).isoformat())
+        all_nodes.extend(chunk_nodes)
+        all_edges.extend(chunk_edges)
+
+        if n_chunks > 1:
+            click.echo(f"    → {len(chunk_nodes)} process node(s) found")
+
+    if not all_nodes:
+        click.echo("No process patterns found in this conversation window.")
+        return
+
+    click.echo(f"Found {len(all_nodes)} process node(s), {len(all_edges)} edge(s):")
+    for node in all_nodes:
+        conf = node.get("confidence", 0.5)
+        click.echo(f"  {node['fact'][:80]} (confidence: {conf:.2f})")
+
+    # Merge into store
+    store = GraphStore(db_path)
+    store.merge_extraction(all_nodes, all_edges)
+    store.embed_missing_nodes()
+    store.close()
+
+    click.echo(f"Extracted {len(all_nodes)} process node(s) into '{project}'.")
 
 
 @cli.command()

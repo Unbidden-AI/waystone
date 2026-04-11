@@ -489,6 +489,60 @@ async def synthesize_extraction(existing_nodes: list[dict], config: dict) -> dic
     return assign_ids_incremental(extraction, existing_ids)
 
 
+async def reflect_extraction(
+    transcript_window: str,
+    project: str,
+    store=None,
+    existing_process_nodes: list[dict] | None = None,
+    domain: str = "software_dev",
+    config: dict | None = None,
+) -> dict:
+    """Extract process patterns from a transcript window through iterative reflection.
+
+    Discovers procedural patterns and protocols that emerged from team iteration,
+    as opposed to explicit decisions or constraints.
+
+    Args:
+        transcript_window: multi-turn conversation text
+        project: project name (for loading store and config if needed)
+        store: optional GraphStore instance (if None, will be loaded from project)
+        existing_process_nodes: list of already-extracted process nodes (for dedup)
+        domain: domain name (e.g. "software_dev")
+        config: optional config dict (if None, will be loaded from default locations)
+
+    Returns:
+        dict with "nodes" (list[dict]) and "edges" (list[dict]) for new nodes.
+    """
+    from .prompts import build_reflect_prompt
+    from .config import load_config
+
+    if config is None:
+        config = load_config()
+
+    if store is None:
+        from .store import GraphStore
+        from .config import get_db_path
+        db_path = get_db_path(config, project)
+        store = GraphStore(db_path)
+
+    if existing_process_nodes is None:
+        existing_process_nodes = [n for n in store.get_all_nodes() if n.get("type") == "process"]
+
+    prompt = build_reflect_prompt(transcript_window, existing_process_nodes, domain)
+    content = await _call_llm(prompt, config)
+    extraction = parse_llm_response(content)
+    existing_ids = {n["id"] for n in existing_process_nodes}
+    result = assign_ids_incremental(extraction, existing_ids)
+
+    # Set domain on each new node
+    for node in result.get("nodes", []):
+        node["domain"] = domain
+        if node.get("type") != "process":
+            node["type"] = "process"
+
+    return result
+
+
 async def extract_turn(
     turn_text: str,
     existing_nodes: list[dict],

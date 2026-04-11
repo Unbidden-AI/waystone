@@ -104,7 +104,8 @@ class GraphStore:
                 source_message_index INTEGER,
                 tags TEXT NOT NULL DEFAULT '[]',
                 created_at TEXT NOT NULL,
-                supersedes TEXT NOT NULL DEFAULT '[]'
+                supersedes TEXT NOT NULL DEFAULT '[]',
+                domain TEXT
             );
 
             CREATE TABLE IF NOT EXISTS edges (
@@ -202,6 +203,14 @@ class GraphStore:
                 self.conn.commit()
             except sqlite3.OperationalError:
                 pass  # Column already exists
+
+        # Migration: add domain column for process nodes
+        try:
+            self.conn.execute("ALTER TABLE nodes ADD COLUMN domain TEXT")
+            self.conn.commit()
+            log.info("Migrated nodes table: added domain column")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
 
         # Create FTS5 virtual table for BM25 full-text search on fact text.
         # Self-contained (no content= link) so rowid alignment isn't required.
@@ -328,8 +337,8 @@ class GraphStore:
         self.conn.execute(
             """INSERT OR REPLACE INTO nodes
                (id, fact, type, confidence, source_transcript,
-                source_message_index, tags, created_at, occurred_at, supersedes, fact_hash)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                source_message_index, tags, created_at, occurred_at, supersedes, fact_hash, domain)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 node["id"],
                 node["fact"],
@@ -342,6 +351,7 @@ class GraphStore:
                 node.get("occurred_at"),
                 json.dumps(node.get("supersedes", [])),
                 fhash,
+                node.get("domain"),
             ),
         )
         self.conn.commit()

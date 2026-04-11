@@ -35,6 +35,8 @@ PAUSE_FILE = STATE_DIR / "paused"
 SESSION_STATE_MAX_CHARS = 2400  # ~600 tokens
 SESSION_STATE_TTL_SECONDS = 600  # fallback expiry: 10 minutes
 
+REFLECT_INTERVAL = 20  # Fire reflect every N new user+assistant turns
+
 _SESSION_STATE_TS_RE = re.compile(r'^\[[\d:]+\|ts=(\d+)\]')
 
 
@@ -254,6 +256,9 @@ def main():
                 _spawn_extraction(flushed_text, project, db_path, source="live", session_id=session_id)
             else:
                 store.save_buffer(buffer._turns)
+
+            # --- Check if reflect should be triggered ---
+            _maybe_trigger_reflect(project, transcript_path)
         else:
             # Still update buffer so turns accumulate while paused
             persisted_turns = store.load_buffer()
@@ -502,6 +507,111 @@ def _estimate_graph_tokens(db_path: Path) -> int:
         return max(1, sum(len(r[0]) for r in rows) // 4)
     except Exception:
         return 0
+
+
+def _count_utterances(transcript_path: str) -> int:
+    """Count user + assistant turns in Claude JSONL session format.
+
+    Returns the total number of utterances (role in ("user", "assistant")).
+    """
+    path = Path(transcript_path).expanduser()
+    if not path.exists():
+        return 0
+
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return 0
+
+    count = 0
+    for raw in lines:
+        raw = raw.strip()
+        if not raw:
+            continue
+        try:
+            entry = json.loads(raw)
+        except Exception:
+            continue
+        message = entry.get("message", {})
+        if message.get("role") in ("user", "assistant"):
+            count += 1
+    return count
+
+
+def _get_reflect_watermark_path(project: str) -> Path:
+    """Get the path to the reflect watermark file for a project."""
+    watermark_dir = STATE_DIR / "projects" / project
+    watermark_dir.mkdir(parents=True, exist_ok=True)
+    return watermark_dir / ".reflect_watermark"
+
+
+def _read_reflect_watermark(project: str) -> int:
+    """Read the reflect watermark (turn count) for a project. Default 0 if missing."""
+    watermark_path = _get_reflect_watermark_path(project)
+    if not watermark_path.exists():
+        return 0
+    try:
+        return int(watermark_path.read_text().strip())
+    except Exception:
+        return 0
+
+
+def _write_reflect_watermark(project: str, watermark: int) -> None:
+    """Write the reflect watermark (turn count) for a project."""
+    watermark_path = _get_reflect_watermark_path(project)
+    try:
+        watermark_path.write_text(str(watermark))
+    except Exception:
+        pass
+
+
+def _spawn_reflect(project: str, transcript_path: str, since_turn: int) -> None:
+    """Fire-and-forget: spawn reflect as a non-blocking background subprocess."""
+    try:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        log_file = STATE_DIR / f"reflect_{project}_{timestamp}.log"
+
+        cmd = [
+            sys.executable, "-m", "engram.cli",
+            "reflect",
+            project,
+            transcript_path,
+            "--since-turn", str(since_turn),
+            "--domain", "software_dev",
+        ]
+
+        with open(log_file, "w") as log_f:
+            proc = subprocess.Popen(
+                cmd,
+                stdout=log_f,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,  # detach so it outlives the hook process
+            )
+    except Exception:
+        pass
+
+
+def _maybe_trigger_reflect(project: str, transcript_path: str) -> None:
+    """Check if reflect should be triggered based on accumulated turns.
+
+    Maintains a watermark of the turn count when reflect last ran.
+    Triggers reflect if (current_count - watermark) >= REFLECT_INTERVAL.
+    """
+    if not transcript_path:
+        return
+
+    try:
+        current_count = _count_utterances(transcript_path)
+        watermark = _read_reflect_watermark(project)
+        delta = current_count - watermark
+
+        if delta >= REFLECT_INTERVAL:
+            # Update watermark BEFORE spawning (to avoid double-fire)
+            _write_reflect_watermark(project, current_count)
+            # Reflect on turns since the old watermark
+            _spawn_reflect(project, transcript_path, watermark)
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":
