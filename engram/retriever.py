@@ -135,6 +135,7 @@ DEFAULT_STRATEGIES = {
     "relevance_scoring": False,
     "semantic_rerank": False,  # Post-BFS re-ranking: multiply _score by cosine similarity to query
     "cross_encoder_rerank": False,  # Post-BFS re-ranking: score (query, fact) pairs via cross-encoder
+    "process_slots": 5,  # Reserved slots for process nodes before top_k cut (0 = disabled)
 }
 
 
@@ -429,6 +430,38 @@ def retrieve_with_stats(
 
     # BFS from entry nodes
     collected_nodes = bfs_collect(store, entry_nodes, hops)
+
+    # Process-node direct injection: bypass BFS depth limits for 'process' nodes.
+    # Process nodes from `reflect` form semi-separate connected components and are
+    # rarely reachable within hops=3 from implementation-heavy seeds. Pull process
+    # nodes whose tags overlap with the query keywords via a type-filtered SQL query —
+    # much more targeted than FTS (which ranks by BM25 and buries process nodes under
+    # thousands of implementation hits). Similar to person_hub exhaustive fan-out.
+    # These are subject to superseded_pruning and slot reservation below.
+    process_slots = strats.get("process_slots", 0)
+    if process_slots > 0 and keywords:
+        _bfs_ids = {n["id"] for n in collected_nodes}
+        # Type-filtered tag search: find process nodes whose tags match any keyword.
+        # Limit to process_slots * 4 candidates to keep the injection set tight.
+        _proc_limit = process_slots * 4
+        _kw_conditions = " OR ".join(["tags LIKE ?" for _ in keywords])
+        _kw_params = [f"%{kw}%" for kw in keywords]
+        _proc_rows = store.conn.execute(
+            f"SELECT * FROM nodes WHERE type='process' AND ({_kw_conditions})"
+            f" ORDER BY confidence DESC LIMIT {_proc_limit}",
+            _kw_params,
+        ).fetchall()
+        proc_nodes_to_inject = [
+            store._row_to_node(r) for r in _proc_rows
+            if r[0] not in _bfs_ids and r[0] not in pinned_ids
+        ]
+        if proc_nodes_to_inject:
+            log.debug(
+                "Process node injection: %d process nodes injected bypassing BFS",
+                len(proc_nodes_to_inject),
+            )
+            collected_nodes.extend(proc_nodes_to_inject)
+
     nodes_before = len(collected_nodes)
 
     # Apply post-retrieval strategy pipeline
@@ -576,13 +609,29 @@ def retrieve_with_stats(
     person_hub_nodes_in_collected = [n for n in collected_nodes if n.get("_person_hub")]
     non_hub_collected = [n for n in collected_nodes if not n.get("_person_hub")]
     seed_ids = {n["id"] for n in entry_nodes}
+
+    # Type-slot reservation: guarantee process nodes are not completely displaced
+    # by the dominant `implementation` type. `implementation` outnumbers `process`
+    # ~70:1 in a mature graph, so without reservation the entire top_k budget fills
+    # with implementation nodes even when highly-relevant process nodes exist.
+    # Reserved process nodes are scored-sorted first, so the best ones win the slots.
+    # (process_slots already set above in the direct-injection block)
+    process_reserved: list[dict] = []
+    if process_slots > 0:
+        process_candidates = [n for n in non_hub_collected if n.get("type") == "process"]
+        process_reserved = process_candidates[:process_slots]
+        process_reserved_ids = {n["id"] for n in process_reserved}
+        non_hub_collected = [n for n in non_hub_collected if n["id"] not in process_reserved_ids]
+
     seeds_in_collected = [n for n in non_hub_collected if n["id"] in seed_ids]
     non_seeds_in_collected = [n for n in non_hub_collected if n["id"] not in seed_ids]
-    seed_reserve = min(len(seeds_in_collected), top_k * 2 // 5)  # up to 40% reserved for seeds
+    remaining_slots = top_k - len(process_reserved)
+    seed_reserve = min(len(seeds_in_collected), remaining_slots * 2 // 5)  # up to 40% reserved for seeds
     collected_nodes = (
         person_hub_nodes_in_collected
+        + process_reserved
         + seeds_in_collected[:seed_reserve]
-        + non_seeds_in_collected[:top_k - seed_reserve]
+        + non_seeds_in_collected[:remaining_slots - seed_reserve]
     )
     # Re-sort the final set by score so output is coherently ordered
     collected_nodes.sort(
