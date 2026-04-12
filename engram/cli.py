@@ -560,6 +560,8 @@ def reflect_cmd(ctx, project, transcript, since_turn, domain, chunk_size):
     """
     from .transcript import from_claude_jsonl, from_plain_text, slice_since, to_prompt_text
     from .extractor import reflect_extraction
+    from .llm import get_provider
+    from .prompts import build_reflect_prompt
 
     config = _load_cfg(ctx.obj["config_path"])
     db_path = get_db_path(config, project)
@@ -592,73 +594,135 @@ def reflect_cmd(ctx, project, transcript, since_turn, domain, chunk_size):
         utterances = slice_since(utterances, since_turn)
 
     total = len(utterances)
-    n_chunks = (total + chunk_size - 1) // chunk_size
+
+    # Token threshold for input prompts. Bisect chunks that exceed this so the
+    # model's output stays well within max_tokens. Default: half of max_tokens
+    # (conservative proxy — larger input tends to produce more output).
+    llm_cfg = config.get("llm", {})
+    max_output_tokens = llm_cfg.get("max_tokens", 65536)
+    token_threshold = max_output_tokens // 2
+
+    provider = get_provider(config)
+    use_token_count = provider is not None and provider.supports_count_tokens
 
     click.echo(
         f"Reflecting on {total} turn(s) from {transcript_path.name} "
-        f"(domain={domain}, chunk_size={chunk_size}, {n_chunks} chunk(s))..."
+        f"(domain={domain}, max_chunk={chunk_size} turns, "
+        f"token_threshold={token_threshold:,}"
+        + (", count_tokens=on" if use_token_count else ", count_tokens=off (static chunking)")
+        + ")..."
     )
 
     store = GraphStore(db_path)
     existing_process_nodes = [n for n in store.get_all_nodes() if n.get("type") == "process"]
     store.close()
 
-    all_nodes: list[dict] = []
-    all_edges: list[dict] = []
+    session_nodes: list[dict] = []  # nodes found this session (for dedup across chunks)
+    total_nodes = 0
+    total_edges = 0
+    chunk_idx = 0
+    remaining = list(utterances)
 
-    for chunk_idx in range(n_chunks):
-        start = chunk_idx * chunk_size
-        end = min(start + chunk_size, total)
-        chunk = utterances[start:end]
-        transcript_window = to_prompt_text(chunk)
+    # Max nodes passed to the prompt as dedup context. Passing all session_nodes
+    # grows the prompt unboundedly: 1000 nodes × ~130 chars/node ≈ 32K tokens of
+    # overhead, which forces bisection down to 1-turn chunks and causes
+    # over-extraction. Cap at a small recent window; the DB fact_hash dedup handles
+    # true duplicates regardless.
+    _DEDUP_CONTEXT_LIMIT = 50
 
-        if n_chunks > 1:
-            click.echo(f"  Chunk {chunk_idx + 1}/{n_chunks}: turns {start}–{end - 1}...")
+    while remaining:
+        chunk_idx += 1
+        # Use only the most recent N session nodes as dedup context so the prompt
+        # stays bounded even after many chunks.
+        recent_session = session_nodes[-_DEDUP_CONTEXT_LIMIT:] if len(session_nodes) > _DEDUP_CONTEXT_LIMIT else session_nodes
+        dedup_nodes = existing_process_nodes[:max(0, _DEDUP_CONTEXT_LIMIT - len(recent_session))] + recent_session
 
-        # Pass previously extracted process nodes so each chunk can dedup against them
-        dedup_nodes = existing_process_nodes + all_nodes
+        # Start with up to chunk_size utterances, then bisect by token count
+        candidate = remaining[:chunk_size]
 
-        try:
-            result = asyncio.run(
-                reflect_extraction(
-                    transcript_window,
-                    project,
-                    existing_process_nodes=dedup_nodes,
-                    domain=domain,
-                    config=config,
+        if use_token_count and len(candidate) > 1:
+            # Bisect down until the prompt fits within token_threshold
+            while len(candidate) > 1:
+                probe_prompt = build_reflect_prompt(to_prompt_text(candidate), dedup_nodes, domain)
+                n_tokens = provider.count_tokens(probe_prompt)
+                if n_tokens <= token_threshold:
+                    break
+                new_size = len(candidate) // 2
+                click.echo(
+                    f"  [token check] {n_tokens:,} tokens > {token_threshold:,}; "
+                    f"bisecting {len(candidate)} → {new_size} turns"
                 )
-            )
-        except Exception as e:
-            click.echo(f"Error: Reflection failed on chunk {chunk_idx + 1}: {e}", err=True)
-            sys.exit(1)
+                candidate = candidate[:new_size]
+
+        start_turn = total - len(remaining)
+        end_turn = start_turn + len(candidate) - 1
+        click.echo(f"  Chunk {chunk_idx}: turns {start_turn}–{end_turn} ({len(candidate)} turns)...")
+
+        # Inner retry loop: if output overflows (MAX_TOKENS), bisect and retry
+        result = None
+        while True:
+            try:
+                result = asyncio.run(
+                    reflect_extraction(
+                        to_prompt_text(candidate),
+                        project,
+                        existing_process_nodes=dedup_nodes,
+                        domain=domain,
+                        config=config,
+                    )
+                )
+                break  # success
+            except ValueError as e:
+                if "truncated" in str(e) and len(candidate) > 1:
+                    # Output overflow — the chunk is too dense regardless of input size.
+                    # Bisect and retry; the skipped second half will be picked up in the
+                    # next outer iteration since remaining advances by len(candidate).
+                    new_size = max(1, len(candidate) // 2)
+                    click.echo(
+                        f"  [output overflow] MAX_TOKENS on {len(candidate)} turns; "
+                        f"retrying with {new_size} turns (turns {start_turn}–{start_turn + new_size - 1})"
+                    )
+                    candidate = candidate[:new_size]
+                    end_turn = start_turn + len(candidate) - 1
+                else:
+                    click.echo(f"Error: Reflection failed on chunk {chunk_idx}: {e}", err=True)
+                    if total_nodes:
+                        click.echo(f"  Saved {total_nodes} node(s) from completed chunks.", err=True)
+                    sys.exit(1)
+            except Exception as e:
+                click.echo(f"Error: Reflection failed on chunk {chunk_idx}: {e}", err=True)
+                if total_nodes:
+                    click.echo(f"  Saved {total_nodes} node(s) from completed chunks.", err=True)
+                sys.exit(1)
 
         chunk_nodes = result.get("nodes", [])
         chunk_edges = result.get("edges", [])
         for node in chunk_nodes:
             node["source_transcript"] = transcript_path.name
             node.setdefault("created_at", datetime.now(timezone.utc).isoformat())
-        all_nodes.extend(chunk_nodes)
-        all_edges.extend(chunk_edges)
 
-        if n_chunks > 1:
-            click.echo(f"    → {len(chunk_nodes)} process node(s) found")
+        if chunk_nodes:
+            # Merge each chunk immediately so progress is never lost
+            store = GraphStore(db_path)
+            store.merge_extraction(chunk_nodes, chunk_edges)
+            store.close()
+            session_nodes.extend(chunk_nodes)
+            total_nodes += len(chunk_nodes)
+            total_edges += len(chunk_edges)
 
-    if not all_nodes:
+        click.echo(f"    → {len(chunk_nodes)} process node(s) found (total: {total_nodes})")
+        remaining = remaining[len(candidate):]
+
+    if not total_nodes:
         click.echo("No process patterns found in this conversation window.")
         return
 
-    click.echo(f"Found {len(all_nodes)} process node(s), {len(all_edges)} edge(s):")
-    for node in all_nodes:
-        conf = node.get("confidence", 0.5)
-        click.echo(f"  {node['fact'][:80]} (confidence: {conf:.2f})")
-
-    # Merge into store
+    # Embed all newly added nodes in one pass
     store = GraphStore(db_path)
-    store.merge_extraction(all_nodes, all_edges)
     store.embed_missing_nodes()
     store.close()
 
-    click.echo(f"Extracted {len(all_nodes)} process node(s) into '{project}'.")
+    click.echo(f"Extracted {total_nodes} process node(s), {total_edges} edge(s) into '{project}'.")
 
 
 @cli.command()
