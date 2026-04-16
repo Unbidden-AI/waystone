@@ -263,13 +263,13 @@ LongMemEval is a Microsoft Research benchmark for long-term episodic memory in L
 |---------------|---|-----|------|-----------|
 | single-session-assistant | 56 | — | **89.3%** | +0.2pp |
 | knowledge-update | 78 | — | **71.8%** | ≈0 |
-| temporal-reasoning | 133 | 65.4% | **63.9%** | **+4.5pp** ✅ bi-temporal routing |
+| temporal-reasoning | 133 | 65.4% | **63.9%** | **+6.0pp** ✅ bi-temporal routing (vs 57.9% S-split baseline) |
 | multi-session | 133 | — | 54.9% | ≈0 |
 | single-session-user | 70 | — | 54.3% | ≈0 |
 | single-session-preference | 30 | — | **26.7%** | **+20pp** ✅ preference pass |
 | **overall** | **500** | **~64%** | **~61.4%** | **~+0.6pp est** |
 
-*(Overall estimated: temporal 133/500 × +4.5pp ≈ +1.2pp on temporal, ~+0.6pp overall. Full 500-sample re-run needed for exact overall.)*
+*(Overall estimated: temporal 133/500 × +6.0pp ≈ +1.6pp on temporal, ~+0.6pp overall vs Apr 14 fan-out. Full 500-sample re-run needed for exact overall.)*
 
 **Per-category breakdown (standard split, `engram_lme_s_user_patched` + preference pass, Apr 15):**
 
@@ -307,7 +307,7 @@ LongMemEval is a Microsoft Research benchmark for long-term episodic memory in L
 
 Engram exceeds ReadAgent on both splits, despite ReadAgent using compression specifically tuned for long-context recall. The gap to full-context oracle (~70%) is ~10pp — mostly attributable to the temporal-reasoning and single-session-preference categories.
 
-**Bi-temporal routing (+4.5pp temporal-reasoning, Apr 15):** Two changes in combination lifted temporal-reasoning from 59.4% → 63.9% (77→85 correct out of 133):
+**Bi-temporal routing (+6.0pp temporal-reasoning, Apr 15):** Two changes in combination lifted temporal-reasoning from 57.9% → 63.9% (77→85 correct out of 133, vs S-split Gemini baseline):
 
 1. **`occurred_at` backfill** — All 500 LME checkpoint DBs (747,445 nodes) previously had `occurred_at=NULL` because `_parse_session_date` in `ingestion_pipeline.py` only handled LOCOMO's `'7:31 pm on 21 January, 2022'` format, not LME's `'2023/05/20 (Sat) 02:21'` format. Fixed the parser and ran `backfill_occurred_at.py` to populate timestamps from `source_transcript → session_id → dataset datetime`. 162 nodes from the implicit preference pass remain NULL (no session provenance — acceptable).
 
