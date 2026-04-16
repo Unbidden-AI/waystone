@@ -670,7 +670,14 @@ class GraphStore:
         return True
 
     def add_edge(self, from_id: str, to_id: str, relation: str):
-        """Insert an edge, or increment its weight if it already exists."""
+        """Insert an edge, or increment its weight if it already exists.
+
+        When relation == "supersedes", also closes the validity window of the
+        superseded node (to_id): sets valid_to = occurred_at of the superseding
+        node (from_id), falling back to its created_at, then now().  This keeps
+        add_edge() consistent with merge_extraction() so callers don't have to
+        remember to expire superseded nodes manually.
+        """
         self.conn.execute(
             """INSERT INTO edges (from_id, to_id, relation, weight)
                VALUES (?, ?, ?, 1.0)
@@ -678,6 +685,21 @@ class GraphStore:
             (from_id, to_id, relation),
         )
         self.conn.commit()
+
+        if relation == "supersedes":
+            superseding = self.get_node(from_id)
+            expiry = None
+            if superseding:
+                expiry = superseding.get("occurred_at") or superseding.get("created_at")
+            expiry = expiry or datetime.now(timezone.utc).isoformat()
+            self.conn.execute(
+                """UPDATE nodes
+                   SET valid_to  = COALESCE(valid_to, ?),
+                       is_active = 0
+                   WHERE id = ? AND is_active = 1""",
+                (expiry, to_id),
+            )
+            self.conn.commit()
 
     def get_node(self, node_id: str) -> dict | None:
         """Fetch a single node by ID."""
