@@ -18,7 +18,7 @@ pytest tests/test_store.py
 engram --help
 engram init <project>
 engram extract <project> <transcript_file> [--verify] [--lessons] [--decisions] [--questions] [--constraints]
-engram query <project> "<task description>" [--hops N] [--top-k N] [--stats]
+engram query <project> "<task description>" [--hops N] [--top-k N] [--stats] [--at-time ISO8601]
 engram show <project>
 engram export <project> [-o output.md]
 ```
@@ -33,7 +33,7 @@ Context Broker is a DAG-based context intelligence layer for LLM workflows. It e
    - `--verify`: runs a second LLM pass hunting for missed secondary details, buried numerics, transition statements, and rationale with time estimates
    - `--lessons`, `--decisions`, `--questions`, `--constraints`: run targeted extraction passes focused on a single category (implemented in `extract_targeted()` in `extractor.py`). Each pass sees existing nodes to avoid re-extracting them. Useful for improving recall on specific node types without touching the main prompt.
 
-2. **Store** — `store.py` wraps SQLite with two tables: `nodes` (id, fact, type, confidence, tags JSON, supersedes JSON, source info) and `edges` (from_id, to_id, relation). The `supersedes` relationship is tracked both as an edge and as a field on the superseding node.
+2. **Store** — `store.py` wraps SQLite with two tables: `nodes` (id, fact, type, confidence, tags JSON, supersedes JSON, source info, occurred_at, valid_to, is_active) and `edges` (from_id, to_id, relation). The `supersedes` relationship is tracked both as an edge and as a field on the superseding node. When a `supersedes` edge is created (via `add_node()`, `add_edge()`, or `merge_extraction()`), `valid_to` is immediately set on the superseded node to the `occurred_at` of the superseding node (falling back to `created_at`), and `is_active` is set to 0. `get_nodes_at_time(valid_at)` returns nodes whose validity window covers the given timestamp (point-in-time query).
 
 3. **Retrieve** — `engram query` calls `retriever.py`:
    - Keywords are extracted from the task description (stop-word filtered)
@@ -54,6 +54,7 @@ Config is deep-merged with hardcoded defaults in `config.py`; missing keys fall 
 - `superseded_pruning`: drops nodes that have a `supersedes` edge pointing at them
 - `confidence_threshold`: filters nodes below a float threshold
 - `recency_decay`: multiplies confidence by `2^(-age_days / half_life_days)`, stored as `_score`
+- `temporal_valid_at`: filters to nodes valid at a specific past timestamp (`--at-time`); auto-enabled for temporal queries
 - `token_budget`: greedy packing by estimated tokens (~4 chars/token)
 - `relevance_scoring`: ranks BFS entry nodes by tag overlap count before traversal
 

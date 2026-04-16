@@ -43,6 +43,9 @@ Nodes and edges are merged into a SQLite database. Each node carries:
 - Tags (keywords for retrieval)
 - Source location (transcript file + message index)
 - A `supersedes` list (IDs of older nodes this one replaces)
+- `occurred_at` — when the fact became true in real time (valid-time start)
+- `valid_to` — when the fact stopped being true (valid-time end; NULL = still current)
+- `is_active` — cached flag: 1 = current, 0 = superseded
 
 **3. Retrieve**
 Given a task description, the engine extracts keywords, finds matching nodes by tag overlap, performs BFS graph traversal to collect related nodes, applies a configurable strategy pipeline to filter and rank results, and assembles a markdown context block grouped by node type.
@@ -242,7 +245,7 @@ Retrieval output is always grouped and ordered by type: decisions first, then co
 | `relates_to` | Loosely related concepts in the same domain |
 | `supersedes` | The source node replaces or overrides the target |
 
-`supersedes` edges are the most semantically important: they are used both as graph edges and as a field on the superseding node, enabling `superseded_pruning` to work without traversing the full edge table.
+`supersedes` edges are the most semantically important: they are used both as graph edges and as a field on the superseding node, enabling `superseded_pruning` to work without traversing the full edge table. Creating a `supersedes` edge (via `add_node()`, `add_edge()`, or `merge_extraction()`) also closes the validity window of the superseded node at storage time — setting `valid_to` to the superseding node's `occurred_at` and flipping `is_active` to 0. This enables point-in-time queries via `get_nodes_at_time(valid_at)` and the `--at-time` retrieval flag.
 
 ---
 
