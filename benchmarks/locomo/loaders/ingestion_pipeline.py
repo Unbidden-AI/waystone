@@ -314,14 +314,25 @@ def ingest_conversation(
         return "\n".join(lines)
 
     def _parse_session_date(datetime_str: str | None) -> str | None:
-        """Parse LOCOMO session date string to ISO-8601 UTC.
+        """Parse session date string to ISO-8601 UTC.
 
-        Input format: '7:31 pm on 21 January, 2022'
+        Handles multiple source formats:
+          LOCOMO: '7:31 pm on 21 January, 2022'
+          LME:    '2023/05/20 (Sat) 02:21'
+          ISO:    '2023-05-20T02:21:00'
+
         Returns ISO string or None if unparseable.
         """
         if not datetime_str:
             return None
-        for fmt in ("%I:%M %p on %d %B, %Y", "%I:%M %p on %d %B %Y"):
+        for fmt in (
+            "%I:%M %p on %d %B, %Y",   # LOCOMO: '7:31 pm on 21 January, 2022'
+            "%I:%M %p on %d %B %Y",    # LOCOMO (no comma)
+            "%Y/%m/%d (%a) %H:%M",     # LME:    '2023/05/20 (Sat) 02:21'
+            "%Y/%m/%d %H:%M",          # LME (no weekday)
+            "%Y-%m-%dT%H:%M:%S",       # ISO 8601
+            "%Y-%m-%d",                # ISO date only
+        ):
             try:
                 dt = datetime.strptime(datetime_str.strip(), fmt)
                 return dt.replace(tzinfo=timezone.utc).isoformat()

@@ -228,6 +228,16 @@ def retrieve_with_stats(
     """
     strats = {**DEFAULT_STRATEGIES, **(strategies or {})}
 
+    # Auto-route temporal queries: enable timeline output + proximity boost.
+    # When temporal_auto_route is True (default), temporal queries unconditionally
+    # enable temporal_sort and temporal_proximity regardless of the caller's defaults.
+    # Set temporal_auto_route=False in the strategy dict to disable.
+    if strats.get("temporal_auto_route", True):
+        _auto_qtype = _classify_query_type(task_description)
+        if _auto_qtype == "temporal":
+            strats["temporal_sort"] = True
+            strats["temporal_proximity"] = True
+
     # Dynamic top_k: scale with graph size when top_k is None.
     # Formula selected by strats["topk_formula"]: "sqrt" or "log2".
     # "sqrt" = min(50, max(10, sqrt(n))) — aggressive, good for small graphs

@@ -257,6 +257,20 @@ LongMemEval is a Microsoft Research benchmark for long-term episodic memory in L
 | temporal-reasoning | 133 | 51.9% | 51.5% | ← Weakest content category |
 | single-session-preference | 30 | 0.0% | 13.8% | ← Structural gap: preference facts aren't reliably extracted |
 
+**Per-category breakdown (standard split, `engram_lme_s_user_patched` + preference pass + bi-temporal routing, Apr 15):**
+
+| Question type | n | kw% | LLM% | vs Apr 14 |
+|---------------|---|-----|------|-----------|
+| single-session-assistant | 56 | — | **89.3%** | +0.2pp |
+| knowledge-update | 78 | — | **71.8%** | ≈0 |
+| temporal-reasoning | 133 | 65.4% | **63.9%** | **+4.5pp** ✅ bi-temporal routing |
+| multi-session | 133 | — | 54.9% | ≈0 |
+| single-session-user | 70 | — | 54.3% | ≈0 |
+| single-session-preference | 30 | — | **26.7%** | **+20pp** ✅ preference pass |
+| **overall** | **500** | **~64%** | **~61.4%** | **~+0.6pp est** |
+
+*(Overall estimated: temporal 133/500 × +4.5pp ≈ +1.2pp on temporal, ~+0.6pp overall. Full 500-sample re-run needed for exact overall.)*
+
 **Per-category breakdown (standard split, `engram_lme_s_user_patched` + preference pass, Apr 15):**
 
 | Question type | n | kw% | LLM% | vs Apr 14 |
@@ -292,6 +306,12 @@ LongMemEval is a Microsoft Research benchmark for long-term episodic memory in L
 | Full context (oracle) | ~70% | All sessions concatenated into context window |
 
 Engram exceeds ReadAgent on both splits, despite ReadAgent using compression specifically tuned for long-context recall. The gap to full-context oracle (~70%) is ~10pp — mostly attributable to the temporal-reasoning and single-session-preference categories.
+
+**Bi-temporal routing (+4.5pp temporal-reasoning, Apr 15):** Two changes in combination lifted temporal-reasoning from 59.4% → 63.9% (77→85 correct out of 133):
+
+1. **`occurred_at` backfill** — All 500 LME checkpoint DBs (747,445 nodes) previously had `occurred_at=NULL` because `_parse_session_date` in `ingestion_pipeline.py` only handled LOCOMO's `'7:31 pm on 21 January, 2022'` format, not LME's `'2023/05/20 (Sat) 02:21'` format. Fixed the parser and ran `backfill_occurred_at.py` to populate timestamps from `source_transcript → session_id → dataset datetime`. 162 nodes from the implicit preference pass remain NULL (no session provenance — acceptable).
+
+2. **Auto-temporal routing** — `retrieve_with_stats()` now classifies queries via `_classify_query_type()`. When a query contains temporal tokens (`when`, `first`, `last`, `ago`, `how long`, `how many times`, etc.), `temporal_sort=True` and `temporal_proximity=True` are unconditionally activated regardless of the caller's strategy defaults. This surfaces a `## Timeline` section listing all dated nodes chronologically in the context, giving the LLM judge the concrete dates needed for arithmetic ("how many days between X and Y?"). Controlled by `temporal_auto_route` strategy key (default `True`).
 
 **Person exhaustive fan-out (+1.5pp overall, Apr 14):** After BFS retrieval, the retriever fetches ALL nodes tagged with identified person names and injects them directly, bypassing the top_k cut. Expected to help multi-session and single-session-user (+0.8pp / +1.4pp). Temporal-reasoning benefited most (+3.0pp) — person names are also strong anchors for time-indexed facts. Single-session-preference dropped 6.7pp but n=30 makes this likely noise (2 samples).
 

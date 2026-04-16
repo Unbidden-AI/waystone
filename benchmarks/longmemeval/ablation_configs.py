@@ -343,6 +343,7 @@ LME_ABLATION_CONFIGS: dict[str, AblationConfig] = {
         domain="episodic_personal",
         abstention_mode=True,
         person_anchoring=True,
+        checkpoint_source="engram_lme_gemini_s_user_patched",
     ),
 
     # Preference fan-out: same as user_patched but with preference_fanout=True.
@@ -366,6 +367,7 @@ LME_ABLATION_CONFIGS: dict[str, AblationConfig] = {
         abstention_mode=True,
         person_anchoring=True,
         preference_fanout=True,
+        checkpoint_source="engram_lme_gemini_s_user_patched",
     ),
 
     # Sentence index: raw per-sentence vectors as semantic fallback for queries whose
