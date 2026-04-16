@@ -1,0 +1,533 @@
+{
+  "project": "Engram",
+  "timestamp": "20260413_102606",
+  "hops": 3,
+  "top_k": 25,
+  "results": [
+    {
+      "id": "cfg_01",
+      "category": "config",
+      "question": "What is the current max_tokens setting for Gemini extraction, and why was the old default insufficient?",
+      "grade": "yes",
+      "auto_grade": "yes",
+      "nodes_before": 877,
+      "nodes_after": 25,
+      "tokens_estimated": 1311,
+      "elapsed_s": 4.41,
+      "matched_keywords": [
+        65000,
+        65536,
+        4096,
+        "finish_reason"
+      ],
+      "expected_keywords": [
+        65000,
+        65536,
+        4096,
+        "truncat",
+        "JSON truncation",
+        "finish_reason"
+      ],
+      "error": null
+    },
+    {
+      "id": "cfg_02",
+      "category": "config",
+      "question": "Why does the Gemini 2.5 Flash config set reasoning_effort to none?",
+      "grade": "yes",
+      "auto_grade": "yes",
+      "nodes_before": 449,
+      "nodes_after": 25,
+      "tokens_estimated": 1289,
+      "elapsed_s": 0.29,
+      "matched_keywords": [
+        "thinking token",
+        "reasoning_effort",
+        "max_tokens",
+        "budget"
+      ],
+      "expected_keywords": [
+        "thinking token",
+        "reasoning_effort",
+        "max_tokens",
+        "budget"
+      ],
+      "error": null
+    },
+    {
+      "id": "cfg_03",
+      "category": "config",
+      "question": "Where is the Gemini API key stored and how is it loaded?",
+      "grade": "partial",
+      "auto_grade": "partial",
+      "nodes_before": 467,
+      "nodes_after": 25,
+      "tokens_estimated": 1284,
+      "elapsed_s": 0.31,
+      "matched_keywords": [
+        ".env",
+        "GEMINI_API_KEY"
+      ],
+      "expected_keywords": [
+        ".env",
+        "GEMINI_API_KEY",
+        "dotenv",
+        "load_dotenv",
+        "api_key_env"
+      ],
+      "error": null
+    },
+    {
+      "id": "cfg_04",
+      "category": "config",
+      "question": "What top_k value is used for Gemini 2.5 Flash benchmarks and why was it raised from 25?",
+      "grade": "yes",
+      "auto_grade": "yes",
+      "nodes_before": 1450,
+      "nodes_after": 25,
+      "tokens_estimated": 1400,
+      "elapsed_s": 0.35,
+      "matched_keywords": [
+        "top_k",
+        30,
+        25
+      ],
+      "expected_keywords": [
+        "top_k",
+        30,
+        25,
+        "q_api_01",
+        "ceiling",
+        "node-count"
+      ],
+      "error": null
+    },
+    {
+      "id": "arch_01",
+      "category": "architecture",
+      "question": "Why does the hook create a new GraphStore inside the thread function instead of passing one in?",
+      "grade": "yes",
+      "auto_grade": "yes",
+      "nodes_before": 467,
+      "nodes_after": 25,
+      "tokens_estimated": 1295,
+      "elapsed_s": 0.57,
+      "matched_keywords": [
+        "thread",
+        "SQLite",
+        "ThreadPoolExecutor"
+      ],
+      "expected_keywords": [
+        "thread",
+        "SQLite",
+        "ThreadPoolExecutor",
+        "created in a thread"
+      ],
+      "error": null
+    },
+    {
+      "id": "arch_02",
+      "category": "architecture",
+      "question": "What SQLite PRAGMAs does Engram apply at connection time and why?",
+      "grade": "no",
+      "auto_grade": "no",
+      "nodes_before": 1668,
+      "nodes_after": 25,
+      "tokens_estimated": 1352,
+      "elapsed_s": 0.5,
+      "matched_keywords": [],
+      "expected_keywords": [
+        "WAL",
+        "journal_mode",
+        "synchronous",
+        "cache_size",
+        "mmap"
+      ],
+      "error": null
+    },
+    {
+      "id": "arch_03",
+      "category": "architecture",
+      "question": "How does BFS traversal work in the retriever? How many queries per depth level?",
+      "grade": "partial",
+      "auto_grade": "partial",
+      "nodes_before": 516,
+      "nodes_after": 25,
+      "tokens_estimated": 1273,
+      "elapsed_s": 0.28,
+      "matched_keywords": [
+        "BFS"
+      ],
+      "expected_keywords": [
+        "BFS",
+        "batch",
+        "2 queries",
+        "frontier",
+        "get_edges_for_nodes"
+      ],
+      "error": null
+    },
+    {
+      "id": "arch_04",
+      "category": "architecture",
+      "question": "What is the node_tags junction table and what indexes does it have?",
+      "grade": "partial",
+      "auto_grade": "partial",
+      "nodes_before": 395,
+      "nodes_after": 25,
+      "tokens_estimated": 1324,
+      "elapsed_s": 0.13,
+      "matched_keywords": [
+        "node_tags",
+        "junction"
+      ],
+      "expected_keywords": [
+        "node_tags",
+        "idx_node_tags_tag",
+        "idx_node_tags_node",
+        "junction",
+        "B-tree"
+      ],
+      "error": null
+    },
+    {
+      "id": "arch_05",
+      "category": "architecture",
+      "question": "What was the _estimate_graph_tokens performance problem and how was it fixed?",
+      "grade": "no",
+      "auto_grade": "no",
+      "nodes_before": 516,
+      "nodes_after": 25,
+      "tokens_estimated": 1333,
+      "elapsed_s": 0.17,
+      "matched_keywords": [],
+      "expected_keywords": [
+        "SUM(LENGTH",
+        "SELECT fact",
+        "full scan",
+        "aggregate",
+        "64K"
+      ],
+      "error": null
+    },
+    {
+      "id": "bench_01",
+      "category": "benchmark",
+      "question": "What is the best recall achieved by Gemini 2.5 Flash on the synthetic benchmark?",
+      "grade": "partial",
+      "auto_grade": "partial",
+      "nodes_before": 1731,
+      "nodes_after": 25,
+      "tokens_estimated": 1273,
+      "elapsed_s": 0.53,
+      "matched_keywords": [
+        "verify",
+        "baseline"
+      ],
+      "expected_keywords": [
+        "95%",
+        "94%",
+        "verify",
+        "top_k=30",
+        "baseline"
+      ],
+      "error": null
+    },
+    {
+      "id": "bench_02",
+      "category": "benchmark",
+      "question": "What happens to recall when combining --decisions and --lessons passes?",
+      "grade": "yes",
+      "auto_grade": "yes",
+      "nodes_before": 965,
+      "nodes_after": 25,
+      "tokens_estimated": 1247,
+      "elapsed_s": 0.41,
+      "matched_keywords": [
+        "regression",
+        "lesson_learned",
+        "tag",
+        "top_k"
+      ],
+      "expected_keywords": [
+        "81%",
+        "regression",
+        "lesson_learned",
+        "tag",
+        "displace",
+        "top_k"
+      ],
+      "error": null
+    },
+    {
+      "id": "bench_03",
+      "category": "benchmark",
+      "question": "How did Nemotron 3 Super 120B perform and what was its main weakness?",
+      "grade": "partial",
+      "auto_grade": "partial",
+      "nodes_before": 1211,
+      "nodes_after": 25,
+      "tokens_estimated": 1238,
+      "elapsed_s": 0.28,
+      "matched_keywords": [
+        "Nemotron"
+      ],
+      "expected_keywords": [
+        "Nemotron",
+        "71%",
+        "Delta Lake",
+        "q_pipe_03",
+        "conservative",
+        "121 nodes"
+      ],
+      "error": null
+    },
+    {
+      "id": "bench_04",
+      "category": "benchmark",
+      "question": "Why did structured outputs hurt GPT-4o recall?",
+      "grade": "yes",
+      "auto_grade": "yes",
+      "nodes_before": 934,
+      "nodes_after": 25,
+      "tokens_estimated": 1136,
+      "elapsed_s": 0.33,
+      "matched_keywords": [
+        "structured output",
+        "GPT-4o",
+        "recall"
+      ],
+      "expected_keywords": [
+        "structured output",
+        "GPT-4o",
+        "48%",
+        "recall",
+        "dropped"
+      ],
+      "error": null
+    },
+    {
+      "id": "bench_05",
+      "category": "benchmark",
+      "question": "What is the LOCOMO dev/test split protocol?",
+      "grade": "partial",
+      "auto_grade": "partial",
+      "nodes_before": 795,
+      "nodes_after": 25,
+      "tokens_estimated": 1243,
+      "elapsed_s": 0.18,
+      "matched_keywords": [
+        "dev",
+        "test split"
+      ],
+      "expected_keywords": [
+        "conv-42",
+        "dev",
+        "first 5",
+        "test split",
+        "smoke"
+      ],
+      "error": null
+    },
+    {
+      "id": "bug_01",
+      "category": "bugs",
+      "question": "What caused the APIConnectionError in the orchestrator about missing tool call for tool response?",
+      "grade": "partial",
+      "auto_grade": "partial",
+      "nodes_before": 508,
+      "nodes_after": 25,
+      "tokens_estimated": 1320,
+      "elapsed_s": 0.47,
+      "matched_keywords": [
+        "compaction",
+        "orphan"
+      ],
+      "expected_keywords": [
+        "compaction",
+        "slice",
+        "atomic",
+        "tool_calls",
+        "orphan",
+        "_safe_batch_size"
+      ],
+      "error": null
+    },
+    {
+      "id": "bug_02",
+      "category": "bugs",
+      "question": "What was the compound hyphen tag bug in the retriever?",
+      "grade": "yes",
+      "auto_grade": "yes",
+      "nodes_before": 683,
+      "nodes_after": 25,
+      "tokens_estimated": 1554,
+      "elapsed_s": 0.21,
+      "matched_keywords": [
+        "hyphen",
+        "compound",
+        "extract_keywords"
+      ],
+      "expected_keywords": [
+        "hyphen",
+        "compound",
+        "hot-path",
+        "extract_keywords",
+        "q_pipe_04",
+        "parts"
+      ],
+      "error": null
+    },
+    {
+      "id": "bug_03",
+      "category": "bugs",
+      "question": "What caused the backfill operations to run on every GraphStore initialization?",
+      "grade": "partial",
+      "auto_grade": "partial",
+      "nodes_before": 150,
+      "nodes_after": 25,
+      "tokens_estimated": 1329,
+      "elapsed_s": 0.31,
+      "matched_keywords": [
+        "backfill",
+        "COUNT"
+      ],
+      "expected_keywords": [
+        "backfill",
+        "NOT EXISTS",
+        "COUNT",
+        "correlated",
+        "pre-check",
+        "every init"
+      ],
+      "error": null
+    },
+    {
+      "id": "bug_04",
+      "category": "bugs",
+      "question": "What was the source restriction regression caused by Rule 4 in the extraction prompt?",
+      "grade": "partial",
+      "auto_grade": "partial",
+      "nodes_before": 538,
+      "nodes_after": 25,
+      "tokens_estimated": 1167,
+      "elapsed_s": 0.48,
+      "matched_keywords": [
+        "Rule 4",
+        "source restriction"
+      ],
+      "expected_keywords": [
+        "Rule 4",
+        "additive",
+        "transition",
+        "api_design",
+        "53 nodes",
+        "source restriction",
+        "76%"
+      ],
+      "error": null
+    },
+    {
+      "id": "ret_01",
+      "category": "decisions",
+      "question": "What is the prior-state tagging rule and what problem did it solve?",
+      "grade": "yes",
+      "auto_grade": "yes",
+      "nodes_before": 257,
+      "nodes_after": 25,
+      "tokens_estimated": 1354,
+      "elapsed_s": 0.23,
+      "matched_keywords": [
+        "prior-state",
+        "tag",
+        "old term",
+        "S3",
+        "supersede"
+      ],
+      "expected_keywords": [
+        "prior-state",
+        "tag",
+        "old term",
+        "q_pipe_02",
+        "S3",
+        "GCS",
+        "supersede",
+        "0%\u2192100%"
+      ],
+      "error": null
+    },
+    {
+      "id": "ret_02",
+      "category": "decisions",
+      "question": "What is the enumeration context tagging rule and where in the prompt does it live?",
+      "grade": "yes",
+      "auto_grade": "yes",
+      "nodes_before": 567,
+      "nodes_after": 25,
+      "tokens_estimated": 1293,
+      "elapsed_s": 0.42,
+      "matched_keywords": [
+        "enumeration",
+        "VERIFICATION",
+        "tags"
+      ],
+      "expected_keywords": [
+        "enumeration",
+        "VERIFICATION",
+        "label",
+        "q_pipe_04",
+        "tags"
+      ],
+      "error": null
+    },
+    {
+      "id": "ret_03",
+      "category": "decisions",
+      "question": "What is the reflect command and how does it prevent hitting max_tokens?",
+      "grade": "yes",
+      "auto_grade": "yes",
+      "nodes_before": 749,
+      "nodes_after": 25,
+      "tokens_estimated": 1265,
+      "elapsed_s": 0.22,
+      "matched_keywords": [
+        "reflect",
+        "bisect",
+        "chunk"
+      ],
+      "expected_keywords": [
+        "reflect",
+        "bisect",
+        "count_tokens",
+        "chunk",
+        "token_threshold",
+        "bisection"
+      ],
+      "error": null
+    },
+    {
+      "id": "ret_04",
+      "category": "decisions",
+      "question": "What is the process node type used for and how is it retrieved?",
+      "grade": "yes",
+      "auto_grade": "yes",
+      "nodes_before": 299,
+      "nodes_after": 25,
+      "tokens_estimated": 1207,
+      "elapsed_s": 0.36,
+      "matched_keywords": [
+        "process",
+        "slot reservation",
+        "type-slot"
+      ],
+      "expected_keywords": [
+        "process",
+        "slot reservation",
+        "boost",
+        "type-slot",
+        "crowded out"
+      ],
+      "error": null
+    }
+  ]
+}

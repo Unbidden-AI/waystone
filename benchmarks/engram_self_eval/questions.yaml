@@ -1,0 +1,330 @@
+# Engram self-eval question bank
+# Each question should be answerable from the Engram project graph.
+# expected_keywords: at least one should appear in the retrieved context to pass auto-check.
+# category: architecture | config | benchmark | bugs | decisions | retrieval | gotchas
+
+questions:
+
+  # ── Config / settings gotchas ─────────────────────────────────────────────
+
+  - id: cfg_01
+    category: config
+    question: "What is the current max_tokens setting for Gemini extraction, and why was the old default insufficient?"
+    expected_keywords: [65000, 65536, 4096, truncat, JSON truncation, finish_reason]
+    notes: "Classic gotcha — default was 4096, dense transcripts hit it mid-JSON."
+
+  - id: cfg_02
+    category: config
+    question: "Why does the Gemini 2.5 Flash config set reasoning_effort to none?"
+    expected_keywords: [thinking token, reasoning_effort, max_tokens, budget]
+    notes: "Thinking tokens count against max_tokens and consumed the whole budget."
+
+  - id: cfg_03
+    category: config
+    question: "Where is the Gemini API key stored and how is it loaded?"
+    expected_keywords: [.env, GEMINI_API_KEY, dotenv, load_dotenv, api_key_env]
+    notes: "Was hardcoded in config.yaml; moved to .env loaded by dotenv."
+
+  - id: cfg_04
+    category: config
+    question: "What top_k value is used for Gemini 2.5 Flash benchmarks and why was it raised from 25?"
+    expected_keywords: [top_k, 30, 25, q_api_01, ceiling, node-count]
+    notes: "Raised from 25→30 to unblock q_pipe_05 hitting node-count ceiling."
+
+  - id: cfg_05
+    category: config
+    question: "What is the dedup_threshold default value and what does it guard against?"
+    expected_keywords: [dedup_threshold, 0.95, duplicate, text-hash, similarity]
+    notes: "0.95 threshold prevents near-duplicate facts from being merged; text-hash dedup mechanism."
+
+  - id: cfg_06
+    category: config
+    question: "What is the MAX_DELTA_TURNS cap and why was it added to the context manager?"
+    expected_keywords: [MAX_DELTA_TURNS, cap, context manager, window, conversation]
+    notes: "Limits conversation window size to prevent runaway growth in long-running sessions."
+
+  - id: cfg_07
+    category: config
+    question: "How do the extraction_buffer settings min_turns and min_words work?"
+    expected_keywords: [extraction_buffer, min_turns, min_words, threshold, trigger]
+    notes: "Controls when extraction is triggered based on turn count and token length."
+
+  - id: cfg_08
+    category: config
+    question: "What is token_trigger_ratio in the context manager and what problem does it solve?"
+    expected_keywords: [token_trigger_ratio, ratio, threshold, growth, limit]
+    notes: "Ratio-based trigger to prevent extraction overhead in dense conversations."
+
+  # ── Architecture decisions ────────────────────────────────────────────────
+
+  - id: arch_01
+    category: architecture
+    question: "Why does the hook create a new GraphStore inside the thread function instead of passing one in?"
+    expected_keywords: [thread, SQLite, ThreadPoolExecutor, created in a thread]
+    notes: "SQLite connections can't be used across threads — classic threading constraint."
+
+  - id: arch_02
+    category: architecture
+    question: "What SQLite PRAGMAs does Engram apply at connection time and why?"
+    expected_keywords: [WAL, journal_mode, synchronous, cache_size, mmap]
+    notes: "WAL + NORMAL sync + 64MB cache + mmap for read-heavy workload."
+
+  - id: arch_03
+    category: architecture
+    question: "How does BFS traversal work in the retriever? How many queries per depth level?"
+    expected_keywords: [BFS, batch, per-layer, hop]
+    notes: "Batch-fetches all edges for whole frontier — 2 queries per hop, not per node."
+
+  - id: arch_04
+    category: architecture
+    question: "What is the node_tags junction table and what indexes does it have?"
+    expected_keywords: [node_tags, idx_node_tags_tag, idx_node_tags_node, junction, B-tree]
+    notes: "tag+node_id junction table; indexes on both columns for O(log N) lookups."
+
+  - id: arch_05
+    category: architecture
+    question: "What was the _estimate_graph_tokens performance problem and how was it fixed?"
+    expected_keywords: [SUM(LENGTH, SELECT fact, full scan, aggregate, 64K]
+    notes: "Was fetching all fact text to sum lengths; fixed to aggregate SQL."
+
+  - id: arch_06
+    category: architecture
+    question: "What is the domain column in the nodes table and why was it added?"
+    expected_keywords: [domain, column, source restriction, project, organization]
+    notes: "Tracks origin domain to enable source-aware retrieval and filtering."
+
+  - id: arch_07
+    category: architecture
+    question: "What is the fact_hash / text-hash dedup mechanism and how does it work?"
+    expected_keywords: [fact_hash, normalize, dedup, hash, text, merge]
+    notes: "Text-normalized hash stored in fact_hash column; add_node deduplicates on hash."
+
+  - id: arch_08
+    category: architecture
+    question: "What is the sentence_index feature and what does it track?"
+    expected_keywords: [sentence_index, position, order, sequence, fact]
+    notes: "Tracks position of fact within transcript for temporal ordering and context."
+
+  - id: arch_09
+    category: architecture
+    question: "How does semantic_rerank differ from a cross-encoder model?"
+    expected_keywords: [semantic_rerank, embedding, cross-encoder, vector, relevance, score]
+    notes: "Semantic rerank uses embeddings; cross-encoder takes two inputs and returns single score."
+
+  - id: arch_10
+    category: architecture
+    question: "What is RRF (Reciprocal Rank Fusion) and how does it combine signals in retrieval?"
+    expected_keywords: [RRF, Reciprocal Rank Fusion, rank, fusion, combine, signal]
+    notes: "Combines multiple ranking signals by taking reciprocals of ranks and summing."
+
+  # ── Benchmark findings ───────────────────────────────────────────────────
+
+  - id: bench_01
+    category: benchmark
+    question: "What is the best recall achieved by Gemini 2.5 Flash on the synthetic benchmark?"
+    expected_keywords: [95%, 94%, verify, top_k=30, baseline]
+    notes: "95% baseline with --verify + top_k=30 (prior-state tagging rule was key)."
+
+  - id: bench_02
+    category: benchmark
+    question: "What happens to recall when combining --decisions and --lessons passes?"
+    expected_keywords: [81%, regression, lesson_learned, tag, displace, top_k]
+    notes: "Combined drops to 81% — lesson_learned nodes share tags with decisions, crowd them out."
+
+  - id: bench_03
+    category: benchmark
+    question: "How did Nemotron 3 Super 120B perform and what was its main weakness?"
+    expected_keywords: [Nemotron, 71%, Delta Lake, q_pipe_03, conservative, 121 nodes]
+    notes: "71% baseline; completely missed Delta Lake specifics (q_pipe_03 = 0%)."
+
+  - id: bench_04
+    category: benchmark
+    question: "Why did structured outputs hurt GPT-4o recall?"
+    expected_keywords: [structured output, GPT-4o, 48%, recall, dropped]
+    notes: "Structured outputs caused recall to drop from ~baseline to 48%."
+
+  - id: bench_05
+    category: benchmark
+    question: "What is the LOCOMO dev/test split protocol?"
+    expected_keywords: [conv-42, dev, first 5, test split, smoke]
+    notes: "conv-42 for quick smoke tests; first 5 convs for dev; full test split reserved."
+
+  - id: bench_06
+    category: benchmark
+    question: "What is the LongMemEval benchmark and how does it differ from LOCOMO?"
+    expected_keywords: [LongMemEval, long-memory, benchmark, conversation, evaluation]
+    notes: "Long-form conversation benchmark contrasting with LOCOMO's synthetic transcripts."
+
+  - id: bench_07
+    category: benchmark
+    question: "What was the temporal proximity boost and how does it work?"
+    expected_keywords: [temporal proximity, boost, recency, time, decay, weight]
+    notes: "Temporal proximity strategy boosts nodes near the query point in conversation time."
+
+  - id: bench_08
+    category: benchmark
+    question: "What is the LOCOMO failure classification between extraction gaps and retrieval gaps?"
+    expected_keywords: [extraction gap, retrieval gap, failure, classification, LOCOMO]
+    notes: "Distinguishes whether failure is due to missing extraction or poor retrieval ranking."
+
+  - id: bench_09
+    category: benchmark
+    question: "What are the BM25 benchmark configurations being tested?"
+    expected_keywords: [BM25, configuration, benchmark, test, parameter]
+    notes: "BM25 baseline configurations for comparison against learned ranking strategies."
+
+  - id: bench_10
+    category: benchmark
+    question: "What caused the LLM judge score drop and how was it traced to model mismatch?"
+    expected_keywords: [judge, score, drop, model, mismatch, regression, inference]
+    notes: "Judge model changed between runs; inference API diverged from local model behavior."
+
+  # ── Bug fixes and root causes ─────────────────────────────────────────────
+
+  - id: bug_01
+    category: bugs
+    question: "What caused the APIConnectionError in the orchestrator about missing tool call for tool response?"
+    expected_keywords: [compaction, slice, atomic, tool_calls, orphan, _safe_batch_size]
+    notes: "Compaction sliced history at fixed boundary, splitting assistant+tool pairs."
+
+  - id: bug_02
+    category: bugs
+    question: "What was the compound hyphen tag bug in the retriever?"
+    expected_keywords: [hyphen, compound, hot-path, extract_keywords, q_pipe_04, parts]
+    notes: "Hyphenated terms weren't split into parts; 'hot-path' never matched 'hot' or 'path'."
+
+  - id: bug_03
+    category: bugs
+    question: "What caused the backfill operations to run on every GraphStore initialization?"
+    expected_keywords: [backfill, NOT EXISTS, COUNT, correlated, pre-check, every init]
+    notes: "Both backfill guards used correlated NOT EXISTS subqueries instead of COUNT pre-checks."
+
+  - id: bug_04
+    category: bugs
+    question: "What was the source restriction regression caused by Rule 4 in the extraction prompt?"
+    expected_keywords: [Rule 4, additive, transition, api_design, 53 nodes, source restriction, 76%]
+    notes: "Rule 4 merged additive changes into transition nodes → reduced api_design nodes → source filter excluded it."
+
+  - id: bug_05
+    category: bugs
+    question: "What was the finish_reason=length warning at 4096 tokens and what caused it?"
+    expected_keywords: [finish_reason, length, 4096, token, max_tokens, truncation]
+    notes: "Default max_tokens=4096 too small for dense transcripts; JSON response cut off mid-object."
+
+  - id: bug_06
+    category: bugs
+    question: "What was the Python 3.14 / sqlite-vec incompatibility issue?"
+    expected_keywords: [Python 3.14, sqlite-vec, incompatibility, macOS, version]
+    notes: "sqlite-vec broke on Python 3.14 macOS; pin to Python 3.13 until resolved."
+
+  - id: bug_07
+    category: bugs
+    question: "What is the stop hook re-spawn pattern and why is it needed?"
+    expected_keywords: [stop hook, re-spawn, pattern, thread, recovery, context]
+    notes: "Hook must respawn on thread exit to clean up resources and prevent orphaned processes."
+
+  - id: bug_08
+    category: bugs
+    question: "What was the orchestrator model hallucination issue with qwen3.5-35b-a3b?"
+    expected_keywords: [orchestrator, qwen3.5-35b-a3b, hallucination, model, invocation]
+    notes: "Model hallucinated tool invocations that didn't match schema; validation caught and rejected."
+
+  # ── Retrieval / extraction improvements ──────────────────────────────────
+
+  - id: ret_01
+    category: decisions
+    question: "What is the prior-state tagging rule and what problem did it solve?"
+    expected_keywords: [prior-state, tag, old term, q_pipe_02, S3, GCS, supersede, 0%→100%]
+    notes: "Rule 11: superseding nodes must include old term in tags so retrievable from both directions."
+
+  - id: ret_02
+    category: decisions
+    question: "What is the enumeration context tagging rule and where in the prompt does it live?"
+    expected_keywords: [enumeration, VERIFICATION, label, q_pipe_04, tags]
+    notes: "In verification pass section, not main extraction prompt."
+
+  - id: ret_03
+    category: decisions
+    question: "What is the reflect command and how does it prevent hitting max_tokens?"
+    expected_keywords: [reflect, bisect, count_tokens, chunk, token_threshold, bisection]
+    notes: "reflect uses count_tokens pre-flight + bisection to fit within budget."
+
+  - id: ret_04
+    category: decisions
+    question: "What is the process node type used for and how is it retrieved?"
+    expected_keywords: [process, slot reservation, boost, type-slot, crowded out]
+    notes: "Tracks operational workflows; needed slot reservation because they get crowded out at top_k."
+
+  - id: ret_05
+    category: decisions
+    question: "What problem did Rule 6 (contrast-node clause) cause and why was it reverted?"
+    expected_keywords: [Rule 6, contrast, rejected, adopted, merge, regression]
+    notes: "Rule 6 merged contrasting facts; reduced tag coverage and hurt recall; removed."
+
+  - id: ret_06
+    category: decisions
+    question: "Why does lesson_learned extraction hurt recall when combined with other passes?"
+    expected_keywords: [lesson_learned, extraction, tag, displacement, top_k, recall]
+    notes: "Lesson nodes share tags with decisions; combined pass causes tag collision at top_k."
+
+  # ── Retrieval mechanics ────────────────────────────────────────────────────
+
+  - id: retr_01
+    category: retrieval
+    question: "What is the process node type slot reservation and how does it prevent crowding?"
+    expected_keywords: [process, slot reservation, type-slot, crowding, top_k, allocation]
+    notes: "Reserved slots for process nodes to prevent them from being excluded by other types."
+
+  - id: retr_02
+    category: retrieval
+    question: "What embedding model is used for semantic rerank in the retriever?"
+    expected_keywords: [semantic, embedding, rerank, model, vector, distance]
+    notes: "Semantic rerank uses embeddings to re-score BFS results by vector distance."
+
+  - id: retr_03
+    category: retrieval
+    question: "How does superseded_pruning work in the strategy pipeline?"
+    expected_keywords: [superseded_pruning, supersedes, prune, edge, strategy, pipeline]
+    notes: "Drops nodes that have a supersedes edge pointing at them; removes old versions."
+
+  - id: retr_04
+    category: retrieval
+    question: "What is the recency_decay strategy and what is its half-life default?"
+    expected_keywords: [recency_decay, half-life, confidence, decay, 2^(-age)]
+    notes: "Multiplies confidence by 2^(-age_days / half_life_days); exponential decay by age."
+
+  - id: retr_05
+    category: retrieval
+    question: "What does confidence_threshold do and what value disables it?"
+    expected_keywords: [confidence_threshold, filter, confidence, 0.0, disable]
+    notes: "Filters nodes below float threshold; 0.0 disables filtering."
+
+  - id: retr_06
+    category: retrieval
+    question: "How does token_budget packing work in the retriever?"
+    expected_keywords: [token_budget, greedy, packing, tokens, ~4 chars]
+    notes: "Greedily packs results by estimated tokens (~4 chars per token) until budget exhausted."
+
+  - id: retr_07
+    category: retrieval
+    question: "What is relevance_scoring and how does it rank BFS entry nodes?"
+    expected_keywords: [relevance_scoring, entry node, tag overlap, rank, BFS]
+    notes: "Ranks initial BFS entry nodes by keyword tag overlap count before traversal."
+
+  - id: retr_08
+    category: retrieval
+    question: "How does the keyword extraction process work in the retriever?"
+    expected_keywords: [extract_keywords, stop-word, filter, task description, tag]
+    notes: "Extracts keywords from task description with stop-word filtering for tag matching."
+
+  - id: retr_09
+    category: retrieval
+    question: "What does get_nodes_by_tags do and what SQL mechanism does it use?"
+    expected_keywords: [get_nodes_by_tags, JSON LIKE, tag, query, SQL]
+    notes: "Uses JSON LIKE queries to find nodes matching extracted keywords."
+
+  - id: retr_10
+    category: retrieval
+    question: "How are incoming and outgoing edges handled during BFS traversal?"
+    expected_keywords: [BFS, incoming, outgoing, edge, traversal, both direction]
+    notes: "BFS collects both outgoing and incoming edges to build complete neighborhood."

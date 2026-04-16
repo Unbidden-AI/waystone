@@ -1,0 +1,263 @@
+{
+  "project": "Engram",
+  "timestamp": "20260413_103335",
+  "hops": 3,
+  "top_k": 50,
+  "results": [
+    {
+      "id": "bench_01",
+      "category": "benchmark",
+      "question": "What is the best recall achieved by Gemini 2.5 Flash on the synthetic benchmark?",
+      "grade": "yes",
+      "auto_grade": "yes",
+      "nodes_before": 2530,
+      "nodes_after": 50,
+      "tokens_estimated": 2196,
+      "elapsed_s": 4.3,
+      "matched_keywords": [
+        "95%",
+        "verify",
+        "baseline"
+      ],
+      "expected_keywords": [
+        "95%",
+        "94%",
+        "verify",
+        "top_k=30",
+        "baseline"
+      ],
+      "error": null
+    },
+    {
+      "id": "bench_02",
+      "category": "benchmark",
+      "question": "What happens to recall when combining --decisions and --lessons passes?",
+      "grade": "yes",
+      "auto_grade": "yes",
+      "nodes_before": 1405,
+      "nodes_after": 50,
+      "tokens_estimated": 2108,
+      "elapsed_s": 0.33,
+      "matched_keywords": [
+        "regression",
+        "lesson_learned",
+        "tag",
+        "top_k"
+      ],
+      "expected_keywords": [
+        "81%",
+        "regression",
+        "lesson_learned",
+        "tag",
+        "displace",
+        "top_k"
+      ],
+      "error": null
+    },
+    {
+      "id": "bench_03",
+      "category": "benchmark",
+      "question": "How did Nemotron 3 Super 120B perform and what was its main weakness?",
+      "grade": "yes",
+      "auto_grade": "yes",
+      "nodes_before": 1290,
+      "nodes_after": 50,
+      "tokens_estimated": 2146,
+      "elapsed_s": 0.28,
+      "matched_keywords": [
+        "Nemotron",
+        "71%",
+        "q_pipe_03",
+        "121 nodes"
+      ],
+      "expected_keywords": [
+        "Nemotron",
+        "71%",
+        "Delta Lake",
+        "q_pipe_03",
+        "conservative",
+        "121 nodes"
+      ],
+      "error": null
+    },
+    {
+      "id": "bench_04",
+      "category": "benchmark",
+      "question": "Why did structured outputs hurt GPT-4o recall?",
+      "grade": "yes",
+      "auto_grade": "yes",
+      "nodes_before": 1199,
+      "nodes_after": 50,
+      "tokens_estimated": 1998,
+      "elapsed_s": 0.33,
+      "matched_keywords": [
+        "structured output",
+        "GPT-4o",
+        "recall"
+      ],
+      "expected_keywords": [
+        "structured output",
+        "GPT-4o",
+        "48%",
+        "recall",
+        "dropped"
+      ],
+      "error": null
+    },
+    {
+      "id": "bench_05",
+      "category": "benchmark",
+      "question": "What is the LOCOMO dev/test split protocol?",
+      "grade": "yes",
+      "auto_grade": "yes",
+      "nodes_before": 1114,
+      "nodes_after": 50,
+      "tokens_estimated": 2254,
+      "elapsed_s": 0.19,
+      "matched_keywords": [
+        "conv-42",
+        "dev",
+        "test split"
+      ],
+      "expected_keywords": [
+        "conv-42",
+        "dev",
+        "first 5",
+        "test split",
+        "smoke"
+      ],
+      "error": null
+    },
+    {
+      "id": "bench_06",
+      "category": "benchmark",
+      "question": "What is the LongMemEval benchmark and how does it differ from LOCOMO?",
+      "grade": "yes",
+      "auto_grade": "yes",
+      "nodes_before": 1396,
+      "nodes_after": 50,
+      "tokens_estimated": 2253,
+      "elapsed_s": 0.27,
+      "matched_keywords": [
+        "LongMemEval",
+        "benchmark",
+        "conversation",
+        "evaluation"
+      ],
+      "expected_keywords": [
+        "LongMemEval",
+        "long-memory",
+        "benchmark",
+        "conversation",
+        "evaluation"
+      ],
+      "error": null
+    },
+    {
+      "id": "bench_07",
+      "category": "benchmark",
+      "question": "What was the temporal proximity boost and how does it work?",
+      "grade": "yes",
+      "auto_grade": "yes",
+      "nodes_before": 844,
+      "nodes_after": 50,
+      "tokens_estimated": 2475,
+      "elapsed_s": 0.17,
+      "matched_keywords": [
+        "temporal proximity",
+        "boost",
+        "recency",
+        "time",
+        "decay"
+      ],
+      "expected_keywords": [
+        "temporal proximity",
+        "boost",
+        "recency",
+        "time",
+        "decay",
+        "weight"
+      ],
+      "error": null
+    },
+    {
+      "id": "bench_08",
+      "category": "benchmark",
+      "question": "What is the LOCOMO failure classification between extraction gaps and retrieval gaps?",
+      "grade": "yes",
+      "auto_grade": "yes",
+      "nodes_before": 1794,
+      "nodes_after": 50,
+      "tokens_estimated": 2310,
+      "elapsed_s": 0.54,
+      "matched_keywords": [
+        "extraction gap",
+        "retrieval gap",
+        "failure",
+        "classification",
+        "LOCOMO"
+      ],
+      "expected_keywords": [
+        "extraction gap",
+        "retrieval gap",
+        "failure",
+        "classification",
+        "LOCOMO"
+      ],
+      "error": null
+    },
+    {
+      "id": "bench_09",
+      "category": "benchmark",
+      "question": "What are the BM25 benchmark configurations being tested?",
+      "grade": "yes",
+      "auto_grade": "yes",
+      "nodes_before": 1783,
+      "nodes_after": 50,
+      "tokens_estimated": 2273,
+      "elapsed_s": 0.25,
+      "matched_keywords": [
+        "BM25",
+        "configuration",
+        "benchmark",
+        "test"
+      ],
+      "expected_keywords": [
+        "BM25",
+        "configuration",
+        "benchmark",
+        "test",
+        "parameter"
+      ],
+      "error": null
+    },
+    {
+      "id": "bench_10",
+      "category": "benchmark",
+      "question": "What caused the LLM judge score drop and how was it traced to model mismatch?",
+      "grade": "yes",
+      "auto_grade": "yes",
+      "nodes_before": 1146,
+      "nodes_after": 50,
+      "tokens_estimated": 2154,
+      "elapsed_s": 0.64,
+      "matched_keywords": [
+        "judge",
+        "score",
+        "drop",
+        "model",
+        "mismatch"
+      ],
+      "expected_keywords": [
+        "judge",
+        "score",
+        "drop",
+        "model",
+        "mismatch",
+        "regression",
+        "inference"
+      ],
+      "error": null
+    }
+  ]
+}
