@@ -1,0 +1,66 @@
+{
+  "dataset": "benchmarks/longmemeval/data/longmemeval_s_cleaned.json",
+  "timestamp": "2026-04-15T06:21:45Z",
+  "configs": {
+    "engram_lme_s_pref_fanout": {
+      "config_name": "engram_lme_s_pref_fanout",
+      "aggregate": {
+        "n": 3,
+        "keyword_accuracy": 0.0,
+        "keyword_exact": 0.0,
+        "avg_tokens": 1545.3,
+        "llm_accuracy": 0.3333,
+        "llm_partial_credit": 0.5,
+        "llm_n": 3
+      },
+      "by_question_type": {
+        "single-session-preference": {
+          "n": 3,
+          "keyword_accuracy": 0.0,
+          "keyword_exact": 0.0,
+          "avg_tokens": 1545.3,
+          "llm_accuracy": 0.3333,
+          "llm_partial_credit": 0.5,
+          "llm_n": 3
+        }
+      },
+      "token_budget": {
+        "query_count": 3,
+        "avg_retrieval_tokens": 1545.3,
+        "total_ingestion_tokens": 0,
+        "total_judge_tokens": 0,
+        "total_tokens": 4636
+      },
+      "ingestion": [],
+      "per_sample": [
+        {
+          "sample_id": "06f04340",
+          "question_type": "single-session-preference",
+          "question": "What should I serve for dinner this weekend with my homegrown ingredients?",
+          "answer": "The user would prefer dinner suggestions that incorporate their homegrown cherry tomatoes and herbs like basil and mint, highlighting recipes that showcase their garden produce. They might not prefer suggestions that do not utilize these specific ingredients or do not emphasize the use of homegrown elements.",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1509
+        },
+        {
+          "sample_id": "38146c39",
+          "question_type": "single-session-preference",
+          "question": "I've been feeling like my chocolate chip cookies need something extra. Any advice?",
+          "answer": "The user would prefer responses that build upon their previous experimentation with turbinado sugar, suggesting ingredients or techniques that complement its richer flavor. They might not prefer generic cookie-making advice or suggestions that don't take into account their existing use of turbinado sugar.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 1639
+        },
+        {
+          "sample_id": "1da05512",
+          "question_type": "single-session-preference",
+          "question": "I'm trying to decide whether to buy a NAS device now or wait. What do you think?",
+          "answer": "The user would prefer responses that take into account their current home network storage capacity issues and recent reliance on external hard drives, highlighting the potential benefits of a NAS device in addressing these specific needs. They might not prefer responses that ignore their current storage challenges or fail to consider their recent tech upgrades and priorities. Preferred responses would utilize the user's previous mentions of storage capacity issues and tech investments to inform their decision.",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 1488
+        }
+      ]
+    }
+  }
+}

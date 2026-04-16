@@ -30,6 +30,13 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 WORKER = Path(__file__).resolve().parent / "extraction_worker.py"
 sys.path.insert(0, str(REPO_ROOT))
 
+# Load project-local .env (e.g. GEMINI_API_KEY) before any Engram imports.
+try:
+    from dotenv import load_dotenv as _load_dotenv
+    _load_dotenv(dotenv_path=REPO_ROOT / ".env", override=False)
+except ImportError:
+    pass
+
 STATE_DIR = Path.home() / ".engram"
 PAUSE_FILE = STATE_DIR / "paused"
 SESSION_STATE_MAX_CHARS = 2400  # ~600 tokens
@@ -285,18 +292,49 @@ def main():
             }, session_id=session_id)
             sys.exit(0)
 
-        store = GraphStore(db_path)
         t0 = time.time()
         defaults = config.get("defaults", {})
-        retrieval = retrieve_with_stats(
-            store,
-            prompt,
-            hops=defaults.get("hops", 3),
-            top_k=defaults.get("top_k", 25),
-            strategies=config.get("strategies", {}),
-        )
+        retrieval_timeout = config.get("hook", {}).get("retrieval_timeout_seconds", 5.0)
+        _strategies = config.get("strategies", {})
+        _hops = defaults.get("hops", 3)
+        _top_k = defaults.get("top_k", 25)
+
+        # Run retrieval in a thread with a hard timeout so a large/slow graph
+        # never blocks Claude from receiving the prompt.
+        # IMPORTANT: GraphStore (SQLite connection) must be created INSIDE the
+        # thread that uses it — SQLite prohibits cross-thread connection sharing.
+        import concurrent.futures as _cf
+
+        def _do_retrieve():
+            _store = GraphStore(db_path)
+            try:
+                return retrieve_with_stats(
+                    _store, prompt,
+                    hops=_hops, top_k=_top_k, strategies=_strategies,
+                )
+            finally:
+                _store.close()
+
+        retrieval = None
+        _pool = _cf.ThreadPoolExecutor(max_workers=1)
+        _fut = _pool.submit(_do_retrieve)
+        try:
+            retrieval = _fut.result(timeout=retrieval_timeout)
+        except _cf.TimeoutError:
+            _write_state({
+                "project": project,
+                "status": "timeout",
+                "nodes_total": total_nodes,
+                "elapsed_ms": int((time.time() - t0) * 1000),
+                "timestamp": time.time(),
+            }, session_id=session_id)
+            # Don't join the pool — the thread may be stuck in SQLite and will
+            # outlive this process, but the hook returns promptly.
+            _pool.shutdown(wait=False, cancel_futures=True)
+            sys.exit(0)
+        _pool.shutdown(wait=False)
+
         elapsed_ms = int((time.time() - t0) * 1000)
-        store.close()
 
         tokens_in_graph = _estimate_graph_tokens(db_path)
         _write_state({
@@ -499,12 +537,13 @@ def _write_state(state: dict, session_id: str = "") -> None:
 
 
 def _estimate_graph_tokens(db_path: Path) -> int:
+    """Estimate total tokens in the graph without fetching all fact text."""
     import sqlite3
     try:
         conn = sqlite3.connect(str(db_path))
-        rows = conn.execute("SELECT fact FROM nodes").fetchall()
+        total_chars = conn.execute("SELECT SUM(LENGTH(fact)) FROM nodes").fetchone()[0] or 0
         conn.close()
-        return max(1, sum(len(r[0]) for r in rows) // 4)
+        return max(1, total_chars // 4)
     except Exception:
         return 0
 

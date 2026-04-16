@@ -1,0 +1,4584 @@
+{
+  "dataset": "benchmarks/longmemeval/data/longmemeval_oracle.json",
+  "timestamp": "2026-04-08T17:18:40Z",
+  "configs": {
+    "engram_lme_rrf_dynamic": {
+      "config_name": "engram_lme_rrf_dynamic",
+      "aggregate": {
+        "n": 500,
+        "keyword_accuracy": 0.538,
+        "keyword_exact": 0.5,
+        "avg_tokens": 727.6,
+        "llm_accuracy": 0.606,
+        "llm_partial_credit": 0.665,
+        "llm_n": 500
+      },
+      "by_question_type": {
+        "temporal-reasoning": {
+          "n": 133,
+          "keyword_accuracy": 0.5188,
+          "keyword_exact": 0.4511,
+          "avg_tokens": 886.8,
+          "llm_accuracy": 0.5714,
+          "llm_partial_credit": 0.5977,
+          "llm_n": 133
+        },
+        "multi-session": {
+          "n": 133,
+          "keyword_accuracy": 0.5038,
+          "keyword_exact": 0.4586,
+          "avg_tokens": 1046.4,
+          "llm_accuracy": 0.609,
+          "llm_partial_credit": 0.7256,
+          "llm_n": 133
+        },
+        "knowledge-update": {
+          "n": 78,
+          "keyword_accuracy": 0.641,
+          "keyword_exact": 0.6282,
+          "avg_tokens": 754.1,
+          "llm_accuracy": 0.6923,
+          "llm_partial_credit": 0.7436,
+          "llm_n": 78
+        },
+        "single-session-preference": {
+          "n": 30,
+          "keyword_accuracy": 0.0,
+          "keyword_exact": 0.0,
+          "avg_tokens": 271.7,
+          "llm_accuracy": 0.1,
+          "llm_partial_credit": 0.2833,
+          "llm_n": 30
+        },
+        "single-session-assistant": {
+          "n": 56,
+          "keyword_accuracy": 0.7321,
+          "keyword_exact": 0.6786,
+          "avg_tokens": 328.0,
+          "llm_accuracy": 0.75,
+          "llm_partial_credit": 0.75,
+          "llm_n": 56
+        },
+        "single-session-user": {
+          "n": 70,
+          "keyword_accuracy": 0.6,
+          "keyword_exact": 0.6,
+          "avg_tokens": 305.2,
+          "llm_accuracy": 0.6714,
+          "llm_partial_credit": 0.6857,
+          "llm_n": 70
+        }
+      },
+      "token_budget": {
+        "query_count": 500,
+        "avg_retrieval_tokens": 727.6,
+        "total_ingestion_tokens": 0,
+        "total_judge_tokens": 0,
+        "total_tokens": 363821
+      },
+      "ingestion": [],
+      "per_sample": [
+        {
+          "sample_id": "gpt4_2655b836",
+          "question_type": "temporal-reasoning",
+          "question": "What was the first issue I had with my new car after its first service?",
+          "answer": "GPS system not functioning correctly",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 876
+        },
+        {
+          "sample_id": "gpt4_2487a7cb",
+          "question_type": "temporal-reasoning",
+          "question": "Which event did I attend first, the 'Effective Time Management' workshop or the 'Data Analysis using",
+          "answer": "'Data Analysis using Python' webinar",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1059
+        },
+        {
+          "sample_id": "gpt4_76048e76",
+          "question_type": "temporal-reasoning",
+          "question": "Which vehicle did I take care of first in February, the bike or the car?",
+          "answer": "bike",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1479
+        },
+        {
+          "sample_id": "gpt4_2312f94c",
+          "question_type": "temporal-reasoning",
+          "question": "Which device did I got first, the Samsung Galaxy S22 or the Dell XPS 13?",
+          "answer": "Samsung Galaxy S22",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1170
+        },
+        {
+          "sample_id": "0bb5a684",
+          "question_type": "temporal-reasoning",
+          "question": "How many days before the team meeting I was preparing for did I attend the workshop on 'Effective Co",
+          "answer": "7 days. 8 days (including the last day) is also acceptable.",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 810
+        },
+        {
+          "sample_id": "08f4fc43",
+          "question_type": "temporal-reasoning",
+          "question": "How many days had passed between the Sunday mass at St. Mary's Church and the Ash Wednesday service ",
+          "answer": "30 days. 31 days (including the last day) is also acceptable.",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 844
+        },
+        {
+          "sample_id": "2c63a862",
+          "question_type": "temporal-reasoning",
+          "question": "How many days did it take for me to find a house I loved after starting to work with Rachel?",
+          "answer": "14 days. 15 days (including the last day) is also acceptable.",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 803
+        },
+        {
+          "sample_id": "gpt4_385a5000",
+          "question_type": "temporal-reasoning",
+          "question": "Which seeds were started first, the tomatoes or the marigolds?",
+          "answer": "Tomatoes",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1301
+        },
+        {
+          "sample_id": "2a1811e2",
+          "question_type": "temporal-reasoning",
+          "question": "How many days had passed between the Hindu festival of Holi and the Sunday mass at St. Mary's Church",
+          "answer": "21 days. 22 days (including the last day) is also acceptable.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 1392
+        },
+        {
+          "sample_id": "bbf86515",
+          "question_type": "temporal-reasoning",
+          "question": "How many days before the 'Rack Fest' did I participate in the 'Turbocharged Tuesdays' event?",
+          "answer": "4 days.",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1218
+        },
+        {
+          "sample_id": "gpt4_5dcc0aab",
+          "question_type": "temporal-reasoning",
+          "question": "Which pair of shoes did I clean last month?",
+          "answer": "white Adidas sneakers",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1581
+        },
+        {
+          "sample_id": "gpt4_0b2f1d21",
+          "question_type": "temporal-reasoning",
+          "question": "Which event happened first, the purchase of the coffee maker or the malfunction of the stand mixer?",
+          "answer": "The malfunction of the stand mixer",
+          "keyword_score": 1.0,
+          "llm_score": 0.5,
+          "tokens": 111
+        },
+        {
+          "sample_id": "f0853d11",
+          "question_type": "temporal-reasoning",
+          "question": "How many days had passed between the 'Walk for Hunger' event and the 'Coastal Cleanup' event?",
+          "answer": "14 days. 8 days (including the last day) is also acceptable.",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1476
+        },
+        {
+          "sample_id": "gpt4_6ed717ea",
+          "question_type": "temporal-reasoning",
+          "question": "Which item did I purchase first, the dog bed for Max or the training pads for Luna?",
+          "answer": "Training pads for Luna",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 953
+        },
+        {
+          "sample_id": "gpt4_70e84552",
+          "question_type": "temporal-reasoning",
+          "question": "Which task did I complete first, fixing the fence or trimming the goats' hooves?",
+          "answer": "Fixing the fence",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 375
+        },
+        {
+          "sample_id": "a3838d2b",
+          "question_type": "temporal-reasoning",
+          "question": "How many charity events did I participate in before the 'Run for the Cure' event?",
+          "answer": "4",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1411
+        },
+        {
+          "sample_id": "gpt4_93159ced",
+          "question_type": "temporal-reasoning",
+          "question": "How long have I been working before I started my current job at NovaTech?",
+          "answer": "4 years and 9 months",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 365
+        },
+        {
+          "sample_id": "gpt4_2d58bcd6",
+          "question_type": "temporal-reasoning",
+          "question": "Which book did I finish reading first, 'The Hate U Give' or 'The Nightingale'?",
+          "answer": "'The Hate U Give'",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1265
+        },
+        {
+          "sample_id": "gpt4_65aabe59",
+          "question_type": "temporal-reasoning",
+          "question": "Which device did I set up first, the smart thermostat or the mesh network system?",
+          "answer": "Smart thermostat",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 776
+        },
+        {
+          "sample_id": "982b5123",
+          "question_type": "temporal-reasoning",
+          "question": "How many months ago did I book the Airbnb in San Francisco?",
+          "answer": "Five months ago",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 1446
+        },
+        {
+          "sample_id": "b9cfe692",
+          "question_type": "temporal-reasoning",
+          "question": "How long did I take to finish 'The Seven Husbands of Evelyn Hugo' and 'The Nightingale' combined?",
+          "answer": "5.5 weeks",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1482
+        },
+        {
+          "sample_id": "gpt4_4edbafa2",
+          "question_type": "temporal-reasoning",
+          "question": "What was the date on which I attended the first BBQ event in June?",
+          "answer": "June 3rd",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1509
+        },
+        {
+          "sample_id": "c8090214",
+          "question_type": "temporal-reasoning",
+          "question": "How many days before I bought the iPhone 13 Pro did I attend the Holiday Market?",
+          "answer": "7 days. 8 days (including the last day) is also acceptable.",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 675
+        },
+        {
+          "sample_id": "gpt4_483dd43c",
+          "question_type": "temporal-reasoning",
+          "question": "Which show did I start watching first, 'The Crown' or 'Game of Thrones'?",
+          "answer": "'Game of Thrones'",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 295
+        },
+        {
+          "sample_id": "e4e14d04",
+          "question_type": "temporal-reasoning",
+          "question": "How long had I been a member of 'Book Lovers Unite' when I attended the meetup?",
+          "answer": "Two weeks",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1062
+        },
+        {
+          "sample_id": "c9f37c46",
+          "question_type": "temporal-reasoning",
+          "question": "How long had I been watching stand-up comedy specials regularly when I attended the open mic night a",
+          "answer": "2 months",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 807
+        },
+        {
+          "sample_id": "gpt4_2c50253f",
+          "question_type": "temporal-reasoning",
+          "question": "What time do I wake up on Tuesdays and Thursdays?",
+          "answer": "6:45 AM",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 651
+        },
+        {
+          "sample_id": "dcfa8644",
+          "question_type": "temporal-reasoning",
+          "question": "How many days had passed since I bought my Adidas running shoes when I realized one of the shoelaces",
+          "answer": "14 days. 15 days (including the last day) is also acceptable.",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 759
+        },
+        {
+          "sample_id": "gpt4_b4a80587",
+          "question_type": "temporal-reasoning",
+          "question": "Which event happened first, the road trip to the coast or the arrival of the new prime lens?",
+          "answer": "The arrival of the new prime lens",
+          "keyword_score": 1.0,
+          "llm_score": 0.0,
+          "tokens": 174
+        },
+        {
+          "sample_id": "gpt4_9a159967",
+          "question_type": "temporal-reasoning",
+          "question": "Which airline did I fly with the most in March and April?",
+          "answer": "United Airlines",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1410
+        },
+        {
+          "sample_id": "cc6d1ec1",
+          "question_type": "temporal-reasoning",
+          "question": "How long had I been bird watching when I attended the bird watching workshop?",
+          "answer": "Two months",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 912
+        },
+        {
+          "sample_id": "gpt4_8c8961ae",
+          "question_type": "temporal-reasoning",
+          "question": "Which trip did I take first, the one to Europe with family or the solo trip to Thailand?",
+          "answer": "The solo trip to Thailand",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 595
+        },
+        {
+          "sample_id": "gpt4_d9af6064",
+          "question_type": "temporal-reasoning",
+          "question": "Which device did I set up first, the smart thermostat or the new router?",
+          "answer": "new router",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1102
+        },
+        {
+          "sample_id": "gpt4_7de946e7",
+          "question_type": "temporal-reasoning",
+          "question": "Which health issue did I deal with first, the persistent cough or the skin tag removal?",
+          "answer": "Persistent cough",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1282
+        },
+        {
+          "sample_id": "d01c6aa8",
+          "question_type": "temporal-reasoning",
+          "question": "How old was I when I moved to the United States?",
+          "answer": "27",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 1135
+        },
+        {
+          "sample_id": "993da5e2",
+          "question_type": "temporal-reasoning",
+          "question": "How long had I been using the new area rug when I rearranged my living room furniture?",
+          "answer": "One week. Answers ranging from 7 days to 10 days are also acceptable.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 363
+        },
+        {
+          "sample_id": "a3045048",
+          "question_type": "temporal-reasoning",
+          "question": "How many days before my best friend's birthday party did I order her gift?",
+          "answer": "7 days. 8 days (including the last day) is also acceptable.",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1214
+        },
+        {
+          "sample_id": "gpt4_d31cdae3",
+          "question_type": "temporal-reasoning",
+          "question": "Which trip did the narrator take first, the solo trip to Europe or the family road trip across the A",
+          "answer": "The family road trip across the American Southwest",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1248
+        },
+        {
+          "sample_id": "gpt4_cd90e484",
+          "question_type": "temporal-reasoning",
+          "question": "How long did I use my new binoculars before I saw the American goldfinches returning to the area?",
+          "answer": "Two weeks",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 795
+        },
+        {
+          "sample_id": "gpt4_88806d6e",
+          "question_type": "temporal-reasoning",
+          "question": "Who did I meet first, Mark and Sarah or Tom?",
+          "answer": "Tom",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1181
+        },
+        {
+          "sample_id": "gpt4_4cd9eba1",
+          "question_type": "temporal-reasoning",
+          "question": "How many weeks have I been accepted into the exchange program when I started attending the pre-depar",
+          "answer": "one week",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1106
+        },
+        {
+          "sample_id": "gpt4_93f6379c",
+          "question_type": "temporal-reasoning",
+          "question": "Which group did I join first, 'Page Turners' or 'Marketing Professionals'?",
+          "answer": "Page Turners",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1566
+        },
+        {
+          "sample_id": "b29f3365",
+          "question_type": "temporal-reasoning",
+          "question": "How long had I been taking guitar lessons when I bought the new guitar amp?",
+          "answer": "Four weeks",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 1172
+        },
+        {
+          "sample_id": "gpt4_2f56ae70",
+          "question_type": "temporal-reasoning",
+          "question": "Which streaming service did I start using most recently?",
+          "answer": "Disney+",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 1297
+        },
+        {
+          "sample_id": "6613b389",
+          "question_type": "temporal-reasoning",
+          "question": "How many months before my anniversary did Rachel get engaged?",
+          "answer": "2",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1188
+        },
+        {
+          "sample_id": "gpt4_78cf46a3",
+          "question_type": "temporal-reasoning",
+          "question": "Which event happened first, the narrator losing their phone charger or the narrator receiving their ",
+          "answer": "Receiving the new phone case",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 955
+        },
+        {
+          "sample_id": "gpt4_0a05b494",
+          "question_type": "temporal-reasoning",
+          "question": "Who did I meet first, the woman selling jam at the farmer's market or the tourist from Australia?",
+          "answer": "the woman selling jam at the farmer's market",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 120
+        },
+        {
+          "sample_id": "gpt4_1a1dc16d",
+          "question_type": "temporal-reasoning",
+          "question": "Which event happened first, the meeting with Rachel or the pride parade?",
+          "answer": "The meeting with Rachel",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 987
+        },
+        {
+          "sample_id": "gpt4_2f584639",
+          "question_type": "temporal-reasoning",
+          "question": "Which gift did I buy first, the necklace for my sister or the photo album for my mom?",
+          "answer": "the photo album for my mom",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1191
+        },
+        {
+          "sample_id": "gpt4_213fd887",
+          "question_type": "temporal-reasoning",
+          "question": "Which event did I participate in first, the volleyball league or the charity 5K run to raise money f",
+          "answer": "volleyball league",
+          "keyword_score": 1.0,
+          "llm_score": 0.0,
+          "tokens": 128
+        },
+        {
+          "sample_id": "gpt4_5438fa52",
+          "question_type": "temporal-reasoning",
+          "question": "Which event happened first, my attendance at a cultural festival or the start of my Spanish classes?",
+          "answer": "Spanish classes",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1167
+        },
+        {
+          "sample_id": "gpt4_c27434e8",
+          "question_type": "temporal-reasoning",
+          "question": "Which project did I start first, the Ferrari model or the Japanese Zero fighter plane model?",
+          "answer": "Japanese Zero fighter plane model",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1651
+        },
+        {
+          "sample_id": "gpt4_fe651585",
+          "question_type": "temporal-reasoning",
+          "question": "Who became a parent first, Rachel or Alex?",
+          "answer": "Alex",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 228
+        },
+        {
+          "sample_id": "8c18457d",
+          "question_type": "temporal-reasoning",
+          "question": "How many days had passed between the day I bought a gift for my brother's graduation ceremony and th",
+          "answer": "7 days. 8 days (including the last day) is also acceptable.",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 900
+        },
+        {
+          "sample_id": "gpt4_70e84552_abs",
+          "question_type": "temporal-reasoning",
+          "question": "Which task did I complete first, fixing the fence or purchasing three cows from Peter?",
+          "answer": "The information provided is not enough. You mentioned fixing the fence but did not mention purchasing cows from Peter.",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 955
+        },
+        {
+          "sample_id": "gpt4_93159ced_abs",
+          "question_type": "temporal-reasoning",
+          "question": "How long have I been working before I started my current job at Google?",
+          "answer": "The information provided is not enough. From the information provided, You haven't started working at Google yet.",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 847
+        },
+        {
+          "sample_id": "982b5123_abs",
+          "question_type": "temporal-reasoning",
+          "question": "When did I book the Airbnb in Sacramento?",
+          "answer": "The information provided is not enough. You only mentioned booking Airbnb in San Francisco.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 1317
+        },
+        {
+          "sample_id": "c8090214_abs",
+          "question_type": "temporal-reasoning",
+          "question": "How many days before I bought my iPad did I attend the Holiday Market?",
+          "answer": "The information provided is not enough. You mentioned getting the iPhone 13 Pro and attending the market, but you did not mention buying an iPad.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 185
+        },
+        {
+          "sample_id": "gpt4_c27434e8_abs",
+          "question_type": "temporal-reasoning",
+          "question": "Which project did I start first, the Ferrari model or the Porsche 991 Turbo S model?",
+          "answer": "The information provided is not enough. You did not mention starting the Porsche 991 Turbo S model.",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1517
+        },
+        {
+          "sample_id": "gpt4_fe651585_abs",
+          "question_type": "temporal-reasoning",
+          "question": "Who became a parent first, Tom or Alex?",
+          "answer": "The information provided is not enough. You mentioned Alex becoming a parent in January, but you didn't mention anything about Tom.",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 563
+        },
+        {
+          "sample_id": "0a995998",
+          "question_type": "multi-session",
+          "question": "How many items of clothing do I need to pick up or return from a store?",
+          "answer": 3,
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 681
+        },
+        {
+          "sample_id": "6d550036",
+          "question_type": "multi-session",
+          "question": "How many projects have I led or am currently leading?",
+          "answer": 2,
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1594
+        },
+        {
+          "sample_id": "gpt4_59c863d7",
+          "question_type": "multi-session",
+          "question": "How many model kits have I worked on or bought?",
+          "answer": "I have worked on or bought five model kits. The scales of the models are: Revell F-15 Eagle (scale not mentioned), Tamiya 1/48 scale Spitfire Mk.V, 1/16 scale German Tiger I tank, 1/72 scale B-29 bomber, and 1/24 scale '69 Camaro.",
+          "keyword_score": 0.8636363636363636,
+          "llm_score": 1.0,
+          "tokens": 1560
+        },
+        {
+          "sample_id": "b5ef892d",
+          "question_type": "multi-session",
+          "question": "How many days did I spend on camping trips in the United States this year?",
+          "answer": "8 days.",
+          "keyword_score": 1.0,
+          "llm_score": 0.0,
+          "tokens": 1533
+        },
+        {
+          "sample_id": "e831120c",
+          "question_type": "multi-session",
+          "question": "How many weeks did it take me to watch all the Marvel Cinematic Universe movies and the main Star Wa",
+          "answer": "3.5 weeks",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 204
+        },
+        {
+          "sample_id": "3a704032",
+          "question_type": "multi-session",
+          "question": "How many plants did I acquire in the last month?",
+          "answer": 3,
+          "keyword_score": 1.0,
+          "llm_score": 0.5,
+          "tokens": 1355
+        },
+        {
+          "sample_id": "gpt4_d84a3211",
+          "question_type": "multi-session",
+          "question": "How much total money have I spent on bike-related expenses since the start of the year?",
+          "answer": "$185",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1306
+        },
+        {
+          "sample_id": "aae3761f",
+          "question_type": "multi-session",
+          "question": "How many hours in total did I spend driving to my three road trip destinations combined?",
+          "answer": "15 hours for getting to the three destinations (or 30 hours for the round trip)",
+          "keyword_score": 0.7142857142857143,
+          "llm_score": 0.5,
+          "tokens": 1488
+        },
+        {
+          "sample_id": "gpt4_f2262a51",
+          "question_type": "multi-session",
+          "question": "How many different doctors did I visit?",
+          "answer": "I visited three different doctors: a primary care physician, an ENT specialist, and a dermatologist.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 467
+        },
+        {
+          "sample_id": "dd2973ad",
+          "question_type": "multi-session",
+          "question": "What time did I go to bed on the day before I had a doctor's appointment?",
+          "answer": "2 AM",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1292
+        },
+        {
+          "sample_id": "c4a1ceb8",
+          "question_type": "multi-session",
+          "question": "How many different types of citrus fruits have I used in my cocktail recipes?",
+          "answer": 3,
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1430
+        },
+        {
+          "sample_id": "gpt4_a56e767c",
+          "question_type": "multi-session",
+          "question": "How many movie festivals that I attended?",
+          "answer": "I attended four movie festivals.",
+          "keyword_score": 0.75,
+          "llm_score": 1.0,
+          "tokens": 1700
+        },
+        {
+          "sample_id": "6cb6f249",
+          "question_type": "multi-session",
+          "question": "How many days did I take social media breaks in total?",
+          "answer": "17 days",
+          "keyword_score": 1.0,
+          "llm_score": 0.5,
+          "tokens": 325
+        },
+        {
+          "sample_id": "46a3abf7",
+          "question_type": "multi-session",
+          "question": "How many tanks do I currently have, including the one I set up for my friend's kid?",
+          "answer": 3,
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1500
+        },
+        {
+          "sample_id": "36b9f61e",
+          "question_type": "multi-session",
+          "question": "What is the total amount I spent on luxury items in the past few months?",
+          "answer": "$2,500",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 982
+        },
+        {
+          "sample_id": "28dc39ac",
+          "question_type": "multi-session",
+          "question": "How many hours have I spent playing games in total?",
+          "answer": "140 hours",
+          "keyword_score": 1.0,
+          "llm_score": 0.0,
+          "tokens": 1635
+        },
+        {
+          "sample_id": "gpt4_2f8be40d",
+          "question_type": "multi-session",
+          "question": "How many weddings have I attended in this year?",
+          "answer": "I attended three weddings. The couples were Rachel and Mike, Emily and Sarah, and Jen and Tom.",
+          "keyword_score": 0.8,
+          "llm_score": 1.0,
+          "tokens": 1205
+        },
+        {
+          "sample_id": "2e6d26dc",
+          "question_type": "multi-session",
+          "question": "How many babies were born to friends and family members in the last few months?",
+          "answer": 5,
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 582
+        },
+        {
+          "sample_id": "gpt4_15e38248",
+          "question_type": "multi-session",
+          "question": "How many pieces of furniture did I buy, assemble, sell, or fix in the past few months?",
+          "answer": "4",
+          "keyword_score": 1.0,
+          "llm_score": 0.5,
+          "tokens": 659
+        },
+        {
+          "sample_id": "88432d0a",
+          "question_type": "multi-session",
+          "question": "How many times did I bake something in the past two weeks?",
+          "answer": 4,
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1569
+        },
+        {
+          "sample_id": "80ec1f4f",
+          "question_type": "multi-session",
+          "question": "How many different museums or galleries did I visit in the month of February?",
+          "answer": 2,
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1397
+        },
+        {
+          "sample_id": "d23cf73b",
+          "question_type": "multi-session",
+          "question": "How many different cuisines have I learned to cook or tried out in the past few months?",
+          "answer": 4,
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1407
+        },
+        {
+          "sample_id": "gpt4_7fce9456",
+          "question_type": "multi-session",
+          "question": "How many properties did I view before making an offer on the townhouse in the Brookside neighborhood",
+          "answer": "I viewed four properties before making an offer on the townhouse in the Brookside neighborhood. The reasons I didn't make an offer on them were: the kitchen of the bungalow needed serious renovation, the property in Cedar Creek was out of my budget, the noise from the highway was a deal-breaker for the 1-bedroom condo, and my offer on the 2-bedroom condo was rejected due to a higher bid.",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1350
+        },
+        {
+          "sample_id": "d682f1a2",
+          "question_type": "multi-session",
+          "question": "How many different types of food delivery services have I used recently?",
+          "answer": 3,
+          "keyword_score": 1.0,
+          "llm_score": 0.5,
+          "tokens": 1533
+        },
+        {
+          "sample_id": "7024f17c",
+          "question_type": "multi-session",
+          "question": "How many hours of jogging and yoga did I do last week?",
+          "answer": "0.5 hours",
+          "keyword_score": 1.0,
+          "llm_score": 0.0,
+          "tokens": 1059
+        },
+        {
+          "sample_id": "gpt4_5501fe77",
+          "question_type": "multi-session",
+          "question": "Which social media platform did I gain the most followers on over the past month?",
+          "answer": "TikTok",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1523
+        },
+        {
+          "sample_id": "gpt4_2ba83207",
+          "question_type": "multi-session",
+          "question": "Which grocery store did I spend the most money at in the past month?",
+          "answer": "Thrive Market",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1287
+        },
+        {
+          "sample_id": "2318644b",
+          "question_type": "multi-session",
+          "question": "How much more did I spend on accommodations per night in Hawaii compared to Tokyo?",
+          "answer": "$270",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 1433
+        },
+        {
+          "sample_id": "2ce6a0f2",
+          "question_type": "multi-session",
+          "question": "How many different art-related events did I attend in the past month?",
+          "answer": 4,
+          "keyword_score": 1.0,
+          "llm_score": 0.5,
+          "tokens": 1656
+        },
+        {
+          "sample_id": "gpt4_d12ceb0e",
+          "question_type": "multi-session",
+          "question": "What is the average age of me, my parents, and my grandparents?",
+          "answer": "59.6",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1339
+        },
+        {
+          "sample_id": "00ca467f",
+          "question_type": "multi-session",
+          "question": "How many doctor's appointments did I go to in March?",
+          "answer": 2,
+          "keyword_score": 1.0,
+          "llm_score": 0.5,
+          "tokens": 1476
+        },
+        {
+          "sample_id": "b3c15d39",
+          "question_type": "multi-session",
+          "question": "How many days did it take for me to receive the new remote shutter release after I ordered it?",
+          "answer": "5 days. 6 days (including the last day) is also acceptable.",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 411
+        },
+        {
+          "sample_id": "gpt4_31ff4165",
+          "question_type": "multi-session",
+          "question": "How many health-related devices do I use in a day?",
+          "answer": "4",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1393
+        },
+        {
+          "sample_id": "eeda8a6d",
+          "question_type": "multi-session",
+          "question": "How many fish are there in total in both of my aquariums?",
+          "answer": 17,
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 347
+        },
+        {
+          "sample_id": "2788b940",
+          "question_type": "multi-session",
+          "question": "How many fitness classes do I attend in a typical week?",
+          "answer": 5,
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1119
+        },
+        {
+          "sample_id": "60bf93ed",
+          "question_type": "multi-session",
+          "question": "How many days did it take for my laptop backpack to arrive after I bought it?",
+          "answer": "5 days. 6 days (including the last day) is also acceptable.",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1379
+        },
+        {
+          "sample_id": "9d25d4e0",
+          "question_type": "multi-session",
+          "question": "How many pieces of jewelry did I acquire in the last two months?",
+          "answer": 3,
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1286
+        },
+        {
+          "sample_id": "129d1232",
+          "question_type": "multi-session",
+          "question": "How much money did I raise in total through all the charity events I participated in?",
+          "answer": "$5,850",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 171
+        },
+        {
+          "sample_id": "60472f9c",
+          "question_type": "multi-session",
+          "question": "How many projects have I been working on simultaneously, excluding my thesis?",
+          "answer": 2,
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1292
+        },
+        {
+          "sample_id": "gpt4_194be4b3",
+          "question_type": "multi-session",
+          "question": "How many musical instruments do I currently own?",
+          "answer": "I currently own 4 musical instruments. I've had the Fender Stratocaster electric guitar for 5 years, the Yamaha FG800 acoustic guitar for 8 years, the 5-piece Pearl Export drum set for an unspecified amount of time, and the Korg B1 piano for 3 years.",
+          "keyword_score": 0.9166666666666666,
+          "llm_score": 1.0,
+          "tokens": 1493
+        },
+        {
+          "sample_id": "a9f6b44c",
+          "question_type": "multi-session",
+          "question": "How many bikes did I service or plan to service in March?",
+          "answer": 2,
+          "keyword_score": 1.0,
+          "llm_score": 0.0,
+          "tokens": 1241
+        },
+        {
+          "sample_id": "d851d5ba",
+          "question_type": "multi-session",
+          "question": "How much money did I raise for charity in total?",
+          "answer": "$3,750",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1599
+        },
+        {
+          "sample_id": "5a7937c8",
+          "question_type": "multi-session",
+          "question": "How many days did I spend participating in faith-related activities in December?",
+          "answer": "3 days.",
+          "keyword_score": 1.0,
+          "llm_score": 0.5,
+          "tokens": 1678
+        },
+        {
+          "sample_id": "gpt4_ab202e7f",
+          "question_type": "multi-session",
+          "question": "How many kitchen items did I replace or fix?",
+          "answer": "I replaced or fixed five items: the kitchen faucet, the kitchen mat, the toaster, the coffee maker, and the kitchen shelves.",
+          "keyword_score": 0.7692307692307693,
+          "llm_score": 1.0,
+          "tokens": 421
+        },
+        {
+          "sample_id": "gpt4_e05b82a6",
+          "question_type": "multi-session",
+          "question": "How many times did I ride rollercoasters across all the events I attended from July to October?",
+          "answer": "10 times",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1715
+        },
+        {
+          "sample_id": "gpt4_731e37d7",
+          "question_type": "multi-session",
+          "question": "How much total money did I spend on attending workshops in the last four months?",
+          "answer": "$720",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1256
+        },
+        {
+          "sample_id": "edced276",
+          "question_type": "multi-session",
+          "question": "How many days did I spend in total traveling in Hawaii and in New York City?",
+          "answer": "15 days",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1369
+        },
+        {
+          "sample_id": "10d9b85a",
+          "question_type": "multi-session",
+          "question": "How many days did I spend attending workshops, lectures, and conferences in April?",
+          "answer": "3 days",
+          "keyword_score": 1.0,
+          "llm_score": 0.5,
+          "tokens": 504
+        },
+        {
+          "sample_id": "e3038f8c",
+          "question_type": "multi-session",
+          "question": "How many rare items do I have in total?",
+          "answer": 99,
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 1754
+        },
+        {
+          "sample_id": "2b8f3739",
+          "question_type": "multi-session",
+          "question": "What is the total amount of money I earned from selling my products at the markets?",
+          "answer": "$495",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 1244
+        },
+        {
+          "sample_id": "1a8a66a6",
+          "question_type": "multi-session",
+          "question": "How many magazine subscriptions do I currently have?",
+          "answer": 2,
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 942
+        },
+        {
+          "sample_id": "c2ac3c61",
+          "question_type": "multi-session",
+          "question": "How many online courses have I completed in total?",
+          "answer": 5,
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1614
+        },
+        {
+          "sample_id": "bf659f65",
+          "question_type": "multi-session",
+          "question": "How many music albums or EPs have I purchased or downloaded?",
+          "answer": 3,
+          "keyword_score": 1.0,
+          "llm_score": 0.0,
+          "tokens": 1563
+        },
+        {
+          "sample_id": "gpt4_372c3eed",
+          "question_type": "multi-session",
+          "question": "How many years in total did I spend in formal education from high school to the completion of my Bac",
+          "answer": "10 years",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1541
+        },
+        {
+          "sample_id": "gpt4_2f91af09",
+          "question_type": "multi-session",
+          "question": "How many total pieces of writing have I completed since I started writing again three weeks ago, inc",
+          "answer": "23",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1091
+        },
+        {
+          "sample_id": "81507db6",
+          "question_type": "multi-session",
+          "question": "How many graduation ceremonies have I attended in the past three months?",
+          "answer": 3,
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1626
+        },
+        {
+          "sample_id": "88432d0a_abs",
+          "question_type": "multi-session",
+          "question": "How many times did I bake egg tarts in the past two weeks?",
+          "answer": "The information provided is not enough. You did not mention baking egg tarts.",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1561
+        },
+        {
+          "sample_id": "80ec1f4f_abs",
+          "question_type": "multi-session",
+          "question": "How many different museums or galleries did I visit in December?",
+          "answer": "0. You did not mention visitng any museum in December",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1208
+        },
+        {
+          "sample_id": "eeda8a6d_abs",
+          "question_type": "multi-session",
+          "question": "How many fish are there in my 30-gallon tank?",
+          "answer": "The information provided is not enough. You did not mention that you have a 30-gallon tank.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 668
+        },
+        {
+          "sample_id": "60bf93ed_abs",
+          "question_type": "multi-session",
+          "question": "How many days did it take for my iPad case to arrive after I bought it?",
+          "answer": "The information provided is not enough. You did not mention buying an iPad case.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 408
+        },
+        {
+          "sample_id": "edced276_abs",
+          "question_type": "multi-session",
+          "question": "How many days did I spend in total traveling in Hawaii and in Seattle?",
+          "answer": "The information provided is not enough. You mentioned traveling for 10 days in Hawaii but did not mention abything about the trip to Seattle.",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1520
+        },
+        {
+          "sample_id": "gpt4_372c3eed_abs",
+          "question_type": "multi-session",
+          "question": "How many years in total did I spend in formal education from high school to the completion of my Mas",
+          "answer": "The information provided is not enough. You mentioned 4 years in high school (2010-2014), 2 years at PCC (2014-2016), and 4 years at UCLA (2016-2020). But you didn't mention the number of years you spend getting the Master's degree",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 181
+        },
+        {
+          "sample_id": "6a1eabeb",
+          "question_type": "knowledge-update",
+          "question": "What was my personal best time in the charity 5K run?",
+          "answer": "25 minutes and 50 seconds (or 25:50)",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1035
+        },
+        {
+          "sample_id": "6aeb4375",
+          "question_type": "knowledge-update",
+          "question": "How many Korean restaurants have I tried in my city?",
+          "answer": "four",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1155
+        },
+        {
+          "sample_id": "830ce83f",
+          "question_type": "knowledge-update",
+          "question": "Where did Rachel move to after her recent relocation?",
+          "answer": "the suburbs",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 405
+        },
+        {
+          "sample_id": "852ce960",
+          "question_type": "knowledge-update",
+          "question": "What was the amount I was pre-approved for when I got my mortgage from Wells Fargo?",
+          "answer": "$400,000",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 451
+        },
+        {
+          "sample_id": "945e3d21",
+          "question_type": "knowledge-update",
+          "question": "How often do I attend yoga classes to help with my anxiety?",
+          "answer": "Three times a week.",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 752
+        },
+        {
+          "sample_id": "d7c942c3",
+          "question_type": "knowledge-update",
+          "question": "Is my mom using the same grocery list method as me?",
+          "answer": "Yes.",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 238
+        },
+        {
+          "sample_id": "71315a70",
+          "question_type": "knowledge-update",
+          "question": "How many hours have I spent on my abstract ocean sculpture?",
+          "answer": "10-12 hours",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1184
+        },
+        {
+          "sample_id": "89941a93",
+          "question_type": "knowledge-update",
+          "question": "How many bikes do I currently own?",
+          "answer": "4",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1149
+        },
+        {
+          "sample_id": "ce6d2d27",
+          "question_type": "knowledge-update",
+          "question": "What day of the week do I take a cocktail-making class?",
+          "answer": "Friday",
+          "keyword_score": 1.0,
+          "llm_score": 0.5,
+          "tokens": 989
+        },
+        {
+          "sample_id": "9ea5eabc",
+          "question_type": "knowledge-update",
+          "question": "Where did I go on my most recent family trip?",
+          "answer": "Paris",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 310
+        },
+        {
+          "sample_id": "07741c44",
+          "question_type": "knowledge-update",
+          "question": "Where do I initially keep my old sneakers?",
+          "answer": "under my bed",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 234
+        },
+        {
+          "sample_id": "a1eacc2a",
+          "question_type": "knowledge-update",
+          "question": "How many short stories have I written since I started writing regularly?",
+          "answer": "seven",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1320
+        },
+        {
+          "sample_id": "184da446",
+          "question_type": "knowledge-update",
+          "question": "How many pages of 'A Short History of Nearly Everything' have I read so far?",
+          "answer": "220",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 471
+        },
+        {
+          "sample_id": "031748ae",
+          "question_type": "knowledge-update",
+          "question": "How many engineers do I lead when I just started my new role as Senior Software Engineer? How many e",
+          "answer": "When you just started your new role as Senior Software Engineer, you led 4 engineers. Now, you lead 5 engineers",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 298
+        },
+        {
+          "sample_id": "4d6b87c8",
+          "question_type": "knowledge-update",
+          "question": "How many titles are currently on my to-watch list?",
+          "answer": "25",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 943
+        },
+        {
+          "sample_id": "0f05491a",
+          "question_type": "knowledge-update",
+          "question": "How many stars do I need to reach the gold level on my Starbucks Rewards app?",
+          "answer": 120,
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 919
+        },
+        {
+          "sample_id": "08e075c7",
+          "question_type": "knowledge-update",
+          "question": "How long have I been using my Fitbit Charge 3?",
+          "answer": "9 months",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 159
+        },
+        {
+          "sample_id": "f9e8c073",
+          "question_type": "knowledge-update",
+          "question": "How many sessions of the bereavement support group did I attend?",
+          "answer": "five",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 206
+        },
+        {
+          "sample_id": "41698283",
+          "question_type": "knowledge-update",
+          "question": "What type of camera lens did I purchase most recently?",
+          "answer": "a 70-200mm zoom lens",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1659
+        },
+        {
+          "sample_id": "2698e78f",
+          "question_type": "knowledge-update",
+          "question": "How often do I see my therapist, Dr. Smith?",
+          "answer": "every week",
+          "keyword_score": 1.0,
+          "llm_score": 0.5,
+          "tokens": 389
+        },
+        {
+          "sample_id": "b6019101",
+          "question_type": "knowledge-update",
+          "question": "How many MCU films did I watch in the last 3 months?",
+          "answer": "5",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 221
+        },
+        {
+          "sample_id": "45dc21b6",
+          "question_type": "knowledge-update",
+          "question": "How many of Emma's recipes have I tried out?",
+          "answer": "3",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 444
+        },
+        {
+          "sample_id": "5a4f22c0",
+          "question_type": "knowledge-update",
+          "question": "What company is Rachel, an old colleague from my previous company, currently working at?",
+          "answer": "TechCorp",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1066
+        },
+        {
+          "sample_id": "6071bd76",
+          "question_type": "knowledge-update",
+          "question": "For the coffee-to-water ratio in my French press, did I switch to more water per tablespoon of coffe",
+          "answer": "You switched to less water (5 ounces) per tablespoon of coffee.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 745
+        },
+        {
+          "sample_id": "e493bb7c",
+          "question_type": "knowledge-update",
+          "question": "Where is the painting 'Ethereal Dreams' by Emma Taylor currently hanging?",
+          "answer": "in my bedroom",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 363
+        },
+        {
+          "sample_id": "618f13b2",
+          "question_type": "knowledge-update",
+          "question": "How many times have I worn my new black Converse Chuck Taylor All Star sneakers?",
+          "answer": "six",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 135
+        },
+        {
+          "sample_id": "72e3ee87",
+          "question_type": "knowledge-update",
+          "question": "How many episodes of the Science series have I completed on Crash Course?",
+          "answer": "50",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1635
+        },
+        {
+          "sample_id": "c4ea545c",
+          "question_type": "knowledge-update",
+          "question": "Do I go to the gym more frequently than I did previously?",
+          "answer": "Yes",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 76
+        },
+        {
+          "sample_id": "01493427",
+          "question_type": "knowledge-update",
+          "question": "How many new postcards have I added to my collection since I started collecting again?",
+          "answer": "25",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 504
+        },
+        {
+          "sample_id": "6a27ffc2",
+          "question_type": "knowledge-update",
+          "question": "How many videos of Corey Schafer's Python programming series have I completed so far?",
+          "answer": "30",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 727
+        },
+        {
+          "sample_id": "2133c1b5",
+          "question_type": "knowledge-update",
+          "question": "How long have I been living in my current apartment in Harajuku?",
+          "answer": "3 months",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 563
+        },
+        {
+          "sample_id": "18bc8abd",
+          "question_type": "knowledge-update",
+          "question": "What brand of BBQ sauce am I currently obsessed with?",
+          "answer": "Kansas City Masterpiece",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1400
+        },
+        {
+          "sample_id": "db467c8c",
+          "question_type": "knowledge-update",
+          "question": "How long have my parents been staying with me in the US?",
+          "answer": "nine months",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1314
+        },
+        {
+          "sample_id": "7a87bd0c",
+          "question_type": "knowledge-update",
+          "question": "How long have I been sticking to my daily tidying routine?",
+          "answer": "4 weeks",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 164
+        },
+        {
+          "sample_id": "e61a7584",
+          "question_type": "knowledge-update",
+          "question": "How long have I had my cat, Luna?",
+          "answer": "9 months",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 402
+        },
+        {
+          "sample_id": "1cea1afa",
+          "question_type": "knowledge-update",
+          "question": "How many Instagram followers do I currently have?",
+          "answer": "600",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 417
+        },
+        {
+          "sample_id": "ed4ddc30",
+          "question_type": "knowledge-update",
+          "question": "How many dozen eggs do we currently have stocked up in our refrigerator?",
+          "answer": "20",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 505
+        },
+        {
+          "sample_id": "8fb83627",
+          "question_type": "knowledge-update",
+          "question": "How many issues of National Geographic have I finished reading?",
+          "answer": "Five",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1281
+        },
+        {
+          "sample_id": "b01defab",
+          "question_type": "knowledge-update",
+          "question": "Did I finish reading 'The Nightingale' by Kristin Hannah?",
+          "answer": "Yes",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1659
+        },
+        {
+          "sample_id": "22d2cb42",
+          "question_type": "knowledge-update",
+          "question": "Where did I get my guitar serviced?",
+          "answer": "The music shop on Main St.",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 585
+        },
+        {
+          "sample_id": "0e4e4c46",
+          "question_type": "knowledge-update",
+          "question": "What is my current highest score in Ticket to Ride?",
+          "answer": "132 points",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 668
+        },
+        {
+          "sample_id": "4b24c848",
+          "question_type": "knowledge-update",
+          "question": "How many tops have I bought from H&M so far?",
+          "answer": "five",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 705
+        },
+        {
+          "sample_id": "7e974930",
+          "question_type": "knowledge-update",
+          "question": "How much did I earn at the Downtown Farmers Market on my most recent visit?",
+          "answer": "$420",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 509
+        },
+        {
+          "sample_id": "603deb26",
+          "question_type": "knowledge-update",
+          "question": "How many times have I tried making a Negroni at home since my friend Emma showed me how to make it?",
+          "answer": "10",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 741
+        },
+        {
+          "sample_id": "59524333",
+          "question_type": "knowledge-update",
+          "question": "What time do I usually go to the gym?",
+          "answer": "6:00 pm",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 231
+        },
+        {
+          "sample_id": "5831f84d",
+          "question_type": "knowledge-update",
+          "question": "How many Crash Course videos have I watched in the past few weeks?",
+          "answer": "15",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 159
+        },
+        {
+          "sample_id": "eace081b",
+          "question_type": "knowledge-update",
+          "question": "Where am I planning to stay for my birthday trip to Hawaii?",
+          "answer": "Oahu",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1508
+        },
+        {
+          "sample_id": "affe2881",
+          "question_type": "knowledge-update",
+          "question": "How many different species of birds have I seen in my local park?",
+          "answer": "32",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 881
+        },
+        {
+          "sample_id": "50635ada",
+          "question_type": "knowledge-update",
+          "question": "What was my previous frequent flyer status on United Airlines before I got the current status?",
+          "answer": "Premier Silver",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 345
+        },
+        {
+          "sample_id": "e66b632c",
+          "question_type": "knowledge-update",
+          "question": "What was my previous personal best time for the charity 5K run?",
+          "answer": "27 minutes and 45 seconds",
+          "keyword_score": 1.0,
+          "llm_score": 0.5,
+          "tokens": 1323
+        },
+        {
+          "sample_id": "0ddfec37",
+          "question_type": "knowledge-update",
+          "question": "How many autographed baseballs have I added to my collection in the first three months of collection",
+          "answer": "15",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 254
+        },
+        {
+          "sample_id": "f685340e",
+          "question_type": "knowledge-update",
+          "question": "How often do I play tennis with my friends at the local park previously? How often do I play now?",
+          "answer": "Previously, you play tennis with your friends at the local park every week (on Sunday). Currently, you play tennis every other week (on Sunday).",
+          "keyword_score": 0.7894736842105263,
+          "llm_score": 0.5,
+          "tokens": 473
+        },
+        {
+          "sample_id": "cc5ded98",
+          "question_type": "knowledge-update",
+          "question": "How much time do I dedicate to coding exercises each day?",
+          "answer": "about two hours",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 521
+        },
+        {
+          "sample_id": "dfde3500",
+          "question_type": "knowledge-update",
+          "question": "What day of the week did I meet with my previous language exchange tutor Juan?",
+          "answer": "Wednesday",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 895
+        },
+        {
+          "sample_id": "69fee5aa",
+          "question_type": "knowledge-update",
+          "question": "How many pre-1920 American coins do I have in my collection?",
+          "answer": "38",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 884
+        },
+        {
+          "sample_id": "7401057b",
+          "question_type": "knowledge-update",
+          "question": "How many free night's stays can I redeem at any Hilton property with my accumulated points?",
+          "answer": "Two",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1535
+        },
+        {
+          "sample_id": "cf22b7bf",
+          "question_type": "knowledge-update",
+          "question": "How much weight have I lost since I started going to the gym consistently?",
+          "answer": "10 pounds",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1032
+        },
+        {
+          "sample_id": "a2f3aa27",
+          "question_type": "knowledge-update",
+          "question": "How many followers do I have on Instagram now?",
+          "answer": 1300,
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1256
+        },
+        {
+          "sample_id": "c7dc5443",
+          "question_type": "knowledge-update",
+          "question": "What is my current record in the recreational volleyball league?",
+          "answer": "5-2",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1330
+        },
+        {
+          "sample_id": "06db6396",
+          "question_type": "knowledge-update",
+          "question": "How many projects have I completed since starting painting classes?",
+          "answer": "5",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 964
+        },
+        {
+          "sample_id": "3ba21379",
+          "question_type": "knowledge-update",
+          "question": "What type of vehicle model am I currently working on?",
+          "answer": "Ford F-150 pickup truck",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1596
+        },
+        {
+          "sample_id": "9bbe84a2",
+          "question_type": "knowledge-update",
+          "question": "What was my previous goal for my Apex Legends level before I updated my goal?",
+          "answer": "level 100",
+          "keyword_score": 1.0,
+          "llm_score": 0.0,
+          "tokens": 1365
+        },
+        {
+          "sample_id": "10e09553",
+          "question_type": "knowledge-update",
+          "question": "How many largemouth bass did I catch with Alex on the earlier fishing trip to Lake Michigan before t",
+          "answer": "7",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 632
+        },
+        {
+          "sample_id": "dad224aa",
+          "question_type": "knowledge-update",
+          "question": "What time do I wake up on Saturday mornings?",
+          "answer": "7:30 am",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 807
+        },
+        {
+          "sample_id": "ba61f0b9",
+          "question_type": "knowledge-update",
+          "question": "How many women are on the team led by my former manager Rachel?",
+          "answer": "6",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1082
+        },
+        {
+          "sample_id": "42ec0761",
+          "question_type": "knowledge-update",
+          "question": "Do I have a spare screwdriver for opening up my laptop?",
+          "answer": "Yes",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 146
+        },
+        {
+          "sample_id": "5c40ec5b",
+          "question_type": "knowledge-update",
+          "question": "How many times have I met up with Alex from Germany?",
+          "answer": "We've met up twice.",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1644
+        },
+        {
+          "sample_id": "c6853660",
+          "question_type": "knowledge-update",
+          "question": "Did I mostly recently increase or decrease the limit on the number of cups of coffee in the morning?",
+          "answer": "You increased the limit (from one cup to two cups)",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 254
+        },
+        {
+          "sample_id": "26bdc477",
+          "question_type": "knowledge-update",
+          "question": "How many trips have I taken my Canon EOS 80D camera on?",
+          "answer": "five",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1446
+        },
+        {
+          "sample_id": "0977f2af",
+          "question_type": "knowledge-update",
+          "question": "What new kitchen gadget did I invest in before getting the Air Fryer?",
+          "answer": "Instant Pot",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 3
+        },
+        {
+          "sample_id": "6aeb4375_abs",
+          "question_type": "knowledge-update",
+          "question": "How many Italian restaurants have I tried in my city?",
+          "answer": "The information provided is not enough. You mentioned trying Korean restaurants but not Italian restaurants.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 478
+        },
+        {
+          "sample_id": "031748ae_abs",
+          "question_type": "knowledge-update",
+          "question": "How many engineers do I lead when I just started my new role as Software Engineer Manager?",
+          "answer": "The information provided is not enough. You mentioned starting the role as Senior Software Engineer but not Software Engineer Manager.",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 572
+        },
+        {
+          "sample_id": "2698e78f_abs",
+          "question_type": "knowledge-update",
+          "question": "How often do I see Dr. Johnson?",
+          "answer": "The information provided is not enough. You mentioned seeing Dr. Smith but not Dr. Johnson.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 3
+        },
+        {
+          "sample_id": "2133c1b5_abs",
+          "question_type": "knowledge-update",
+          "question": "How long have I been living in my current apartment in Shinjuku?",
+          "answer": "The information provided is not enough. You mentioned living in Harajuku but not Shinjuku.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 947
+        },
+        {
+          "sample_id": "0ddfec37_abs",
+          "question_type": "knowledge-update",
+          "question": "How many autographed football have I added to my collection in the first three months of collection?",
+          "answer": "The information provided is not enough. You mentioned collecting autographed baseball but not football.",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 567
+        },
+        {
+          "sample_id": "f685340e_abs",
+          "question_type": "knowledge-update",
+          "question": "How often do I play table tennis with my friends at the local park?",
+          "answer": "The information provided is not enough. You mentioned playing tennis but not table tennis.",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 1008
+        },
+        {
+          "sample_id": "89941a94",
+          "question_type": "knowledge-update",
+          "question": "Before I purchased the gravel bike, do I have other bikes in addition to my mountain bike and my com",
+          "answer": "Yes. (You have a road bike too.)",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1445
+        },
+        {
+          "sample_id": "07741c45",
+          "question_type": "knowledge-update",
+          "question": "Where do I currently keep my old sneakers?",
+          "answer": "in a shoe rack in my closet",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 139
+        },
+        {
+          "sample_id": "8a2466db",
+          "question_type": "single-session-preference",
+          "question": "Can you recommend some resources where I can learn more about video editing?",
+          "answer": "The user would prefer responses that suggest resources specifically tailored to Adobe Premiere Pro, especially those that delve into its advanced settings. They might not prefer general video editing resources or resources related to other video editing software.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 1398
+        },
+        {
+          "sample_id": "06878be2",
+          "question_type": "single-session-preference",
+          "question": "Can you suggest some accessories that would complement my current photography setup?",
+          "answer": "The user would prefer suggestions of Sony-compatible accessories or high-quality photography gear that can enhance their photography experience. They may not prefer suggestions of other brands' equipment or low-quality gear.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 3
+        },
+        {
+          "sample_id": "75832dbd",
+          "question_type": "single-session-preference",
+          "question": "Can you recommend some recent publications or conferences that I might find interesting?",
+          "answer": "The user would prefer suggestions related to recent research papers, articles, or conferences that focus on artificial intelligence in healthcare, particularly those that involve deep learning for medical image analysis. They would not be interested in general AI topics or those unrelated to healthcare.",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 320
+        },
+        {
+          "sample_id": "0edc2aef",
+          "question_type": "single-session-preference",
+          "question": "Can you suggest a hotel for my upcoming trip to Miami?",
+          "answer": "The user would prefer suggestions of hotels in Miami that offer great views, possibly of the ocean or the city skyline, and have unique features such as a rooftop pool or a hot tub on the balcony. They may not prefer suggestions of basic or budget hotels without these features.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 132
+        },
+        {
+          "sample_id": "35a27287",
+          "question_type": "single-session-preference",
+          "question": "Can you recommend some interesting cultural events happening around me this weekend?",
+          "answer": "The user would prefer responses that suggest cultural events where they can practice their language skills, particularly Spanish and French. They would also appreciate if the event has a focus on language learning resources. They would not prefer events that do not provide opportunities for language practice or cultural exchange.",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 925
+        },
+        {
+          "sample_id": "32260d93",
+          "question_type": "single-session-preference",
+          "question": "Can you recommend a show or movie for me to watch tonight?",
+          "answer": "The user would prefer recommendations for stand-up comedy specials on Netflix, especially those that are known for their storytelling. They may not prefer recommendations for other genres or platforms.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 3
+        },
+        {
+          "sample_id": "195a1a1b",
+          "question_type": "single-session-preference",
+          "question": "Can you suggest some activities that I can do in the evening?",
+          "answer": "The user would prefer suggestions that involve relaxing activities that can be done in the evening, preferably before 9:30 pm. They would not prefer suggestions that involve using their phone or watching TV, as these activities have been affecting their sleep quality.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 3
+        },
+        {
+          "sample_id": "afdc33df",
+          "question_type": "single-session-preference",
+          "question": "My kitchen's becoming a bit of a mess again. Any tips for keeping it clean?",
+          "answer": "The user would prefer responses that acknowledge and build upon their existing efforts to organize their kitchen, such as utilizing their new utensil holder to keep countertops clutter-free. They would also appreciate tips that address their concern for maintaining their granite surface, particularly around the sink area. Preferred responses would provide practical and actionable steps to maintain cleanliness, leveraging the user's current tools and setup. They might not prefer generic or vague suggestions that do not take into account their specific kitchen setup or concerns.",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 1020
+        },
+        {
+          "sample_id": "caf03d32",
+          "question_type": "single-session-preference",
+          "question": "I've been struggling with my slow cooker recipes. Any advice on getting better results?",
+          "answer": "The user would prefer responses that provide tips and advice specifically tailored to their slow cooker experiences, utilizing their recent success with beef stew and interest in making yogurt in the slow cooker. They might not prefer general slow cooker recipes or advice unrelated to their specific experiences and interests.",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 209
+        },
+        {
+          "sample_id": "54026fce",
+          "question_type": "single-session-preference",
+          "question": "I've been thinking about ways to stay connected with my colleagues. Any suggestions?",
+          "answer": "The user would prefer responses that acknowledge their desire for social interaction and collaboration while working remotely, utilizing their previous experiences with company initiatives and team collaborations. They might prefer suggestions of virtual team-building activities, regular check-ins, or joining interest-based groups within the company. The user may not prefer generic suggestions that do not take into account their specific work situation or previous attempts at staying connected with colleagues.",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 578
+        },
+        {
+          "sample_id": "06f04340",
+          "question_type": "single-session-preference",
+          "question": "What should I serve for dinner this weekend with my homegrown ingredients?",
+          "answer": "The user would prefer dinner suggestions that incorporate their homegrown cherry tomatoes and herbs like basil and mint, highlighting recipes that showcase their garden produce. They might not prefer suggestions that do not utilize these specific ingredients or do not emphasize the use of homegrown elements.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 3
+        },
+        {
+          "sample_id": "6b7dfb22",
+          "question_type": "single-session-preference",
+          "question": "I've been feeling a bit stuck with my paintings lately. Do you have any ideas on how I can find new ",
+          "answer": "The user would prefer responses that build upon their existing sources of inspiration, such as revisiting Instagram art accounts or exploring new techniques from online tutorials. They might also appreciate suggestions that revisit previous themes they found enjoyable, like painting flowers. The user would not prefer generic or vague suggestions for finding inspiration, and would likely appreciate responses that utilize their recent 30-day painting challenge experience.",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 69
+        },
+        {
+          "sample_id": "1a1907b4",
+          "question_type": "single-session-preference",
+          "question": "I've been thinking about making a cocktail for an upcoming get-together, but I'm not sure which one ",
+          "answer": "Considering their mixology class background, the user would prefer cocktail suggestions that build upon their existing skills and interests, such as creative variations of classic cocktails or innovative twists on familiar flavors. They might appreciate recommendations that incorporate their experience with refreshing summer drinks like Pimm's Cup. The user would not prefer overly simplistic or basic cocktail recipes, and may not be interested in suggestions that don't take into account their mixology class background.",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 155
+        },
+        {
+          "sample_id": "09d032c9",
+          "question_type": "single-session-preference",
+          "question": "I've been having trouble with the battery life on my phone lately. Any tips?",
+          "answer": "The user would prefer responses that build upon their previous mention of purchasing a portable power bank, such as suggestions on how to optimize its use, like ensuring it's fully charged before use. They might also appreciate tips on utilizing battery-saving features on their phone. The user may not prefer responses that suggest alternative solutions or unrelated advice.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 69
+        },
+        {
+          "sample_id": "38146c39",
+          "question_type": "single-session-preference",
+          "question": "I've been feeling like my chocolate chip cookies need something extra. Any advice?",
+          "answer": "The user would prefer responses that build upon their previous experimentation with turbinado sugar, suggesting ingredients or techniques that complement its richer flavor. They might not prefer generic cookie-making advice or suggestions that don't take into account their existing use of turbinado sugar.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 3
+        },
+        {
+          "sample_id": "d24813b1",
+          "question_type": "single-session-preference",
+          "question": "I'm thinking of inviting my colleagues over for a small gathering. Any tips on what to bake?",
+          "answer": "The user would prefer baking suggestions that take into account their previous success with the lemon poppyseed cake, such as variations of that recipe or other desserts that share similar qualities. They might prefer suggestions that balance impressiveness with manageability, considering their previous experience. The user may not prefer overly complex or unfamiliar recipes, or suggestions that do not build upon their existing baking experience.",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 84
+        },
+        {
+          "sample_id": "57f827a0",
+          "question_type": "single-session-preference",
+          "question": "I was thinking about rearranging the furniture in my bedroom this weekend. Any tips?",
+          "answer": "The user would prefer responses that take into account their existing plans to replace the bedroom dresser and their interest in mid-century modern style, suggesting furniture layouts that accommodate the new dresser and incorporate elements of this design aesthetic. They might not prefer general furniture arrangement tips or suggestions that do not consider their specific design preferences.",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 409
+        },
+        {
+          "sample_id": "95228167",
+          "question_type": "single-session-preference",
+          "question": "I'm getting excited about my visit to the music store this weekend. Any tips on what to look for in ",
+          "answer": "The user would prefer responses that highlight the differences between Fender Stratocaster and Gibson Les Paul electric guitars, such as the feel of the neck, weight, and sound profile. They might not prefer general tips on buying an electric guitar or suggestions that do not take into account their current guitar and desired upgrade.",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 174
+        },
+        {
+          "sample_id": "505af2f5",
+          "question_type": "single-session-preference",
+          "question": "I was thinking of trying a new coffee creamer recipe. Any recommendations?",
+          "answer": "The user would prefer responses that suggest variations on their existing almond milk, vanilla extract, and honey creamer recipe or new ideas that align with their goals of reducing sugar intake and saving money. They might not prefer responses that recommend commercial creamer products or recipes that are high in sugar or expensive.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 285
+        },
+        {
+          "sample_id": "75f70248",
+          "question_type": "single-session-preference",
+          "question": "I've been sneezing quite a bit lately. Do you think it might be my living room?",
+          "answer": "The user would prefer responses that consider the potential impact of their cat, Luna, and her shedding on their sneezing, as well as the recent deep clean of the living room and its possible effect on stirring up dust. They might not prefer responses that fail to take into account these specific details previously mentioned, such as generic suggestions or unrelated factors.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 3
+        },
+        {
+          "sample_id": "d6233ab6",
+          "question_type": "single-session-preference",
+          "question": "I've been feeling nostalgic lately. Do you think it would be a good idea to attend my high school re",
+          "answer": "The user would prefer responses that draw upon their personal experiences and memories, specifically their positive high school experiences such as being part of the debate team and taking advanced placement courses. They would prefer suggestions that highlight the potential benefits of attending the reunion, such as reconnecting with old friends and revisiting favorite subjects like history and economics. The user might not prefer generic or vague responses that do not take into account their individual experiences and interests.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 3
+        },
+        {
+          "sample_id": "1da05512",
+          "question_type": "single-session-preference",
+          "question": "I'm trying to decide whether to buy a NAS device now or wait. What do you think?",
+          "answer": "The user would prefer responses that take into account their current home network storage capacity issues and recent reliance on external hard drives, highlighting the potential benefits of a NAS device in addressing these specific needs. They might not prefer responses that ignore their current storage challenges or fail to consider their recent tech upgrades and priorities. Preferred responses would utilize the user's previous mentions of storage capacity issues and tech investments to inform their decision.",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 669
+        },
+        {
+          "sample_id": "fca70973",
+          "question_type": "single-session-preference",
+          "question": "I am planning another theme park weekend; do you have any suggestions?",
+          "answer": "The user would prefer theme park suggestions that cater to their interest in both thrill rides and special events, utilizing their previous experiences at Disneyland, Knott's Berry Farm, Six Flags Magic Mountain, and Universal Studios Hollywood as a reference point. They would also appreciate recommendations that highlight unique food experiences and nighttime shows. The user might not prefer suggestions that focus solely on one aspect of theme parks, such as only thrill rides or only family-friendly attractions, and may not be interested in parks that lack special events or unique dining options.",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 736
+        },
+        {
+          "sample_id": "b6025781",
+          "question_type": "single-session-preference",
+          "question": "I'm planning my meal prep next week, any suggestions for new recipes?",
+          "answer": "The user would prefer responses that suggest healthy meal prep recipes, especially those that incorporate quinoa and roasted vegetables, and offer variations in protein sources. They might appreciate suggestions that build upon their existing preferences, such as new twists on chicken Caesar salads or turkey and avocado wraps. The user may not prefer responses that suggest unhealthy or high-calorie meal prep options, or those that deviate significantly from their established healthy eating habits.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 44
+        },
+        {
+          "sample_id": "a89d7624",
+          "question_type": "single-session-preference",
+          "question": "I'm planning a trip to Denver soon. Any suggestions on what to do there?",
+          "answer": "The user would prefer responses that take into account their previous experience in Denver, specifically their interest in live music and memorable encounter with Brandon Flowers. They might appreciate suggestions that revisit or build upon this experience, such as revisiting the same bar or exploring similar music venues in the area. The user may not prefer general tourist recommendations or activities unrelated to their interest in live music.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 3
+        },
+        {
+          "sample_id": "b0479f84",
+          "question_type": "single-session-preference",
+          "question": "I've got some free time tonight, any documentary recommendations?",
+          "answer": "The user would prefer documentary recommendations that are similar in style and theme to 'Our Planet', 'Free Solo', and 'Tiger King', which they have previously enjoyed. They might not prefer recommendations of documentaries that are vastly different in tone or subject matter from these titles. The preferred response utilizes the user's previously mentioned viewing history to suggest documentaries that cater to their tastes.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 3
+        },
+        {
+          "sample_id": "1d4e3b97",
+          "question_type": "single-session-preference",
+          "question": "I noticed my bike seems to be performing even better during my Sunday group rides. Could there be a ",
+          "answer": "The user would prefer responses that reference specific details from their previous interactions, such as the replacement of the bike's chain and cassette, and the use of a new Garmin bike computer. They might prefer explanations that connect these details to the observed improvement in bike performance. The user may not prefer responses that fail to acknowledge these specific details or provide vague, general explanations for the improvement.",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 644
+        },
+        {
+          "sample_id": "07b6f563",
+          "question_type": "single-session-preference",
+          "question": "Can you suggest some useful accessories for my phone?",
+          "answer": "The user would prefer suggestions of accessories that are compatible with an iPhone 13 Pro, such as high-quality screen protectors, durable cases, portable power banks, or phone wallet cases. They may not prefer suggestions of accessories that are not compatible with Apple products or do not enhance the functionality or protection of their phone.",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 197
+        },
+        {
+          "sample_id": "1c0ddc50",
+          "question_type": "single-session-preference",
+          "question": "Can you suggest some activities I can do during my commute to work?",
+          "answer": "The user would prefer suggestions related to listening to new podcasts or audiobooks, especially the genre beyond true crime or self-improvement, such as history. They may not be interested in activities that require visual attention, such as reading or watching videos, as they are commuting. The user would not prefer general podcast topics such as true crime or self-improvement, as the user wants to explore other topics.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 3
+        },
+        {
+          "sample_id": "0a34ad58",
+          "question_type": "single-session-preference",
+          "question": "I\u2019m a bit anxious about getting around Tokyo. Do you have any helpful tips?",
+          "answer": "The user would prefer responses that utilize their existing resources, such as their Suica card and TripIt app, to provide personalized tips for navigating Tokyo's public transportation. They might not prefer general tips or recommendations that do not take into account their prior preparations.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 3
+        },
+        {
+          "sample_id": "7161e7e2",
+          "question_type": "single-session-assistant",
+          "question": "I'm checking our previous chat about the shift rotation sheet for GM social media agents. Can you re",
+          "answer": "Admon was assigned to the 8 am - 4 pm (Day Shift) on Sundays.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 334
+        },
+        {
+          "sample_id": "c4f10528",
+          "question_type": "single-session-assistant",
+          "question": "I'm planning to visit Bandung again and I was wondering if you could remind me of the name of that r",
+          "answer": "Miss Bee Providore",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 360
+        },
+        {
+          "sample_id": "89527b6b",
+          "question_type": "single-session-assistant",
+          "question": "I'm going back to our previous conversation about the children's book on dinosaurs. Can you remind m",
+          "answer": "The Plesiosaur had a blue scaly body.",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 287
+        },
+        {
+          "sample_id": "e9327a54",
+          "question_type": "single-session-assistant",
+          "question": "I'm planning to revisit Orlando. I was wondering if you could remind me of that unique dessert shop ",
+          "answer": "The Sugar Factory at Icon Park.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 227
+        },
+        {
+          "sample_id": "4c36ccef",
+          "question_type": "single-session-assistant",
+          "question": "Can you remind me of the name of the romantic Italian restaurant in Rome you recommended for dinner?",
+          "answer": "Roscioli",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 274
+        },
+        {
+          "sample_id": "6ae235be",
+          "question_type": "single-session-assistant",
+          "question": "I remember you told me about the refining processes at CITGO's three refineries earlier. Can you rem",
+          "answer": "Atmospheric distillation, fluid catalytic cracking (FCC), alkylation, and hydrotreating.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 327
+        },
+        {
+          "sample_id": "7e00a6cb",
+          "question_type": "single-session-assistant",
+          "question": "I'm planning my trip to Amsterdam again and I was wondering, what was the name of that hostel near t",
+          "answer": "International Budget Hostel",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 352
+        },
+        {
+          "sample_id": "1903aded",
+          "question_type": "single-session-assistant",
+          "question": "I think we discussed work from home jobs for seniors earlier. Can you remind me what was the 7th job",
+          "answer": "Transcriptionist.",
+          "keyword_score": 1.0,
+          "llm_score": 0.0,
+          "tokens": 218
+        },
+        {
+          "sample_id": "ceb54acb",
+          "question_type": "single-session-assistant",
+          "question": "In our previous chat, you suggested 'sexual compulsions' and a few other options for alternative ter",
+          "answer": "I suggested 'sexual fixations', 'problematic sexual behaviors', 'sexual impulsivity', and 'compulsive sexuality'.",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 126
+        },
+        {
+          "sample_id": "f523d9fe",
+          "question_type": "single-session-assistant",
+          "question": "I wanted to check back on our previous conversation about Netflix. I mentioned that I wanted to be a",
+          "answer": "Doc Martin",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 242
+        },
+        {
+          "sample_id": "0e5e2d1a",
+          "question_type": "single-session-assistant",
+          "question": "I wanted to follow up on our previous conversation about binaural beats for anxiety and depression. ",
+          "answer": "38 subjects",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 277
+        },
+        {
+          "sample_id": "fea54f57",
+          "question_type": "single-session-assistant",
+          "question": "I was thinking about our previous conversation about the Fifth Album, and I was wondering if you cou",
+          "answer": "Evolution",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 499
+        },
+        {
+          "sample_id": "cc539528",
+          "question_type": "single-session-assistant",
+          "question": "I wanted to follow up on our previous conversation about front-end and back-end development. Can you",
+          "answer": "I recommended learning Ruby, Python, or PHP as a back-end programming language.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 255
+        },
+        {
+          "sample_id": "dc439ea3",
+          "question_type": "single-session-assistant",
+          "question": "I was looking back at our previous conversation about Native American powwows and I was wondering, w",
+          "answer": "Hoop Dance",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 532
+        },
+        {
+          "sample_id": "18dcd5a5",
+          "question_type": "single-session-assistant",
+          "question": "I'm going back to our previous chat about the Lost Temple of the Djinn one-shot. Can you remind me h",
+          "answer": "4",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 133
+        },
+        {
+          "sample_id": "488d3006",
+          "question_type": "single-session-assistant",
+          "question": "I'm planning to go back to the Natural Park of Moncayo mountain in Arag\u00f3n and I was wondering, what ",
+          "answer": "The GR-90 trail.",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 401
+        },
+        {
+          "sample_id": "58470ed2",
+          "question_type": "single-session-assistant",
+          "question": "I was going through our previous conversation about The Library of Babel, and I wanted to confirm - ",
+          "answer": "According to Borges, 'The Library is a sphere whose exact center is any one of its hexagons and whose circumference is inaccessible.'",
+          "keyword_score": 0.9285714285714286,
+          "llm_score": 1.0,
+          "tokens": 489
+        },
+        {
+          "sample_id": "8cf51dda",
+          "question_type": "single-session-assistant",
+          "question": "I'm going back to our previous conversation about the grant aim page on molecular subtypes and endom",
+          "answer": "The three objectives were: 1) to identify molecular subtypes of endometrial cancer, 2) to investigate their clinical and biological significance, and 3) to develop biomarkers for early detection and prognosis.",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 122
+        },
+        {
+          "sample_id": "1d4da289",
+          "question_type": "single-session-assistant",
+          "question": "I was thinking about our previous conversation about data privacy and security. You mentioned that c",
+          "answer": "I mentioned biometric authentication or one-time passwords (OTP) as examples of two-factor authentication methods.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 156
+        },
+        {
+          "sample_id": "8464fc84",
+          "question_type": "single-session-assistant",
+          "question": "I'm planning to visit the Vatican again and I was wondering if you could remind me of the name of th",
+          "answer": "Roscioli",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 420
+        },
+        {
+          "sample_id": "8aef76bc",
+          "question_type": "single-session-assistant",
+          "question": "I'm going back to our previous conversation about DIY home decor projects using recycled materials. ",
+          "answer": "Mod Podge or another sealant",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 259
+        },
+        {
+          "sample_id": "71a3fd6b",
+          "question_type": "single-session-assistant",
+          "question": "I'm planning my trip to Speyer again and I wanted to confirm, what's the phone number of the Speyer ",
+          "answer": "+49 (0) 62 32 / 14 23 - 0",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 245
+        },
+        {
+          "sample_id": "2bf43736",
+          "question_type": "single-session-assistant",
+          "question": "I was going through our previous chat and I wanted to clarify something about the prayer of beginner",
+          "answer": "Chapter 4 of Book 1, titled 'Vocal Prayer and Meditation'.",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 251
+        },
+        {
+          "sample_id": "70b3e69b",
+          "question_type": "single-session-assistant",
+          "question": "I was going through our previous conversation about the impact of the political climate in Catalonia",
+          "answer": "Manolo Garc\u00eda",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 150
+        },
+        {
+          "sample_id": "8752c811",
+          "question_type": "single-session-assistant",
+          "question": "I remember you provided a list of 100 prompt parameters that I can specify to influence your output.",
+          "answer": "The 27th parameter was 'Sound effects (e.g., ambient, diegetic, non-diegetic, etc.)'.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 504
+        },
+        {
+          "sample_id": "3249768e",
+          "question_type": "single-session-assistant",
+          "question": "I'm looking back at our previous conversation about building a cocktail bar. You recommended five bo",
+          "answer": "Absinthe",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 200
+        },
+        {
+          "sample_id": "1b9b7252",
+          "question_type": "single-session-assistant",
+          "question": "I wanted to follow up on our previous conversation about mindfulness techniques. You mentioned some ",
+          "answer": "Mindful.org.",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 390
+        },
+        {
+          "sample_id": "1568498a",
+          "question_type": "single-session-assistant",
+          "question": "I'm looking back at our previous chess game and I was wondering, what was the move you made after 27",
+          "answer": "28. Kg3",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 425
+        },
+        {
+          "sample_id": "6222b6eb",
+          "question_type": "single-session-assistant",
+          "question": "I was going through our previous conversation about atmospheric correction methods, and I wanted to ",
+          "answer": "The 6S algorithm is implemented in the SIAC_GEE tool.",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 402
+        },
+        {
+          "sample_id": "e8a79c70",
+          "question_type": "single-session-assistant",
+          "question": "I was going through our previous conversation about making a classic French omelette, and I wanted t",
+          "answer": "2-3 eggs",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 333
+        },
+        {
+          "sample_id": "d596882b",
+          "question_type": "single-session-assistant",
+          "question": "I'm planning another trip to New York City and I was wondering if you could remind me of that vegan ",
+          "answer": "By Chloe",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 183
+        },
+        {
+          "sample_id": "e3fc4d6e",
+          "question_type": "single-session-assistant",
+          "question": "I wanted to follow up on our previous conversation about the fusion breakthrough at Lawrence Livermo",
+          "answer": "Dr. Arati Prabhakar",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 732
+        },
+        {
+          "sample_id": "51b23612",
+          "question_type": "single-session-assistant",
+          "question": "I was going through our previous conversation about political propaganda and humor, and I was wonder",
+          "answer": "Nu, pogodi!",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 584
+        },
+        {
+          "sample_id": "3e321797",
+          "question_type": "single-session-assistant",
+          "question": "I wanted to follow up on our previous conversation about natural remedies for dark circles under the",
+          "answer": "10 minutes",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 267
+        },
+        {
+          "sample_id": "e982271f",
+          "question_type": "single-session-assistant",
+          "question": "I was going through our previous chat. Can you remind me of the name of the last venue you recommend",
+          "answer": "Revolution Hall",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 418
+        },
+        {
+          "sample_id": "352ab8bd",
+          "question_type": "single-session-assistant",
+          "question": "Can you remind me what was the average improvement in framerate when using the Hardware-Aware Modula",
+          "answer": "The average improvement in framerate was approximately 20% when using the Hardware-Aware Modular Training (HAMT) agent.",
+          "keyword_score": 0.9090909090909091,
+          "llm_score": 0.0,
+          "tokens": 181
+        },
+        {
+          "sample_id": "fca762bc",
+          "question_type": "single-session-assistant",
+          "question": "I wanted to follow up on our previous conversation about language learning apps. You mentioned a few",
+          "answer": "Memrise",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 201
+        },
+        {
+          "sample_id": "7a8d0b71",
+          "question_type": "single-session-assistant",
+          "question": "I'm looking back at our previous chat about the DHL Wellness Retreats campaign. Can you remind me ho",
+          "answer": "$2,000",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 235
+        },
+        {
+          "sample_id": "a40e080f",
+          "question_type": "single-session-assistant",
+          "question": "I was going through our previous conversation and I was wondering if you could remind me of the two ",
+          "answer": "Patagonia and Southwest Airlines.",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 329
+        },
+        {
+          "sample_id": "8b9d4367",
+          "question_type": "single-session-assistant",
+          "question": "I wanted to follow up on our previous conversation about private sector businesses in Chaudhary. Can",
+          "answer": "Jaipur Rugs",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 225
+        },
+        {
+          "sample_id": "5809eb10",
+          "question_type": "single-session-assistant",
+          "question": "I'm looking back at our previous conversation about the Bajimaya v Reward Homes Pty Ltd case. Can yo",
+          "answer": "2014.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 111
+        },
+        {
+          "sample_id": "41275add",
+          "question_type": "single-session-assistant",
+          "question": "I wanted to follow up on our previous conversation about YouTube videos for workplace posture. Can y",
+          "answer": "The video is 'How to Sit Properly at a Desk to Avoid Back Pain' and the link is https://www.youtube.com/watch?v=UfOvNlX9Hh0.",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 122
+        },
+        {
+          "sample_id": "4388e9dd",
+          "question_type": "single-session-assistant",
+          "question": "I was going through our previous chat and I was wondering, what was Andy wearing in the script you w",
+          "answer": "Andy was wearing an untidy, stained white shirt.",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 555
+        },
+        {
+          "sample_id": "4baee567",
+          "question_type": "single-session-assistant",
+          "question": "I was looking back at our previous chat and I wanted to confirm, how many times did the Chiefs play ",
+          "answer": "The Chiefs played the Jaguars 12 times at Arrowhead Stadium.",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 754
+        },
+        {
+          "sample_id": "561fabcd",
+          "question_type": "single-session-assistant",
+          "question": "I was thinking back to our previous conversation about the Radiation Amplified zombie, and I was won",
+          "answer": "Fissionator.",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 467
+        },
+        {
+          "sample_id": "b759caee",
+          "question_type": "single-session-assistant",
+          "question": "I was looking back at our previous conversation about buying unique engagement rings directly from d",
+          "answer": "@jessica_poole_jewellery",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 156
+        },
+        {
+          "sample_id": "ac031881",
+          "question_type": "single-session-assistant",
+          "question": "I'm trying to recall what the designation on my jumpsuit was that helped me find the file number in ",
+          "answer": "The designation on your jumpsuit was 'LIV'.",
+          "keyword_score": 0.75,
+          "llm_score": 1.0,
+          "tokens": 542
+        },
+        {
+          "sample_id": "28bcfaac",
+          "question_type": "single-session-assistant",
+          "question": "I'm going back to our previous conversation about music theory. You mentioned some online resources ",
+          "answer": "MusicTheory.net",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 211
+        },
+        {
+          "sample_id": "16c90bf4",
+          "question_type": "single-session-assistant",
+          "question": "I'm looking back at our previous conversation about the Seco de Cordero recipe from Ancash. You ment",
+          "answer": "I recommended using a Pilsner or Lager for the recipe.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 453
+        },
+        {
+          "sample_id": "c8f1aeed",
+          "question_type": "single-session-assistant",
+          "question": "I wanted to follow up on our previous conversation about fracking in the Marcellus Shale region. You",
+          "answer": "Pennsylvania",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 437
+        },
+        {
+          "sample_id": "eaca4986",
+          "question_type": "single-session-assistant",
+          "question": "I'm looking back at our previous conversation where you created two sad songs for me. Can you remind",
+          "answer": "C D E F G A B A G F E D C",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 154
+        },
+        {
+          "sample_id": "c7cf7dfd",
+          "question_type": "single-session-assistant",
+          "question": "I'm going back to our previous conversation about traditional Indian embroidery and tailoring techni",
+          "answer": "Nostalgia",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 525
+        },
+        {
+          "sample_id": "e48988bc",
+          "question_type": "single-session-assistant",
+          "question": "I was looking back at our previous conversation about environmentally responsible supply chain pract",
+          "answer": "Patagonia",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 258
+        },
+        {
+          "sample_id": "1de5cff2",
+          "question_type": "single-session-assistant",
+          "question": "I was going through our previous conversation about high-end fashion brands, and I was wondering if ",
+          "answer": "Veja",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 442
+        },
+        {
+          "sample_id": "65240037",
+          "question_type": "single-session-assistant",
+          "question": "I remember you told me to dilute tea tree oil with a carrier oil before applying it to my skin. Can ",
+          "answer": "The recommended ratio is 1:10, meaning one part tea tree oil to ten parts carrier oil.",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 297
+        },
+        {
+          "sample_id": "778164c6",
+          "question_type": "single-session-assistant",
+          "question": "I was looking back at our previous conversation about Caribbean dishes and I was wondering, what was",
+          "answer": "Grilled Snapper with Mango Salsa",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 339
+        },
+        {
+          "sample_id": "e47becba",
+          "question_type": "single-session-user",
+          "question": "What degree did I graduate with?",
+          "answer": "Business Administration",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 66
+        },
+        {
+          "sample_id": "118b2229",
+          "question_type": "single-session-user",
+          "question": "How long is my daily commute to work?",
+          "answer": "45 minutes each way",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 61
+        },
+        {
+          "sample_id": "51a45a95",
+          "question_type": "single-session-user",
+          "question": "Where did I redeem a $5 coupon on coffee creamer?",
+          "answer": "Target",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 144
+        },
+        {
+          "sample_id": "58bf7951",
+          "question_type": "single-session-user",
+          "question": "What play did I attend at the local community theater?",
+          "answer": "The Glass Menagerie",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 684
+        },
+        {
+          "sample_id": "1e043500",
+          "question_type": "single-session-user",
+          "question": "What is the name of the playlist I created on Spotify?",
+          "answer": "Summer Vibes",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 36
+        },
+        {
+          "sample_id": "c5e8278d",
+          "question_type": "single-session-user",
+          "question": "What was my last name before I changed it?",
+          "answer": "Johnson",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 279
+        },
+        {
+          "sample_id": "6ade9755",
+          "question_type": "single-session-user",
+          "question": "Where do I take yoga classes?",
+          "answer": "Serenity Yoga",
+          "keyword_score": 1.0,
+          "llm_score": 0.5,
+          "tokens": 580
+        },
+        {
+          "sample_id": "6f9b354f",
+          "question_type": "single-session-user",
+          "question": "What color did I repaint my bedroom walls?",
+          "answer": "a lighter shade of gray",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 549
+        },
+        {
+          "sample_id": "58ef2f1c",
+          "question_type": "single-session-user",
+          "question": "When did I volunteer at the local animal shelter's fundraising dinner?",
+          "answer": "February 14th",
+          "keyword_score": 1.0,
+          "llm_score": 0.0,
+          "tokens": 691
+        },
+        {
+          "sample_id": "f8c5f88b",
+          "question_type": "single-session-user",
+          "question": "Where did I buy my new tennis racket from?",
+          "answer": "the sports store downtown",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 332
+        },
+        {
+          "sample_id": "5d3d2817",
+          "question_type": "single-session-user",
+          "question": "What was my previous occupation?",
+          "answer": "Marketing specialist at a small startup",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 71
+        },
+        {
+          "sample_id": "7527f7e2",
+          "question_type": "single-session-user",
+          "question": "How much did I spend on a designer handbag?",
+          "answer": "$800",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 428
+        },
+        {
+          "sample_id": "c960da58",
+          "question_type": "single-session-user",
+          "question": "How many playlists do I have on Spotify?",
+          "answer": "20",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 543
+        },
+        {
+          "sample_id": "3b6f954b",
+          "question_type": "single-session-user",
+          "question": "Where did I attend for my study abroad program?",
+          "answer": "University of Melbourne in Australia",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 61
+        },
+        {
+          "sample_id": "726462e0",
+          "question_type": "single-session-user",
+          "question": "What was the discount I got on my first purchase from the new clothing brand?",
+          "answer": "10%",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 120
+        },
+        {
+          "sample_id": "94f70d80",
+          "question_type": "single-session-user",
+          "question": "How long did it take me to assemble the IKEA bookshelf?",
+          "answer": "4 hours",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 129
+        },
+        {
+          "sample_id": "66f24dbb",
+          "question_type": "single-session-user",
+          "question": "What did I buy for my sister's birthday gift?",
+          "answer": "a yellow dress",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 252
+        },
+        {
+          "sample_id": "ad7109d1",
+          "question_type": "single-session-user",
+          "question": "What speed is my new internet plan?",
+          "answer": "500 Mbps",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 63
+        },
+        {
+          "sample_id": "af8d2e46",
+          "question_type": "single-session-user",
+          "question": "How many shirts did I pack for my 5-day trip to Costa Rica?",
+          "answer": "7",
+          "keyword_score": 1.0,
+          "llm_score": 0.0,
+          "tokens": 72
+        },
+        {
+          "sample_id": "dccbc061",
+          "question_type": "single-session-user",
+          "question": "What was my previous stance on spirituality?",
+          "answer": "A staunch atheist",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 3
+        },
+        {
+          "sample_id": "c8c3f81d",
+          "question_type": "single-session-user",
+          "question": "What brand are my favorite running shoes?",
+          "answer": "Nike",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 132
+        },
+        {
+          "sample_id": "8ebdbe50",
+          "question_type": "single-session-user",
+          "question": "What certification did I complete last month?",
+          "answer": "Data Science",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 301
+        },
+        {
+          "sample_id": "6b168ec8",
+          "question_type": "single-session-user",
+          "question": "How many bikes do I own?",
+          "answer": "three",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 42
+        },
+        {
+          "sample_id": "75499fd8",
+          "question_type": "single-session-user",
+          "question": "What breed is my dog?",
+          "answer": "Golden Retriever",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 267
+        },
+        {
+          "sample_id": "21436231",
+          "question_type": "single-session-user",
+          "question": "How many largemouth bass did I catch on my fishing trip to Lake Michigan?",
+          "answer": "12",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1144
+        },
+        {
+          "sample_id": "95bcc1c8",
+          "question_type": "single-session-user",
+          "question": "How many amateur comedians did I watch perform at the open mic night?",
+          "answer": "10",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 133
+        },
+        {
+          "sample_id": "0862e8bf",
+          "question_type": "single-session-user",
+          "question": "What is the name of my cat?",
+          "answer": "Luna",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 718
+        },
+        {
+          "sample_id": "853b0a1d",
+          "question_type": "single-session-user",
+          "question": "How old was I when my grandma gave me the silver necklace?",
+          "answer": "18",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 164
+        },
+        {
+          "sample_id": "a06e4cfe",
+          "question_type": "single-session-user",
+          "question": "What is my preferred gin-to-vermouth ratio for a classic gin martini?",
+          "answer": "3:1",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 3
+        },
+        {
+          "sample_id": "37d43f65",
+          "question_type": "single-session-user",
+          "question": "How much RAM did I upgrade my laptop to?",
+          "answer": "16GB",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 744
+        },
+        {
+          "sample_id": "b86304ba",
+          "question_type": "single-session-user",
+          "question": "How much is the painting of a sunset worth in terms of the amount I paid for it?",
+          "answer": "The painting is worth triple what I paid for it.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 3
+        },
+        {
+          "sample_id": "d52b4f67",
+          "question_type": "single-session-user",
+          "question": "Where did I attend my cousin's wedding?",
+          "answer": "The Grand Ballroom",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 95
+        },
+        {
+          "sample_id": "25e5aa4f",
+          "question_type": "single-session-user",
+          "question": "Where did I complete my Bachelor's degree in Computer Science?",
+          "answer": "University of California, Los Angeles (UCLA)",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1120
+        },
+        {
+          "sample_id": "caf9ead2",
+          "question_type": "single-session-user",
+          "question": "How long did it take to move to the new apartment?",
+          "answer": "5 hours",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 144
+        },
+        {
+          "sample_id": "8550ddae",
+          "question_type": "single-session-user",
+          "question": "What type of cocktail recipe did I try last weekend?",
+          "answer": "lavender gin fizz",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 878
+        },
+        {
+          "sample_id": "60d45044",
+          "question_type": "single-session-user",
+          "question": "What type of rice is my favorite?",
+          "answer": "Japanese short-grain rice",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 57
+        },
+        {
+          "sample_id": "3f1e9474",
+          "question_type": "single-session-user",
+          "question": "Who did I have a conversation with about destiny?",
+          "answer": "Sarah",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 166
+        },
+        {
+          "sample_id": "86b68151",
+          "question_type": "single-session-user",
+          "question": "Where did I buy my new bookshelf from?",
+          "answer": "IKEA",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 90
+        },
+        {
+          "sample_id": "577d4d32",
+          "question_type": "single-session-user",
+          "question": "What time do I stop checking work emails and messages?",
+          "answer": "7 pm",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 788
+        },
+        {
+          "sample_id": "ec81a493",
+          "question_type": "single-session-user",
+          "question": "How many copies of my favorite artist's debut album were released worldwide?",
+          "answer": "500",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 33
+        },
+        {
+          "sample_id": "15745da0",
+          "question_type": "single-session-user",
+          "question": "How long have I been collecting vintage cameras?",
+          "answer": "three months",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 57
+        },
+        {
+          "sample_id": "e01b8e2f",
+          "question_type": "single-session-user",
+          "question": "Where did I go on a week-long trip with my family?",
+          "answer": "Hawaii",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 945
+        },
+        {
+          "sample_id": "bc8a6e93",
+          "question_type": "single-session-user",
+          "question": "What did I bake for my niece's birthday party?",
+          "answer": "a lemon blueberry cake",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 354
+        },
+        {
+          "sample_id": "ccb36322",
+          "question_type": "single-session-user",
+          "question": "What is the name of the music streaming service have I been using lately?",
+          "answer": "Spotify",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 84
+        },
+        {
+          "sample_id": "001be529",
+          "question_type": "single-session-user",
+          "question": "How long did I wait for the decision on my asylum application?",
+          "answer": "over a year",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 3
+        },
+        {
+          "sample_id": "b320f3f8",
+          "question_type": "single-session-user",
+          "question": "What type of action figure did I buy from a thrift store?",
+          "answer": "a blue Snaggletooth",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 409
+        },
+        {
+          "sample_id": "19b5f2b3",
+          "question_type": "single-session-user",
+          "question": "How long was I in Japan for?",
+          "answer": "two weeks",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 145
+        },
+        {
+          "sample_id": "4fd1909e",
+          "question_type": "single-session-user",
+          "question": "Where did I attend the Imagine Dragons concert?",
+          "answer": "Xfinity Center",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 354
+        },
+        {
+          "sample_id": "545bd2b5",
+          "question_type": "single-session-user",
+          "question": "How much screen time have I been averaging on Instagram per day?",
+          "answer": "2 hours",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 129
+        },
+        {
+          "sample_id": "8a137a7f",
+          "question_type": "single-session-user",
+          "question": "What type of bulb did I replace in my bedside lamp?",
+          "answer": "Philips LED bulb",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 147
+        },
+        {
+          "sample_id": "76d63226",
+          "question_type": "single-session-user",
+          "question": "What size is my new Samsung TV?",
+          "answer": "55-inch",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 336
+        },
+        {
+          "sample_id": "86f00804",
+          "question_type": "single-session-user",
+          "question": "What book am I currently reading?",
+          "answer": "The Seven Husbands of Evelyn Hugo",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 553
+        },
+        {
+          "sample_id": "8e9d538c",
+          "question_type": "single-session-user",
+          "question": "How many skeins of worsted weight yarn did I find in my stash?",
+          "answer": "17",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 112
+        },
+        {
+          "sample_id": "311778f1",
+          "question_type": "single-session-user",
+          "question": "How many hours did I spend watching documentaries on Netflix last month?",
+          "answer": "10",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 52
+        },
+        {
+          "sample_id": "c19f7a0b",
+          "question_type": "single-session-user",
+          "question": "What time do I usually get home from work on weeknights?",
+          "answer": "6:30 pm",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 396
+        },
+        {
+          "sample_id": "4100d0a0",
+          "question_type": "single-session-user",
+          "question": "What is my ethnicity?",
+          "answer": "A mix of Irish and Italian",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 35
+        },
+        {
+          "sample_id": "29f2956b",
+          "question_type": "single-session-user",
+          "question": "How much time do I dedicate to practicing guitar every day?",
+          "answer": "30 minutes",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 347
+        },
+        {
+          "sample_id": "1faac195",
+          "question_type": "single-session-user",
+          "question": "Where does my sister Emily live?",
+          "answer": "Denver",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 663
+        },
+        {
+          "sample_id": "faba32e5",
+          "question_type": "single-session-user",
+          "question": "How long did Alex marinate the BBQ ribs in special sauce?",
+          "answer": "24 hours",
+          "keyword_score": 1.0,
+          "llm_score": 0.0,
+          "tokens": 993
+        },
+        {
+          "sample_id": "f4f1d8a4",
+          "question_type": "single-session-user",
+          "question": "Who gave me a new stand mixer as a birthday gift?",
+          "answer": "my sister",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 728
+        },
+        {
+          "sample_id": "c14c00dd",
+          "question_type": "single-session-user",
+          "question": "What brand of shampoo do I currently use?",
+          "answer": "Trader Joe's",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 3
+        },
+        {
+          "sample_id": "36580ce8",
+          "question_type": "single-session-user",
+          "question": "What health issue did I initially think was just a cold?",
+          "answer": "bronchitis",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 679
+        },
+        {
+          "sample_id": "3d86fd0a",
+          "question_type": "single-session-user",
+          "question": "Where did I meet Sophia?",
+          "answer": "a coffee shop in the city",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 57
+        },
+        {
+          "sample_id": "a82c026e",
+          "question_type": "single-session-user",
+          "question": "What game did I finally beat last weekend?",
+          "answer": "Dark Souls 3 DLC",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 300
+        },
+        {
+          "sample_id": "0862e8bf_abs",
+          "question_type": "single-session-user",
+          "question": "What is the name of my hamster?",
+          "answer": "You did not mention this information. You mentioned your cat Luna but not your hamster.",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 3
+        },
+        {
+          "sample_id": "15745da0_abs",
+          "question_type": "single-session-user",
+          "question": "How long have I been collecting vintage films?",
+          "answer": "You did not mention this information. You mentioned collecting vintage cameras but not vintage films.",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 76
+        },
+        {
+          "sample_id": "bc8a6e93_abs",
+          "question_type": "single-session-user",
+          "question": "What did I bake for my uncle's birthday party?",
+          "answer": "You did not mention this information. You mentioned baking for your niece's birthday party but not your uncle's",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 443
+        },
+        {
+          "sample_id": "19b5f2b3_abs",
+          "question_type": "single-session-user",
+          "question": "How long was I in Korea for?",
+          "answer": "You did not mention this information. You mentioned staying in Japan, but not in Korea.",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 411
+        },
+        {
+          "sample_id": "29f2956b_abs",
+          "question_type": "single-session-user",
+          "question": "How much time do I dedicate to practicing violin every day?",
+          "answer": "You did not mention this information. You mentioned practing guitar everyday, but not violin.",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 361
+        },
+        {
+          "sample_id": "f4f1d8a4_abs",
+          "question_type": "single-session-user",
+          "question": "What did my dad gave me as a birthday gift?",
+          "answer": "You did not mention this information. You mentioned receiving a birthday gift from your sister, but not your dad.",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 3
+        },
+        {
+          "sample_id": "gpt4_59149c77",
+          "question_type": "temporal-reasoning",
+          "question": "How many days passed between my visit to the Museum of Modern Art (MoMA) and the 'Ancient Civilizati",
+          "answer": "7 days. 8 days (including the last day) is also acceptable.",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1647
+        },
+        {
+          "sample_id": "gpt4_f49edff3",
+          "question_type": "temporal-reasoning",
+          "question": "Which three events happened in the order from first to last: the day I helped my friend prepare the ",
+          "answer": "First, I helped my friend prepare the nursery, then I helped my cousin pick out stuff for her baby shower, and lastly, I ordered a customized phone case for my friend's birthday.",
+          "keyword_score": 0.9047619047619048,
+          "llm_score": 0.0,
+          "tokens": 968
+        },
+        {
+          "sample_id": "71017276",
+          "question_type": "temporal-reasoning",
+          "question": "How many weeks ago did I meet up with my aunt and receive the crystal chandelier?",
+          "answer": 4,
+          "keyword_score": 1.0,
+          "llm_score": 0.0,
+          "tokens": 198
+        },
+        {
+          "sample_id": "b46e15ed",
+          "question_type": "temporal-reasoning",
+          "question": "How many months have passed since I participated in two charity events in a row, on consecutive days",
+          "answer": 2,
+          "keyword_score": 1.0,
+          "llm_score": 0.0,
+          "tokens": 1510
+        },
+        {
+          "sample_id": "gpt4_fa19884c",
+          "question_type": "temporal-reasoning",
+          "question": "How many days passed between the day I started playing along to my favorite songs on my old keyboard",
+          "answer": "6 days. 7 days (including the last day) is also acceptable.",
+          "keyword_score": 0.8333333333333334,
+          "llm_score": 1.0,
+          "tokens": 1569
+        },
+        {
+          "sample_id": "0bc8ad92",
+          "question_type": "temporal-reasoning",
+          "question": "How many months have passed since I last visited a museum with a friend?",
+          "answer": 5,
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 1545
+        },
+        {
+          "sample_id": "af082822",
+          "question_type": "temporal-reasoning",
+          "question": "How many weeks ago did I attend the friends and family sale at Nordstrom?",
+          "answer": 2,
+          "keyword_score": 1.0,
+          "llm_score": 0.5,
+          "tokens": 306
+        },
+        {
+          "sample_id": "gpt4_4929293a",
+          "question_type": "temporal-reasoning",
+          "question": "Which event happened first, my cousin's wedding or Michael's engagement party?",
+          "answer": "Michael's engagement party",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1139
+        },
+        {
+          "sample_id": "gpt4_b5700ca9",
+          "question_type": "temporal-reasoning",
+          "question": "How many days ago did I attend the Maundy Thursday service at the Episcopal Church?",
+          "answer": "4 days.",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 227
+        },
+        {
+          "sample_id": "9a707b81",
+          "question_type": "temporal-reasoning",
+          "question": "How many days ago did I attend a baking class at a local culinary school when I made my friend's bir",
+          "answer": "21 days. 22 days (including the last day) is also acceptable.",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 867
+        },
+        {
+          "sample_id": "gpt4_1d4ab0c9",
+          "question_type": "temporal-reasoning",
+          "question": "How many days passed between the day I started watering my herb garden and the day I harvested my fi",
+          "answer": "24 days. 25 days (including the last day) is also acceptable.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 207
+        },
+        {
+          "sample_id": "gpt4_e072b769",
+          "question_type": "temporal-reasoning",
+          "question": "How many weeks ago did I start using the cashback app 'Ibotta'?",
+          "answer": "3 weeks ago",
+          "keyword_score": 1.0,
+          "llm_score": 0.0,
+          "tokens": 127
+        },
+        {
+          "sample_id": "0db4c65d",
+          "question_type": "temporal-reasoning",
+          "question": "How many days had passed since I finished reading 'The Seven Husbands of Evelyn Hugo' when I attende",
+          "answer": "18 days. 19 days (including the last day) is also acceptable.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 1729
+        },
+        {
+          "sample_id": "gpt4_1d80365e",
+          "question_type": "temporal-reasoning",
+          "question": "How many days did I spend on my solo camping trip to Yosemite National Park?",
+          "answer": "2 days. 3 days (including the last day) is also acceptable.",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1565
+        },
+        {
+          "sample_id": "gpt4_7f6b06db",
+          "question_type": "temporal-reasoning",
+          "question": "What is the order of the three trips I took in the past three months, from earliest to latest?",
+          "answer": "I went on a day hike to Muir Woods National Monument with my family, then I went on a road trip with friends to Big Sur and Monterey, and finally I started my solo camping trip to Yosemite National Park.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 1473
+        },
+        {
+          "sample_id": "gpt4_6dc9b45b",
+          "question_type": "temporal-reasoning",
+          "question": "How many months ago did I attend the Seattle International Film Festival?",
+          "answer": "4 months ago",
+          "keyword_score": 1.0,
+          "llm_score": 0.0,
+          "tokens": 384
+        },
+        {
+          "sample_id": "gpt4_8279ba02",
+          "question_type": "temporal-reasoning",
+          "question": "How many days ago did I buy a smoker?",
+          "answer": "10 days ago. 11 days (including the last day) is also acceptable.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 3
+        },
+        {
+          "sample_id": "gpt4_18c2b244",
+          "question_type": "temporal-reasoning",
+          "question": "What is the order of the three events: 'I signed up for the rewards program at ShopRite', 'I used a ",
+          "answer": "First, I used a Buy One Get One Free coupon on Luvs diapers at Walmart. Then, I redeemed $12 cashback for a $10 Amazon gift card from Ibotta. Finally, I signed up for the rewards program at ShopRite.",
+          "keyword_score": 0.9130434782608695,
+          "llm_score": 1.0,
+          "tokens": 1448
+        },
+        {
+          "sample_id": "gpt4_a1b77f9c",
+          "question_type": "temporal-reasoning",
+          "question": "How many weeks in total do I spent on reading 'The Nightingale' and listening to 'Sapiens: A Brief H",
+          "answer": "2 weeks for 'The Nightingale', 4 weeks for 'Sapiens: A Brief History of Humankind', and 2 weeks for 'The Power', so a total of 8 weeks.",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1850
+        },
+        {
+          "sample_id": "gpt4_1916e0ea",
+          "question_type": "temporal-reasoning",
+          "question": "How many days passed between the day I cancelled my FarmFresh subscription and the day I did my onli",
+          "answer": "54 days. 55 days (including the last day) is also acceptable.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 398
+        },
+        {
+          "sample_id": "gpt4_7a0daae1",
+          "question_type": "temporal-reasoning",
+          "question": "How many weeks passed between the day I bought my new tennis racket and the day I received it?",
+          "answer": "1 week",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 121
+        },
+        {
+          "sample_id": "gpt4_468eb063",
+          "question_type": "temporal-reasoning",
+          "question": "How many days ago did I meet Emma?",
+          "answer": "9 days ago. 10 days (including the last day) is also acceptable.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 250
+        },
+        {
+          "sample_id": "gpt4_7abb270c",
+          "question_type": "temporal-reasoning",
+          "question": "What is the order of the six museums I visited from earliest to latest?",
+          "answer": "Science Museum, Museum of Contemporary Art, Metropolitan Museum of Art, Museum of History, Modern Art Museum, Natural History Museum",
+          "keyword_score": 0.9375,
+          "llm_score": 0.0,
+          "tokens": 1557
+        },
+        {
+          "sample_id": "gpt4_1e4a8aeb",
+          "question_type": "temporal-reasoning",
+          "question": "How many days passed between the day I attended the gardening workshop and the day I planted the tom",
+          "answer": "6 days. 7 days (including the last day) is also acceptable.",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1238
+        },
+        {
+          "sample_id": "gpt4_4fc4f797",
+          "question_type": "temporal-reasoning",
+          "question": "How many days passed between the day I received feedback about my car's suspension and the day I tes",
+          "answer": "38 days. 39 days (including the last day) is also acceptable.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 511
+        },
+        {
+          "sample_id": "4dfccbf7",
+          "question_type": "temporal-reasoning",
+          "question": "How many days had passed since I started taking ukulele lessons when I decided to take my acoustic g",
+          "answer": "24 days. 25 days (including the last day) is also acceptable.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 955
+        },
+        {
+          "sample_id": "gpt4_61e13b3c",
+          "question_type": "temporal-reasoning",
+          "question": "How many weeks passed between the time I sold homemade baked goods at the Farmers' Market for the la",
+          "answer": "3 weeks",
+          "keyword_score": 1.0,
+          "llm_score": 0.0,
+          "tokens": 387
+        },
+        {
+          "sample_id": "gpt4_45189cb4",
+          "question_type": "temporal-reasoning",
+          "question": "What is the order of the sports events I watched in January?",
+          "answer": "First, I attended a NBA game at the Staples Center, then I watched the College Football National Championship game, and finally, I watched the NFL playoffs.",
+          "keyword_score": 0.8235294117647058,
+          "llm_score": 1.0,
+          "tokens": 1445
+        },
+        {
+          "sample_id": "2ebe6c90",
+          "question_type": "temporal-reasoning",
+          "question": "How many days did it take me to finish 'The Nightingale' by Kristin Hannah?",
+          "answer": "21 days. 22 days (including the last day) is also acceptable.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 457
+        },
+        {
+          "sample_id": "gpt4_e061b84f",
+          "question_type": "temporal-reasoning",
+          "question": "What is the order of the three sports events I participated in during the past month, from earliest ",
+          "answer": "I first completed the Spring Sprint Triathlon, then took part in the Midsummer 5K Run, and finally participated in the company's annual charity soccer tournament.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 1389
+        },
+        {
+          "sample_id": "370a8ff4",
+          "question_type": "temporal-reasoning",
+          "question": "How many weeks had passed since I recovered from the flu when I went on my 10th jog outdoors?",
+          "answer": 15,
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 352
+        },
+        {
+          "sample_id": "gpt4_d6585ce8",
+          "question_type": "temporal-reasoning",
+          "question": "What is the order of the concerts and musical events I attended in the past two months, starting fro",
+          "answer": "The order of the concerts I attended is: 1. Billie Eilish concert at the Wells Fargo Center in Philly, 2. Free outdoor concert series in the park, 3. Music festival in Brooklyn, 4. Jazz night at a local bar, 5. Queen + Adam Lambert concert at the Prudential Center in Newark, NJ.",
+          "keyword_score": 0.7586206896551724,
+          "llm_score": 0.0,
+          "tokens": 1700
+        },
+        {
+          "sample_id": "gpt4_4ef30696",
+          "question_type": "temporal-reasoning",
+          "question": "How many days passed between the day I finished reading 'The Nightingale' and the day I started read",
+          "answer": "1 day. 2 days (including the last day) is also acceptable.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 913
+        },
+        {
+          "sample_id": "gpt4_ec93e27f",
+          "question_type": "temporal-reasoning",
+          "question": "Which mode of transport did I use most recently, a bus or a train?",
+          "answer": "train",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1433
+        },
+        {
+          "sample_id": "6e984301",
+          "question_type": "temporal-reasoning",
+          "question": "How many weeks have I been taking sculpting classes when I invested in my own set of sculpting tools",
+          "answer": 3,
+          "keyword_score": 1.0,
+          "llm_score": 0.5,
+          "tokens": 512
+        },
+        {
+          "sample_id": "8077ef71",
+          "question_type": "temporal-reasoning",
+          "question": "How many days ago did I attend a networking event?",
+          "answer": "26 days. 27 days (including the last day) is also acceptable.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 79
+        },
+        {
+          "sample_id": "gpt4_f420262c",
+          "question_type": "temporal-reasoning",
+          "question": "What is the order of airlines I flew with from earliest to latest before today?",
+          "answer": "JetBlue, Delta, United, American Airlines",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1494
+        },
+        {
+          "sample_id": "gpt4_8e165409",
+          "question_type": "temporal-reasoning",
+          "question": "How many days passed between the day I repotted the previous spider plant and the day I gave my neig",
+          "answer": "14 days. 15 days (including the last day) is also acceptable.",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1271
+        },
+        {
+          "sample_id": "gpt4_74aed68e",
+          "question_type": "temporal-reasoning",
+          "question": "How many days passed between the day I replaced my spark plugs and the day I participated in the Tur",
+          "answer": "29 days. 30 days (including the last day) is also acceptable.",
+          "keyword_score": 0.8333333333333334,
+          "llm_score": 1.0,
+          "tokens": 1317
+        },
+        {
+          "sample_id": "bcbe585f",
+          "question_type": "temporal-reasoning",
+          "question": "How many weeks ago did I attend a bird watching workshop at the local Audubon society?",
+          "answer": 4,
+          "keyword_score": 1.0,
+          "llm_score": 0.0,
+          "tokens": 1092
+        },
+        {
+          "sample_id": "gpt4_21adecb5",
+          "question_type": "temporal-reasoning",
+          "question": "How many months passed between the completion of my undergraduate degree and the submission of my ma",
+          "answer": "6 months",
+          "keyword_score": 1.0,
+          "llm_score": 0.0,
+          "tokens": 313
+        },
+        {
+          "sample_id": "5e1b23de",
+          "question_type": "temporal-reasoning",
+          "question": "How many months ago did I attend the photography workshop?",
+          "answer": 3,
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 890
+        },
+        {
+          "sample_id": "gpt4_98f46fc6",
+          "question_type": "temporal-reasoning",
+          "question": "Which event did I participate in first, the charity gala or the charity bake sale?",
+          "answer": "I participated in the charity bake sale first.",
+          "keyword_score": 1.0,
+          "llm_score": 0.0,
+          "tokens": 251
+        },
+        {
+          "sample_id": "gpt4_af6db32f",
+          "question_type": "temporal-reasoning",
+          "question": "How many days ago did I watch the Super Bowl?",
+          "answer": "17 days ago. 18 days (including the last day) is also acceptable.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 3
+        },
+        {
+          "sample_id": "eac54adc",
+          "question_type": "temporal-reasoning",
+          "question": "How many days ago did I launch my website when I signed a contract with my first client?",
+          "answer": "19 days ago. 20 days (including the last day) is also acceptable.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 168
+        },
+        {
+          "sample_id": "gpt4_7ddcf75f",
+          "question_type": "temporal-reasoning",
+          "question": "How many days ago did I go on a whitewater rafting trip in the Oregon mountains?",
+          "answer": "3 days ago. 4 days (including the last day) is also acceptable.",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 416
+        },
+        {
+          "sample_id": "gpt4_a2d1d1f6",
+          "question_type": "temporal-reasoning",
+          "question": "How many days ago did I harvest my first batch of fresh herbs from the herb garden kit?",
+          "answer": "3 days ago. 4 days (including the last day) is also acceptable.",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 978
+        },
+        {
+          "sample_id": "gpt4_85da3956",
+          "question_type": "temporal-reasoning",
+          "question": "How many weeks ago did I attend the 'Summer Nights' festival at Universal Studios Hollywood?",
+          "answer": "3 weeks ago",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 882
+        },
+        {
+          "sample_id": "gpt4_b0863698",
+          "question_type": "temporal-reasoning",
+          "question": "How many days ago did I participate in the 5K charity run?",
+          "answer": "7 days ago. 8 days (including the last day) is also acceptable.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 306
+        },
+        {
+          "sample_id": "gpt4_68e94287",
+          "question_type": "temporal-reasoning",
+          "question": "Which event happened first, my participation in the #PlankChallenge or my post about vegan chili rec",
+          "answer": "You posted a recipe for vegan chili on Instagram using the hashtag #FoodieAdventures first.",
+          "keyword_score": 0.7,
+          "llm_score": 1.0,
+          "tokens": 692
+        },
+        {
+          "sample_id": "gpt4_e414231e",
+          "question_type": "temporal-reasoning",
+          "question": "How many days passed between the day I fixed my mountain bike and the day I decided to upgrade my ro",
+          "answer": "4 days. 5 days (including the last day) is also acceptable.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 541
+        },
+        {
+          "sample_id": "gpt4_7ca326fa",
+          "question_type": "temporal-reasoning",
+          "question": "Who graduated first, second and third among Emma, Rachel and Alex?",
+          "answer": "Emma graduated first, followed by Rachel and then Alex.",
+          "keyword_score": 0.7142857142857143,
+          "llm_score": 1.0,
+          "tokens": 1037
+        },
+        {
+          "sample_id": "gpt4_7bc6cf22",
+          "question_type": "temporal-reasoning",
+          "question": "How many days ago did I read the March 15th issue of The New Yorker?",
+          "answer": "12 days ago. 13 days (including the last day) is also acceptable.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 3
+        },
+        {
+          "sample_id": "2ebe6c92",
+          "question_type": "temporal-reasoning",
+          "question": "Which book did I finish a week ago?",
+          "answer": "'The Nightingale' by Kristin Hannah",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 778
+        },
+        {
+          "sample_id": "gpt4_e061b84g",
+          "question_type": "temporal-reasoning",
+          "question": "I mentioned participating in a sports event two weeks ago. What was the event?",
+          "answer": "The company's annual charity soccer tournament.",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1474
+        },
+        {
+          "sample_id": "71017277",
+          "question_type": "temporal-reasoning",
+          "question": "I received a piece of jewelry last Saturday from whom?",
+          "answer": "my aunt",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 145
+        },
+        {
+          "sample_id": "b46e15ee",
+          "question_type": "temporal-reasoning",
+          "question": "What charity event did I participate in a month ago?",
+          "answer": "the 'Walk for Hunger' charity event",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1490
+        },
+        {
+          "sample_id": "gpt4_d6585ce9",
+          "question_type": "temporal-reasoning",
+          "question": "Who did I go with to the music event last Saturday?",
+          "answer": "my parents",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1482
+        },
+        {
+          "sample_id": "gpt4_1e4a8aec",
+          "question_type": "temporal-reasoning",
+          "question": "What gardening-related activity did I do two weeks ago?",
+          "answer": "planting 12 new tomato saplings",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 3
+        },
+        {
+          "sample_id": "gpt4_f420262d",
+          "question_type": "temporal-reasoning",
+          "question": "What was the airline that I flied with on Valentine's day?",
+          "answer": "American Airlines",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1433
+        },
+        {
+          "sample_id": "gpt4_59149c78",
+          "question_type": "temporal-reasoning",
+          "question": "I mentioned that I participated in an art-related event two weeks ago. Where was that event held at?",
+          "answer": "The Metropolitan Museum of Art.",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1516
+        },
+        {
+          "sample_id": "gpt4_e414231f",
+          "question_type": "temporal-reasoning",
+          "question": "Which bike did I fixed or serviced the past weekend?",
+          "answer": "road bike",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 847
+        },
+        {
+          "sample_id": "gpt4_4929293b",
+          "question_type": "temporal-reasoning",
+          "question": "What was the the life event of one of my relatives that I participated in a week ago?",
+          "answer": "my cousin's wedding",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1449
+        },
+        {
+          "sample_id": "gpt4_468eb064",
+          "question_type": "temporal-reasoning",
+          "question": "Who did I meet with during the lunch last Tuesday?",
+          "answer": "Emma",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 92
+        },
+        {
+          "sample_id": "gpt4_fa19884d",
+          "question_type": "temporal-reasoning",
+          "question": "What is the artist that I started to listen to last Friday?",
+          "answer": "a bluegrass band that features a banjo player",
+          "keyword_score": 1.0,
+          "llm_score": 0.5,
+          "tokens": 1352
+        },
+        {
+          "sample_id": "9a707b82",
+          "question_type": "temporal-reasoning",
+          "question": "I mentioned cooking something for my friend a couple of days ago. What was it?",
+          "answer": "a chocolate cake",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 263
+        },
+        {
+          "sample_id": "eac54add",
+          "question_type": "temporal-reasoning",
+          "question": "What was the significant buisiness milestone I mentioned four weeks ago?",
+          "answer": "I signed a contract with my first client.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 36
+        },
+        {
+          "sample_id": "4dfccbf8",
+          "question_type": "temporal-reasoning",
+          "question": "What did I do with Rachel on the Wednesday two months ago?",
+          "answer": "I started taking ukulele lessons with Rachel.",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 273
+        },
+        {
+          "sample_id": "0bc8ad93",
+          "question_type": "temporal-reasoning",
+          "question": "I mentioned visiting a museum two months ago. Did I visit with a friend or not?",
+          "answer": "No, you did not visit with a friend.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 1507
+        },
+        {
+          "sample_id": "6e984302",
+          "question_type": "temporal-reasoning",
+          "question": "I mentioned an investment for a competition four weeks ago? What did I buy?",
+          "answer": "I got my own set of sculpting tools.",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 744
+        },
+        {
+          "sample_id": "gpt4_8279ba03",
+          "question_type": "temporal-reasoning",
+          "question": "What kitchen appliance did I buy 10 days ago?",
+          "answer": "a smoker",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 3
+        },
+        {
+          "sample_id": "gpt4_b5700ca0",
+          "question_type": "temporal-reasoning",
+          "question": "Where did I attend the religious activity last week?",
+          "answer": "the Episcopal Church",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 249
+        },
+        {
+          "sample_id": "gpt4_68e94288",
+          "question_type": "temporal-reasoning",
+          "question": "What was the social media activity I participated 5 days ago?",
+          "answer": "You participated in a social media challenge called #PlankChallenge.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 297
+        },
+        {
+          "sample_id": "d3ab962e",
+          "question_type": "multi-session",
+          "question": "What is the total distance of the hikes I did on two consecutive weekends?",
+          "answer": "8 miles",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 379
+        },
+        {
+          "sample_id": "2311e44b",
+          "question_type": "multi-session",
+          "question": "How many pages do I have left to read in 'The Nightingale'?",
+          "answer": "190",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 315
+        },
+        {
+          "sample_id": "cc06de0d",
+          "question_type": "multi-session",
+          "question": "For my daily commute, how much more expensive was the taxi ride compared to the train fare?",
+          "answer": "$6",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 375
+        },
+        {
+          "sample_id": "a11281a2",
+          "question_type": "multi-session",
+          "question": "What was the approximate increase in Instagram followers I experienced in two weeks?",
+          "answer": "100",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1643
+        },
+        {
+          "sample_id": "4f54b7c9",
+          "question_type": "multi-session",
+          "question": "How many antique items did I inherit or acquire from my family members?",
+          "answer": "5",
+          "keyword_score": 1.0,
+          "llm_score": 0.0,
+          "tokens": 1049
+        },
+        {
+          "sample_id": "85fa3a3f",
+          "question_type": "multi-session",
+          "question": "What is the total cost of the new food bowl, measuring cup, dental chews, and flea and tick collar I",
+          "answer": "$50",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1050
+        },
+        {
+          "sample_id": "9aaed6a3",
+          "question_type": "multi-session",
+          "question": "How much cashback did I earn at SaveMart last Thursday?",
+          "answer": "$0.75",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 624
+        },
+        {
+          "sample_id": "1f2b8d4f",
+          "question_type": "multi-session",
+          "question": "What is the difference in price between my luxury boots and the similar pair found at the budget sto",
+          "answer": "$750",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 774
+        },
+        {
+          "sample_id": "e6041065",
+          "question_type": "multi-session",
+          "question": "What percentage of packed shoes did I wear on my last trip?",
+          "answer": "40%",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 621
+        },
+        {
+          "sample_id": "51c32626",
+          "question_type": "multi-session",
+          "question": "When did I submit my research paper on sentiment analysis?",
+          "answer": "February 1st",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1188
+        },
+        {
+          "sample_id": "d905b33f",
+          "question_type": "multi-session",
+          "question": "What percentage discount did I get on the book from my favorite author?",
+          "answer": "20%",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 271
+        },
+        {
+          "sample_id": "7405e8b1",
+          "question_type": "multi-session",
+          "question": "Did I receive a higher percentage discount on my first order from HelloFresh, compared to my first U",
+          "answer": "Yes.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 859
+        },
+        {
+          "sample_id": "f35224e0",
+          "question_type": "multi-session",
+          "question": "What is the total number of episodes I've listened to from 'How I Built This' and 'My Favorite Murde",
+          "answer": "27",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1227
+        },
+        {
+          "sample_id": "6456829e",
+          "question_type": "multi-session",
+          "question": "How many plants did I initially plant for tomatoes and cucumbers?",
+          "answer": "8",
+          "keyword_score": 1.0,
+          "llm_score": 0.5,
+          "tokens": 844
+        },
+        {
+          "sample_id": "a4996e51",
+          "question_type": "multi-session",
+          "question": "How many hours do I work in a typical week during peak campaign seasons?",
+          "answer": "50",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1258
+        },
+        {
+          "sample_id": "3c1045c8",
+          "question_type": "multi-session",
+          "question": "How much older am I than the average age of employees in my department?",
+          "answer": "2.5 years",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1587
+        },
+        {
+          "sample_id": "60036106",
+          "question_type": "multi-session",
+          "question": "What was the total number of people reached by my Facebook ad campaign and Instagram influencer coll",
+          "answer": "12,000",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 1431
+        },
+        {
+          "sample_id": "681a1674",
+          "question_type": "multi-session",
+          "question": "How many Marvel movies did I re-watch?",
+          "answer": "2",
+          "keyword_score": 1.0,
+          "llm_score": 0.5,
+          "tokens": 1167
+        },
+        {
+          "sample_id": "e25c3b8d",
+          "question_type": "multi-session",
+          "question": "How much did I save on the designer handbag at TK Maxx?",
+          "answer": "$300",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 144
+        },
+        {
+          "sample_id": "4adc0475",
+          "question_type": "multi-session",
+          "question": "What is the total number of goals and assists I have in the recreational indoor soccer league?",
+          "answer": "5",
+          "keyword_score": 1.0,
+          "llm_score": 0.5,
+          "tokens": 756
+        },
+        {
+          "sample_id": "4bc144e2",
+          "question_type": "multi-session",
+          "question": "How much did I spend on car wash and parking ticket?",
+          "answer": "$65",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 412
+        },
+        {
+          "sample_id": "ef66a6e5",
+          "question_type": "multi-session",
+          "question": "How many sports have I played competitively in the past?",
+          "answer": "two",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 225
+        },
+        {
+          "sample_id": "5025383b",
+          "question_type": "multi-session",
+          "question": "What are the two hobbies that led me to join online communities?",
+          "answer": "photography and cooking",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1570
+        },
+        {
+          "sample_id": "a1cc6108",
+          "question_type": "multi-session",
+          "question": "How old was I when Alex was born?",
+          "answer": "11",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1323
+        },
+        {
+          "sample_id": "9ee3ecd6",
+          "question_type": "multi-session",
+          "question": "How many points do I need to earn to redeem a free skincare product at Sephora?",
+          "answer": "100",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 604
+        },
+        {
+          "sample_id": "3fdac837",
+          "question_type": "multi-session",
+          "question": "What is the total number of days I spent in Japan and Chicago?",
+          "answer": "11 days (or 12 days, if April 15th to 22nd is considered as 8 days)",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 889
+        },
+        {
+          "sample_id": "91b15a6e",
+          "question_type": "multi-session",
+          "question": "What is the minimum amount I could get if I sold the vintage diamond necklace and the antique vanity",
+          "answer": "$5,150",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1182
+        },
+        {
+          "sample_id": "27016adc",
+          "question_type": "multi-session",
+          "question": "What percentage of the countryside property's price is the cost of the renovations I plan to do on m",
+          "answer": "10%",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1557
+        },
+        {
+          "sample_id": "720133ac",
+          "question_type": "multi-session",
+          "question": "What is the total cost of Lola's vet visit and flea medication?",
+          "answer": "$75",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1004
+        },
+        {
+          "sample_id": "77eafa52",
+          "question_type": "multi-session",
+          "question": "How much more did I have to pay for the trip after the initial quote?",
+          "answer": "$300",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 714
+        },
+        {
+          "sample_id": "8979f9ec",
+          "question_type": "multi-session",
+          "question": "What is the total number of lunch meals I got from the chicken fajitas and lentil soup?",
+          "answer": "8 meals",
+          "keyword_score": 1.0,
+          "llm_score": 0.5,
+          "tokens": 376
+        },
+        {
+          "sample_id": "0100672e",
+          "question_type": "multi-session",
+          "question": "How much did I spend on each coffee mug for my coworkers?",
+          "answer": "$12",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 789
+        },
+        {
+          "sample_id": "a96c20ee",
+          "question_type": "multi-session",
+          "question": "At which university did I present a poster on my thesis research?",
+          "answer": "Harvard University",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1084
+        },
+        {
+          "sample_id": "92a0aa75",
+          "question_type": "multi-session",
+          "question": "How long have I been working in my current role?",
+          "answer": "1 year and 5 months",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 781
+        },
+        {
+          "sample_id": "3fe836c9",
+          "question_type": "multi-session",
+          "question": "How much more was the pre-approval amount than the final sale price of the house?",
+          "answer": "$25,000",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 1513
+        },
+        {
+          "sample_id": "1c549ce4",
+          "question_type": "multi-session",
+          "question": "What is the total cost of the car cover and detailing spray I purchased?",
+          "answer": "$140",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 879
+        },
+        {
+          "sample_id": "6c49646a",
+          "question_type": "multi-session",
+          "question": "What is the total distance I covered in my four road trips?",
+          "answer": "3,000 miles",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1567
+        },
+        {
+          "sample_id": "1192316e",
+          "question_type": "multi-session",
+          "question": "What is the total time it takes I to get ready and commute to work?",
+          "answer": "an hour and a half",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1621
+        },
+        {
+          "sample_id": "0ea62687",
+          "question_type": "multi-session",
+          "question": "How much more miles per gallon was my car getting a few months ago compared to now?",
+          "answer": "2",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1260
+        },
+        {
+          "sample_id": "67e0d0f2",
+          "question_type": "multi-session",
+          "question": "What is the total number of online courses I've completed?",
+          "answer": "20",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 1119
+        },
+        {
+          "sample_id": "bb7c3b45",
+          "question_type": "multi-session",
+          "question": "How much did I save on the Jimmy Choo heels?",
+          "answer": "$300",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 417
+        },
+        {
+          "sample_id": "ba358f49",
+          "question_type": "multi-session",
+          "question": "How many years will I be when my friend Rachel gets married?",
+          "answer": "33",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1242
+        },
+        {
+          "sample_id": "61f8c8f8",
+          "question_type": "multi-session",
+          "question": "How much faster did I finish the 5K run compared to my previous year's time?",
+          "answer": "10 minutes",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 675
+        },
+        {
+          "sample_id": "60159905",
+          "question_type": "multi-session",
+          "question": "How many dinner parties have I attended in the past month?",
+          "answer": "three",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1130
+        },
+        {
+          "sample_id": "ef9cf60a",
+          "question_type": "multi-session",
+          "question": "How much did I spend on gifts for my sister?",
+          "answer": "$300",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 859
+        },
+        {
+          "sample_id": "73d42213",
+          "question_type": "multi-session",
+          "question": "What time did I reach the clinic on Monday?",
+          "answer": "9:00 AM",
+          "keyword_score": 1.0,
+          "llm_score": 0.5,
+          "tokens": 1005
+        },
+        {
+          "sample_id": "bc149d6b",
+          "question_type": "multi-session",
+          "question": "What is the total weight of the new feed I purchased in the past two months?",
+          "answer": "70 pounds",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 476
+        },
+        {
+          "sample_id": "099778bb",
+          "question_type": "multi-session",
+          "question": "What percentage of leadership positions do women hold in the my company?",
+          "answer": "20%",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1227
+        },
+        {
+          "sample_id": "09ba9854",
+          "question_type": "multi-session",
+          "question": "How much will I save by taking the train from the airport to my hotel instead of a taxi?",
+          "answer": "$50",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1428
+        },
+        {
+          "sample_id": "d6062bb9",
+          "question_type": "multi-session",
+          "question": "What is the total number of views on my most popular videos on YouTube and TikTok?",
+          "answer": "1,998",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 729
+        },
+        {
+          "sample_id": "157a136e",
+          "question_type": "multi-session",
+          "question": "How many years older is my grandma than me?",
+          "answer": "43",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 242
+        },
+        {
+          "sample_id": "c18a7dc8",
+          "question_type": "multi-session",
+          "question": "How many years older am I than when I graduated from college?",
+          "answer": "7",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1665
+        },
+        {
+          "sample_id": "a3332713",
+          "question_type": "multi-session",
+          "question": "What is the total amount I spent on gifts for my coworker and brother?",
+          "answer": "$200",
+          "keyword_score": 1.0,
+          "llm_score": 0.5,
+          "tokens": 724
+        },
+        {
+          "sample_id": "55241a1f",
+          "question_type": "multi-session",
+          "question": "What is the total number of comments on my recent Facebook Live session and my most popular YouTube ",
+          "answer": "33",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 444
+        },
+        {
+          "sample_id": "a08a253f",
+          "question_type": "multi-session",
+          "question": "How many days a week do I attend fitness classes?",
+          "answer": "4 days.",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 928
+        },
+        {
+          "sample_id": "f0e564bc",
+          "question_type": "multi-session",
+          "question": "What is the total amount I spent on the designer handbag and high-end skincare products?",
+          "answer": "$1,300",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1202
+        },
+        {
+          "sample_id": "078150f1",
+          "question_type": "multi-session",
+          "question": "How much more money did I raise than my initial goal in the charity cycling event?",
+          "answer": "$50",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 462
+        },
+        {
+          "sample_id": "8cf4d046",
+          "question_type": "multi-session",
+          "question": "What is the average GPA of my undergraduate and graduate studies?",
+          "answer": "3.83",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 761
+        },
+        {
+          "sample_id": "a346bb18",
+          "question_type": "multi-session",
+          "question": "How many minutes did I exceed my target time by in the marathon?",
+          "answer": "12",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1616
+        },
+        {
+          "sample_id": "37f165cf",
+          "question_type": "multi-session",
+          "question": "What was the page count of the two novels I finished in January and March?",
+          "answer": "856",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1446
+        },
+        {
+          "sample_id": "8e91e7d9",
+          "question_type": "multi-session",
+          "question": "What is the total number of siblings I have?",
+          "answer": "4",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 3
+        },
+        {
+          "sample_id": "87f22b4a",
+          "question_type": "multi-session",
+          "question": "How much have I made from selling eggs this month?",
+          "answer": "$120",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 672
+        },
+        {
+          "sample_id": "e56a43b9",
+          "question_type": "multi-session",
+          "question": "How much discount will I get on my next purchase at FreshMart?",
+          "answer": "$5",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 689
+        },
+        {
+          "sample_id": "efc3f7c2",
+          "question_type": "multi-session",
+          "question": "How much earlier do I wake up on Fridays compared to other weekdays?",
+          "answer": "30 minutes",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 448
+        },
+        {
+          "sample_id": "21d02d0d",
+          "question_type": "multi-session",
+          "question": "How many fun runs did I miss in March due to work commitments?",
+          "answer": "2",
+          "keyword_score": 1.0,
+          "llm_score": 0.5,
+          "tokens": 898
+        },
+        {
+          "sample_id": "2311e44b_abs",
+          "question_type": "multi-session",
+          "question": "How many pages do I have left to read in 'Sapiens'?",
+          "answer": "The information provided is not enough. You did not mention how many paged do you have left to read in 'Sapiens'.",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 540
+        },
+        {
+          "sample_id": "6456829e_abs",
+          "question_type": "multi-session",
+          "question": "How many plants did I initially plant for tomatoes and chili peppers?",
+          "answer": "The information provided is not enough. You mentioned planting 5 plants for tomatoes but you did not mention chili peppers.",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 701
+        },
+        {
+          "sample_id": "e5ba910e_abs",
+          "question_type": "multi-session",
+          "question": "What is the total cost of my recently purchased headphones and the iPad?",
+          "answer": "The information provided is not enough. You mentioned purchasing a headphone, but you did not mention the iPad.",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1510
+        },
+        {
+          "sample_id": "a96c20ee_abs",
+          "question_type": "multi-session",
+          "question": "At which university did I present a poster for my undergrad course research project?",
+          "answer": "The information provided is not enough. You did not mention presenting a poster for your undergrad course research project.",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 1277
+        },
+        {
+          "sample_id": "ba358f49_abs",
+          "question_type": "multi-session",
+          "question": "How old will Rachel be when I get married?",
+          "answer": "The information provided is not enough. You did not mention how old Rachel is right now, nor when will you get married.",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 123
+        },
+        {
+          "sample_id": "09ba9854_abs",
+          "question_type": "multi-session",
+          "question": "How much will I save by taking the bus from the airport to my hotel instead of a taxi?",
+          "answer": "The information provided is not enough. You did not mention how much will the bus take.",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 1479
+        }
+      ]
+    }
+  }
+}

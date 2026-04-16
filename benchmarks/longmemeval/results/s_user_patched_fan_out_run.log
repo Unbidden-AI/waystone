@@ -1,0 +1,1056 @@
+============================================================
+PRE-RUN CONFIG CHECK (LongMemEval)
+  Extraction model : gemini-2.5-flash-lite
+  max_tokens       : 65536
+  base_url         : https://generativelanguage.googleapis.com/v1beta/openai
+
+  Dataset: 500 samples, avg 47.7 sessions/sample
+  Processing: 500 samples
+  Config: engram_lme_s_user_patched
+    db_dir: /Users/justinwalton/.engram/longmemeval_cache/engram_lme_gemini_s_user_patched
+    Checkpoints found (skip): 500 samples
+    All checkpoints present — no extraction needed
+============================================================
+
+Dataset: 500 samples, avg 47.7 sessions/sample, 246750 total turns
+Question types: {'knowledge-update': 78, 'multi-session': 133, 'single-session-assistant': 56, 'single-session-preference': 30, 'single-session-user': 70, 'temporal-reasoning': 133}
+Configs: ['engram_lme_s_user_patched']
+LLM judge: True (gpt-4o-mini)
+
+============================================================
+Config: engram_lme_s_user_patched
+  S-split patched User node — synthetic person node injected into existing gemini_s checkpoints, person_anchoring=True, semantic rerank top_k=100.
+
+  [engram_lme_s_user_patched] e47becba (single-session-user): 53 sessions
+  [engram_lme_s_user_patched] 118b2229 (single-session-user): 45 sessions
+  [engram_lme_s_user_patched] 118b2229: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] e47becba: checkpoint found, skipping extraction
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s][ALoading weights: 100%|██████████| 199/199 [00:00<00:00, 3424.78it/s]
+Loading weights: 100%|██████████| 199/199 [00:00<00:00, 4261.52it/s]
+[1mBertModel LOAD REPORT[0m from: BAAI/bge-small-en-v1.5
+Key                     | Status     |  | 
+------------------------+------------+--+-
+embeddings.position_ids | UNEXPECTED |  | 
+
+[3mNotes:
+- UNEXPECTED[3m	:can be ignored when loading from different task/architecture; not ok if you expect identical arch.[0m
+[1mBertModel LOAD REPORT[0m from: BAAI/bge-small-en-v1.5
+Key                     | Status     |  | 
+------------------------+------------+--+-
+embeddings.position_ids | UNEXPECTED |  | 
+
+[3mNotes:
+- UNEXPECTED[3m	:can be ignored when loading from different task/architecture; not ok if you expect identical arch.[0m
+  [engram_lme_s_user_patched] 51a45a95 (single-session-user): 50 sessions
+  [engram_lme_s_user_patched] 51a45a95: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 58bf7951 (single-session-user): 57 sessions
+  [engram_lme_s_user_patched] 58bf7951: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 1e043500 (single-session-user): 50 sessions
+  [engram_lme_s_user_patched] 1e043500: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] c5e8278d (single-session-user): 44 sessions
+  [engram_lme_s_user_patched] c5e8278d: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 6ade9755 (single-session-user): 51 sessions
+  [engram_lme_s_user_patched] 6ade9755: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 6f9b354f (single-session-user): 50 sessions
+  [engram_lme_s_user_patched] 6f9b354f: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 58ef2f1c (single-session-user): 50 sessions
+  [engram_lme_s_user_patched] 58ef2f1c: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] f8c5f88b (single-session-user): 46 sessions
+  [engram_lme_s_user_patched] f8c5f88b: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 5d3d2817 (single-session-user): 53 sessions
+  [engram_lme_s_user_patched] 5d3d2817: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 7527f7e2 (single-session-user): 45 sessions
+  [engram_lme_s_user_patched] 7527f7e2: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] c960da58 (single-session-user): 46 sessions
+  [engram_lme_s_user_patched] c960da58: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 3b6f954b (single-session-user): 50 sessions
+  [engram_lme_s_user_patched] 3b6f954b: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 726462e0 (single-session-user): 48 sessions
+  [engram_lme_s_user_patched] 94f70d80 (single-session-user): 49 sessions
+  [engram_lme_s_user_patched] 726462e0: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 94f70d80: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 66f24dbb (single-session-user): 50 sessions
+  [engram_lme_s_user_patched] 66f24dbb: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] ad7109d1 (single-session-user): 44 sessions
+  [engram_lme_s_user_patched] ad7109d1: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] af8d2e46 (single-session-user): 50 sessions
+  [engram_lme_s_user_patched] af8d2e46: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] dccbc061 (single-session-user): 49 sessions
+  [engram_lme_s_user_patched] dccbc061: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] c8c3f81d (single-session-user): 52 sessions
+  [engram_lme_s_user_patched] 8ebdbe50 (single-session-user): 48 sessions
+  [engram_lme_s_user_patched] c8c3f81d: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 8ebdbe50: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 6b168ec8 (single-session-user): 50 sessions
+  [engram_lme_s_user_patched] 6b168ec8: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 75499fd8 (single-session-user): 52 sessions
+  [engram_lme_s_user_patched] 75499fd8: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 21436231 (single-session-user): 50 sessions
+  [engram_lme_s_user_patched] 21436231: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 95bcc1c8 (single-session-user): 46 sessions
+  [engram_lme_s_user_patched] 95bcc1c8: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 0862e8bf (single-session-user): 50 sessions
+  [engram_lme_s_user_patched] 0862e8bf: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 853b0a1d (single-session-user): 52 sessions
+  [engram_lme_s_user_patched] 853b0a1d: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] a06e4cfe (single-session-user): 53 sessions
+  [engram_lme_s_user_patched] a06e4cfe: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 37d43f65 (single-session-user): 49 sessions
+  [engram_lme_s_user_patched] 37d43f65: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] b86304ba (single-session-user): 41 sessions
+  [engram_lme_s_user_patched] b86304ba: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] d52b4f67 (single-session-user): 52 sessions
+  [engram_lme_s_user_patched] d52b4f67: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 25e5aa4f (single-session-user): 45 sessions
+  [engram_lme_s_user_patched] 25e5aa4f: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] caf9ead2 (single-session-user): 43 sessions
+  [engram_lme_s_user_patched] caf9ead2: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 8550ddae (single-session-user): 42 sessions
+  [engram_lme_s_user_patched] 8550ddae: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 60d45044 (single-session-user): 51 sessions
+  [engram_lme_s_user_patched] 60d45044: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 3f1e9474 (single-session-user): 52 sessions
+  [engram_lme_s_user_patched] 3f1e9474: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 86b68151 (single-session-user): 47 sessions
+  [engram_lme_s_user_patched] 86b68151: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 577d4d32 (single-session-user): 46 sessions
+  [engram_lme_s_user_patched] 577d4d32: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] ec81a493 (single-session-user): 51 sessions
+  [engram_lme_s_user_patched] ec81a493: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 15745da0 (single-session-user): 47 sessions
+  [engram_lme_s_user_patched] e01b8e2f (single-session-user): 53 sessions
+  [engram_lme_s_user_patched] 15745da0: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] e01b8e2f: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] bc8a6e93 (single-session-user): 48 sessions
+  [engram_lme_s_user_patched] bc8a6e93: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] ccb36322 (single-session-user): 46 sessions
+  [engram_lme_s_user_patched] ccb36322: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 001be529 (single-session-user): 51 sessions
+  [engram_lme_s_user_patched] 001be529: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] b320f3f8 (single-session-user): 46 sessions
+  [engram_lme_s_user_patched] b320f3f8: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 19b5f2b3 (single-session-user): 43 sessions
+  [engram_lme_s_user_patched] 19b5f2b3: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 4fd1909e (single-session-user): 55 sessions
+  [engram_lme_s_user_patched] 4fd1909e: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 545bd2b5 (single-session-user): 44 sessions
+  [engram_lme_s_user_patched] 545bd2b5: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 8a137a7f (single-session-user): 51 sessions
+  [engram_lme_s_user_patched] 8a137a7f: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 76d63226 (single-session-user): 48 sessions
+  [engram_lme_s_user_patched] 76d63226: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 86f00804 (single-session-user): 43 sessions
+  [engram_lme_s_user_patched] 86f00804: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 8e9d538c (single-session-user): 48 sessions
+  [engram_lme_s_user_patched] 8e9d538c: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 311778f1 (single-session-user): 52 sessions
+  [engram_lme_s_user_patched] 311778f1: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] c19f7a0b (single-session-user): 46 sessions
+  [engram_lme_s_user_patched] c19f7a0b: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 4100d0a0 (single-session-user): 50 sessions
+  [engram_lme_s_user_patched] 4100d0a0: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 29f2956b (single-session-user): 47 sessions
+  [engram_lme_s_user_patched] 29f2956b: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 1faac195 (single-session-user): 45 sessions
+  [engram_lme_s_user_patched] 1faac195: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] faba32e5 (single-session-user): 46 sessions
+  [engram_lme_s_user_patched] faba32e5: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] f4f1d8a4 (single-session-user): 52 sessions
+  [engram_lme_s_user_patched] f4f1d8a4: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] c14c00dd (single-session-user): 51 sessions
+  [engram_lme_s_user_patched] c14c00dd: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 36580ce8 (single-session-user): 55 sessions
+  [engram_lme_s_user_patched] 36580ce8: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 3d86fd0a (single-session-user): 55 sessions
+  [engram_lme_s_user_patched] 3d86fd0a: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] a82c026e (single-session-user): 47 sessions
+  [engram_lme_s_user_patched] a82c026e: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 0862e8bf_abs (single-session-user): 52 sessions
+  [engram_lme_s_user_patched] 0862e8bf_abs: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 15745da0_abs (single-session-user): 50 sessions
+  [engram_lme_s_user_patched] 15745da0_abs: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] bc8a6e93_abs (single-session-user): 47 sessions
+  [engram_lme_s_user_patched] bc8a6e93_abs: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 19b5f2b3_abs (single-session-user): 50 sessions
+  [engram_lme_s_user_patched] 19b5f2b3_abs: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 29f2956b_abs (single-session-user): 50 sessions
+  [engram_lme_s_user_patched] 29f2956b_abs: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] f4f1d8a4_abs (single-session-user): 50 sessions
+  [engram_lme_s_user_patched] f4f1d8a4_abs: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 0a995998 (multi-session): 44 sessions
+  [engram_lme_s_user_patched] 0a995998: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 6d550036 (multi-session): 47 sessions
+  [engram_lme_s_user_patched] 6d550036: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_59c863d7 (multi-session): 47 sessions
+  [engram_lme_s_user_patched] gpt4_59c863d7: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] b5ef892d (multi-session): 52 sessions
+  [engram_lme_s_user_patched] b5ef892d: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] e831120c (multi-session): 47 sessions
+  [engram_lme_s_user_patched] e831120c: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 3a704032 (multi-session): 48 sessions
+  [engram_lme_s_user_patched] 3a704032: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_d84a3211 (multi-session): 48 sessions
+  [engram_lme_s_user_patched] gpt4_d84a3211: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] aae3761f (multi-session): 47 sessions
+  [engram_lme_s_user_patched] aae3761f: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_f2262a51 (multi-session): 45 sessions
+  [engram_lme_s_user_patched] gpt4_f2262a51: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] dd2973ad (multi-session): 49 sessions
+  [engram_lme_s_user_patched] dd2973ad: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] c4a1ceb8 (multi-session): 49 sessions
+  [engram_lme_s_user_patched] c4a1ceb8: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_a56e767c (multi-session): 48 sessions
+  [engram_lme_s_user_patched] gpt4_a56e767c: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 6cb6f249 (multi-session): 41 sessions
+  [engram_lme_s_user_patched] 6cb6f249: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 46a3abf7 (multi-session): 50 sessions
+  [engram_lme_s_user_patched] 46a3abf7: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 36b9f61e (multi-session): 47 sessions
+  [engram_lme_s_user_patched] 36b9f61e: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 28dc39ac (multi-session): 38 sessions
+  [engram_lme_s_user_patched] 28dc39ac: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_2f8be40d (multi-session): 46 sessions
+  [engram_lme_s_user_patched] gpt4_2f8be40d: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 2e6d26dc (multi-session): 54 sessions
+  [engram_lme_s_user_patched] 2e6d26dc: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_15e38248 (multi-session): 46 sessions
+  [engram_lme_s_user_patched] gpt4_15e38248: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 88432d0a (multi-session): 45 sessions
+  [engram_lme_s_user_patched] 88432d0a: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 80ec1f4f (multi-session): 46 sessions
+  [engram_lme_s_user_patched] 80ec1f4f: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] d23cf73b (multi-session): 51 sessions
+  [engram_lme_s_user_patched] d23cf73b: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_7fce9456 (multi-session): 44 sessions
+  [engram_lme_s_user_patched] gpt4_7fce9456: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] d682f1a2 (multi-session): 47 sessions
+  [engram_lme_s_user_patched] d682f1a2: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 7024f17c (multi-session): 47 sessions
+  [engram_lme_s_user_patched] 7024f17c: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_5501fe77 (multi-session): 45 sessions
+  [engram_lme_s_user_patched] gpt4_5501fe77: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_2ba83207 (multi-session): 53 sessions
+  [engram_lme_s_user_patched] gpt4_2ba83207: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 2318644b (multi-session): 41 sessions
+  [engram_lme_s_user_patched] 2318644b: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 2ce6a0f2 (multi-session): 47 sessions
+  [engram_lme_s_user_patched] 2ce6a0f2: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_d12ceb0e (multi-session): 45 sessions
+  [engram_lme_s_user_patched] gpt4_d12ceb0e: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 00ca467f (multi-session): 47 sessions
+  [engram_lme_s_user_patched] 00ca467f: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] b3c15d39 (multi-session): 51 sessions
+  [engram_lme_s_user_patched] b3c15d39: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_31ff4165 (multi-session): 42 sessions
+  [engram_lme_s_user_patched] gpt4_31ff4165: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] eeda8a6d (multi-session): 49 sessions
+  [engram_lme_s_user_patched] eeda8a6d: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 2788b940 (multi-session): 47 sessions
+  [engram_lme_s_user_patched] 2788b940: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 60bf93ed (multi-session): 51 sessions
+  [engram_lme_s_user_patched] 60bf93ed: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 9d25d4e0 (multi-session): 44 sessions
+  [engram_lme_s_user_patched] 9d25d4e0: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 129d1232 (multi-session): 48 sessions
+  [engram_lme_s_user_patched] 129d1232: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 60472f9c (multi-session): 45 sessions
+  [engram_lme_s_user_patched] 60472f9c: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_194be4b3 (multi-session): 44 sessions
+  [engram_lme_s_user_patched] gpt4_194be4b3: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] a9f6b44c (multi-session): 45 sessions
+  [engram_lme_s_user_patched] a9f6b44c: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] d851d5ba (multi-session): 46 sessions
+  [engram_lme_s_user_patched] d851d5ba: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 5a7937c8 (multi-session): 42 sessions
+  [engram_lme_s_user_patched] 5a7937c8: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_ab202e7f (multi-session): 46 sessions
+  [engram_lme_s_user_patched] gpt4_ab202e7f: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_e05b82a6 (multi-session): 46 sessions
+  [engram_lme_s_user_patched] gpt4_e05b82a6: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_731e37d7 (multi-session): 48 sessions
+  [engram_lme_s_user_patched] gpt4_731e37d7: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] edced276 (multi-session): 46 sessions
+  [engram_lme_s_user_patched] edced276: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 10d9b85a (multi-session): 44 sessions
+  [engram_lme_s_user_patched] 10d9b85a: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] e3038f8c (multi-session): 45 sessions
+  [engram_lme_s_user_patched] e3038f8c: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 2b8f3739 (multi-session): 47 sessions
+  [engram_lme_s_user_patched] 2b8f3739: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 1a8a66a6 (multi-session): 51 sessions
+  [engram_lme_s_user_patched] 1a8a66a6: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] c2ac3c61 (multi-session): 53 sessions
+  [engram_lme_s_user_patched] c2ac3c61: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] bf659f65 (multi-session): 52 sessions
+  [engram_lme_s_user_patched] bf659f65: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_372c3eed (multi-session): 45 sessions
+  [engram_lme_s_user_patched] gpt4_372c3eed: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_2f91af09 (multi-session): 53 sessions
+  [engram_lme_s_user_patched] gpt4_2f91af09: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 81507db6 (multi-session): 50 sessions
+  [engram_lme_s_user_patched] 81507db6: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 88432d0a_abs (multi-session): 44 sessions
+  [engram_lme_s_user_patched] 88432d0a_abs: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 80ec1f4f_abs (multi-session): 44 sessions
+  [engram_lme_s_user_patched] 80ec1f4f_abs: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] eeda8a6d_abs (multi-session): 49 sessions
+  [engram_lme_s_user_patched] eeda8a6d_abs: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 60bf93ed_abs (multi-session): 51 sessions
+  [engram_lme_s_user_patched] 60bf93ed_abs: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] edced276_abs (multi-session): 47 sessions
+  [engram_lme_s_user_patched] edced276_abs: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_372c3eed_abs (multi-session): 44 sessions
+  [engram_lme_s_user_patched] gpt4_372c3eed_abs: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 8a2466db (single-session-preference): 50 sessions
+  [engram_lme_s_user_patched] 8a2466db: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 06878be2 (single-session-preference): 48 sessions
+  [engram_lme_s_user_patched] 06878be2: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 75832dbd (single-session-preference): 48 sessions
+  [engram_lme_s_user_patched] 75832dbd: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 0edc2aef (single-session-preference): 46 sessions
+  [engram_lme_s_user_patched] 0edc2aef: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 35a27287 (single-session-preference): 51 sessions
+  [engram_lme_s_user_patched] 35a27287: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 32260d93 (single-session-preference): 46 sessions
+  [engram_lme_s_user_patched] 32260d93: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 195a1a1b (single-session-preference): 46 sessions
+  [engram_lme_s_user_patched] 195a1a1b: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] afdc33df (single-session-preference): 46 sessions
+  [engram_lme_s_user_patched] afdc33df: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] caf03d32 (single-session-preference): 51 sessions
+  [engram_lme_s_user_patched] caf03d32: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 54026fce (single-session-preference): 49 sessions
+  [engram_lme_s_user_patched] 54026fce: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 06f04340 (single-session-preference): 55 sessions
+  [engram_lme_s_user_patched] 06f04340: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 6b7dfb22 (single-session-preference): 45 sessions
+  [engram_lme_s_user_patched] 6b7dfb22: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 1a1907b4 (single-session-preference): 48 sessions
+  [engram_lme_s_user_patched] 1a1907b4: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 09d032c9 (single-session-preference): 43 sessions
+  [engram_lme_s_user_patched] 09d032c9: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 38146c39 (single-session-preference): 46 sessions
+  [engram_lme_s_user_patched] 38146c39: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] d24813b1 (single-session-preference): 44 sessions
+  [engram_lme_s_user_patched] d24813b1: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 57f827a0 (single-session-preference): 51 sessions
+  [engram_lme_s_user_patched] 57f827a0: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 95228167 (single-session-preference): 49 sessions
+  [engram_lme_s_user_patched] 95228167: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 505af2f5 (single-session-preference): 53 sessions
+  [engram_lme_s_user_patched] 505af2f5: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 75f70248 (single-session-preference): 42 sessions
+  [engram_lme_s_user_patched] 75f70248: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] d6233ab6 (single-session-preference): 44 sessions
+  [engram_lme_s_user_patched] d6233ab6: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 1da05512 (single-session-preference): 47 sessions
+  [engram_lme_s_user_patched] 1da05512: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] fca70973 (single-session-preference): 45 sessions
+  [engram_lme_s_user_patched] fca70973: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] b6025781 (single-session-preference): 47 sessions
+  [engram_lme_s_user_patched] b6025781: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] a89d7624 (single-session-preference): 49 sessions
+  [engram_lme_s_user_patched] a89d7624: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] b0479f84 (single-session-preference): 48 sessions
+  [engram_lme_s_user_patched] b0479f84: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 1d4e3b97 (single-session-preference): 45 sessions
+  [engram_lme_s_user_patched] 1d4e3b97: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 07b6f563 (single-session-preference): 52 sessions
+  [engram_lme_s_user_patched] 07b6f563: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 1c0ddc50 (single-session-preference): 51 sessions
+  [engram_lme_s_user_patched] 1c0ddc50: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 0a34ad58 (single-session-preference): 42 sessions
+  [engram_lme_s_user_patched] 0a34ad58: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] d3ab962e (multi-session): 49 sessions
+  [engram_lme_s_user_patched] d3ab962e: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 2311e44b (multi-session): 50 sessions
+  [engram_lme_s_user_patched] 2311e44b: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] cc06de0d (multi-session): 42 sessions
+  [engram_lme_s_user_patched] cc06de0d: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] a11281a2 (multi-session): 50 sessions
+  [engram_lme_s_user_patched] a11281a2: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 4f54b7c9 (multi-session): 45 sessions
+  [engram_lme_s_user_patched] 4f54b7c9: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 85fa3a3f (multi-session): 47 sessions
+  [engram_lme_s_user_patched] 85fa3a3f: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 9aaed6a3 (multi-session): 51 sessions
+  [engram_lme_s_user_patched] 9aaed6a3: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 1f2b8d4f (multi-session): 51 sessions
+  [engram_lme_s_user_patched] 1f2b8d4f: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] e6041065 (multi-session): 45 sessions
+  [engram_lme_s_user_patched] e6041065: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 51c32626 (multi-session): 51 sessions
+  [engram_lme_s_user_patched] 51c32626: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] d905b33f (multi-session): 48 sessions
+  [engram_lme_s_user_patched] d905b33f: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 7405e8b1 (multi-session): 48 sessions
+  [engram_lme_s_user_patched] 7405e8b1: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] f35224e0 (multi-session): 53 sessions
+  [engram_lme_s_user_patched] f35224e0: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 6456829e (multi-session): 47 sessions
+  [engram_lme_s_user_patched] 6456829e: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] a4996e51 (multi-session): 48 sessions
+  [engram_lme_s_user_patched] a4996e51: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 3c1045c8 (multi-session): 52 sessions
+  [engram_lme_s_user_patched] 3c1045c8: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 60036106 (multi-session): 44 sessions
+  [engram_lme_s_user_patched] 60036106: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 681a1674 (multi-session): 49 sessions
+  [engram_lme_s_user_patched] 681a1674: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] e25c3b8d (multi-session): 48 sessions
+  [engram_lme_s_user_patched] e25c3b8d: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 4adc0475 (multi-session): 45 sessions
+  [engram_lme_s_user_patched] 4adc0475: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 4bc144e2 (multi-session): 48 sessions
+  [engram_lme_s_user_patched] 4bc144e2: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] ef66a6e5 (multi-session): 45 sessions
+  [engram_lme_s_user_patched] ef66a6e5: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 5025383b (multi-session): 46 sessions
+  [engram_lme_s_user_patched] 5025383b: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] a1cc6108 (multi-session): 43 sessions
+  [engram_lme_s_user_patched] a1cc6108: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 9ee3ecd6 (multi-session): 50 sessions
+  [engram_lme_s_user_patched] 9ee3ecd6: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 3fdac837 (multi-session): 44 sessions
+  [engram_lme_s_user_patched] 3fdac837: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 91b15a6e (multi-session): 49 sessions
+  [engram_lme_s_user_patched] 91b15a6e: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 27016adc (multi-session): 45 sessions
+  [engram_lme_s_user_patched] 27016adc: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 720133ac (multi-session): 47 sessions
+  [engram_lme_s_user_patched] 720133ac: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 77eafa52 (multi-session): 51 sessions
+  [engram_lme_s_user_patched] 77eafa52: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 8979f9ec (multi-session): 43 sessions
+  [engram_lme_s_user_patched] 8979f9ec: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 0100672e (multi-session): 49 sessions
+  [engram_lme_s_user_patched] 0100672e: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] a96c20ee (multi-session): 51 sessions
+  [engram_lme_s_user_patched] a96c20ee: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 92a0aa75 (multi-session): 42 sessions
+  [engram_lme_s_user_patched] 92a0aa75: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 3fe836c9 (multi-session): 45 sessions
+  [engram_lme_s_user_patched] 3fe836c9: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 1c549ce4 (multi-session): 45 sessions
+  [engram_lme_s_user_patched] 1c549ce4: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 6c49646a (multi-session): 43 sessions
+  [engram_lme_s_user_patched] 6c49646a: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 1192316e (multi-session): 42 sessions
+  [engram_lme_s_user_patched] 1192316e: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 0ea62687 (multi-session): 43 sessions
+  [engram_lme_s_user_patched] 0ea62687: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 67e0d0f2 (multi-session): 52 sessions
+  [engram_lme_s_user_patched] 67e0d0f2: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] bb7c3b45 (multi-session): 47 sessions
+  [engram_lme_s_user_patched] bb7c3b45: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] ba358f49 (multi-session): 41 sessions
+  [engram_lme_s_user_patched] ba358f49: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 61f8c8f8 (multi-session): 48 sessions
+  [engram_lme_s_user_patched] 61f8c8f8: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 60159905 (multi-session): 44 sessions
+  [engram_lme_s_user_patched] 60159905: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] ef9cf60a (multi-session): 54 sessions
+  [engram_lme_s_user_patched] ef9cf60a: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 73d42213 (multi-session): 49 sessions
+  [engram_lme_s_user_patched] 73d42213: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] bc149d6b (multi-session): 46 sessions
+  [engram_lme_s_user_patched] bc149d6b: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 099778bb (multi-session): 46 sessions
+  [engram_lme_s_user_patched] 099778bb: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 09ba9854 (multi-session): 44 sessions
+  [engram_lme_s_user_patched] 09ba9854: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] d6062bb9 (multi-session): 50 sessions
+  [engram_lme_s_user_patched] d6062bb9: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 157a136e (multi-session): 47 sessions
+  [engram_lme_s_user_patched] 157a136e: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] c18a7dc8 (multi-session): 49 sessions
+  [engram_lme_s_user_patched] c18a7dc8: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] a3332713 (multi-session): 42 sessions
+  [engram_lme_s_user_patched] a3332713: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 55241a1f (multi-session): 49 sessions
+  [engram_lme_s_user_patched] 55241a1f: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] a08a253f (multi-session): 53 sessions
+  [engram_lme_s_user_patched] a08a253f: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] f0e564bc (multi-session): 50 sessions
+  [engram_lme_s_user_patched] f0e564bc: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 078150f1 (multi-session): 46 sessions
+  [engram_lme_s_user_patched] 078150f1: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 8cf4d046 (multi-session): 45 sessions
+  [engram_lme_s_user_patched] 8cf4d046: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] a346bb18 (multi-session): 49 sessions
+  [engram_lme_s_user_patched] a346bb18: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 37f165cf (multi-session): 45 sessions
+  [engram_lme_s_user_patched] 37f165cf: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 8e91e7d9 (multi-session): 47 sessions
+  [engram_lme_s_user_patched] 8e91e7d9: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 87f22b4a (multi-session): 47 sessions
+  [engram_lme_s_user_patched] 87f22b4a: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] e56a43b9 (multi-session): 45 sessions
+  [engram_lme_s_user_patched] e56a43b9: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] efc3f7c2 (multi-session): 48 sessions
+  [engram_lme_s_user_patched] efc3f7c2: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 21d02d0d (multi-session): 47 sessions
+  [engram_lme_s_user_patched] 21d02d0d: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 2311e44b_abs (multi-session): 49 sessions
+  [engram_lme_s_user_patched] 2311e44b_abs: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 6456829e_abs (multi-session): 53 sessions
+  [engram_lme_s_user_patched] 6456829e_abs: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] e5ba910e_abs (multi-session): 48 sessions
+  [engram_lme_s_user_patched] e5ba910e_abs: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] a96c20ee_abs (multi-session): 53 sessions
+  [engram_lme_s_user_patched] a96c20ee_abs: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] ba358f49_abs (multi-session): 48 sessions
+  [engram_lme_s_user_patched] ba358f49_abs: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 09ba9854_abs (multi-session): 50 sessions
+  [engram_lme_s_user_patched] 09ba9854_abs: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_59149c77 (temporal-reasoning): 48 sessions
+  [engram_lme_s_user_patched] gpt4_59149c77: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_f49edff3 (temporal-reasoning): 47 sessions
+  [engram_lme_s_user_patched] gpt4_f49edff3: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 71017276 (temporal-reasoning): 49 sessions
+  [engram_lme_s_user_patched] 71017276: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] b46e15ed (temporal-reasoning): 46 sessions
+  [engram_lme_s_user_patched] b46e15ed: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_fa19884c (temporal-reasoning): 46 sessions
+  [engram_lme_s_user_patched] gpt4_fa19884c: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 0bc8ad92 (temporal-reasoning): 49 sessions
+  [engram_lme_s_user_patched] 0bc8ad92: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] af082822 (temporal-reasoning): 43 sessions
+  [engram_lme_s_user_patched] af082822: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_4929293a (temporal-reasoning): 44 sessions
+  [engram_lme_s_user_patched] gpt4_4929293a: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_b5700ca9 (temporal-reasoning): 52 sessions
+  [engram_lme_s_user_patched] gpt4_b5700ca9: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 9a707b81 (temporal-reasoning): 54 sessions
+  [engram_lme_s_user_patched] 9a707b81: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_1d4ab0c9 (temporal-reasoning): 53 sessions
+  [engram_lme_s_user_patched] gpt4_1d4ab0c9: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_e072b769 (temporal-reasoning): 45 sessions
+  [engram_lme_s_user_patched] gpt4_e072b769: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 0db4c65d (temporal-reasoning): 44 sessions
+  [engram_lme_s_user_patched] 0db4c65d: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_1d80365e (temporal-reasoning): 51 sessions
+  [engram_lme_s_user_patched] gpt4_1d80365e: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_7f6b06db (temporal-reasoning): 52 sessions
+  [engram_lme_s_user_patched] gpt4_7f6b06db: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_6dc9b45b (temporal-reasoning): 48 sessions
+  [engram_lme_s_user_patched] gpt4_6dc9b45b: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_8279ba02 (temporal-reasoning): 47 sessions
+  [engram_lme_s_user_patched] gpt4_8279ba02: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_18c2b244 (temporal-reasoning): 44 sessions
+  [engram_lme_s_user_patched] gpt4_18c2b244: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_a1b77f9c (temporal-reasoning): 49 sessions
+  [engram_lme_s_user_patched] gpt4_a1b77f9c: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_1916e0ea (temporal-reasoning): 56 sessions
+  [engram_lme_s_user_patched] gpt4_1916e0ea: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_7a0daae1 (temporal-reasoning): 61 sessions
+  [engram_lme_s_user_patched] gpt4_7a0daae1: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_468eb063 (temporal-reasoning): 44 sessions
+  [engram_lme_s_user_patched] gpt4_468eb063: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_7abb270c (temporal-reasoning): 48 sessions
+  [engram_lme_s_user_patched] gpt4_7abb270c: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_1e4a8aeb (temporal-reasoning): 48 sessions
+  [engram_lme_s_user_patched] gpt4_1e4a8aeb: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_4fc4f797 (temporal-reasoning): 45 sessions
+  [engram_lme_s_user_patched] gpt4_4fc4f797: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 4dfccbf7 (temporal-reasoning): 47 sessions
+  [engram_lme_s_user_patched] 4dfccbf7: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_61e13b3c (temporal-reasoning): 48 sessions
+  [engram_lme_s_user_patched] gpt4_61e13b3c: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_45189cb4 (temporal-reasoning): 45 sessions
+  [engram_lme_s_user_patched] gpt4_45189cb4: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 2ebe6c90 (temporal-reasoning): 43 sessions
+  [engram_lme_s_user_patched] 2ebe6c90: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_e061b84f (temporal-reasoning): 46 sessions
+  [engram_lme_s_user_patched] gpt4_e061b84f: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 370a8ff4 (temporal-reasoning): 46 sessions
+  [engram_lme_s_user_patched] 370a8ff4: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_d6585ce8 (temporal-reasoning): 50 sessions
+  [engram_lme_s_user_patched] gpt4_d6585ce8: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_4ef30696 (temporal-reasoning): 49 sessions
+  [engram_lme_s_user_patched] gpt4_4ef30696: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_ec93e27f (temporal-reasoning): 47 sessions
+  [engram_lme_s_user_patched] gpt4_ec93e27f: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 6e984301 (temporal-reasoning): 50 sessions
+  [engram_lme_s_user_patched] 6e984301: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 8077ef71 (temporal-reasoning): 47 sessions
+  [engram_lme_s_user_patched] 8077ef71: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_f420262c (temporal-reasoning): 47 sessions
+  [engram_lme_s_user_patched] gpt4_f420262c: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_8e165409 (temporal-reasoning): 47 sessions
+  [engram_lme_s_user_patched] gpt4_8e165409: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_74aed68e (temporal-reasoning): 45 sessions
+  [engram_lme_s_user_patched] gpt4_74aed68e: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] bcbe585f (temporal-reasoning): 48 sessions
+  [engram_lme_s_user_patched] bcbe585f: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_21adecb5 (temporal-reasoning): 52 sessions
+  [engram_lme_s_user_patched] gpt4_21adecb5: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 5e1b23de (temporal-reasoning): 45 sessions
+  [engram_lme_s_user_patched] 5e1b23de: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_98f46fc6 (temporal-reasoning): 49 sessions
+  [engram_lme_s_user_patched] gpt4_98f46fc6: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_af6db32f (temporal-reasoning): 42 sessions
+  [engram_lme_s_user_patched] gpt4_af6db32f: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] eac54adc (temporal-reasoning): 46 sessions
+  [engram_lme_s_user_patched] eac54adc: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_7ddcf75f (temporal-reasoning): 47 sessions
+  [engram_lme_s_user_patched] gpt4_7ddcf75f: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_a2d1d1f6 (temporal-reasoning): 44 sessions
+  [engram_lme_s_user_patched] gpt4_a2d1d1f6: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_85da3956 (temporal-reasoning): 53 sessions
+  [engram_lme_s_user_patched] gpt4_85da3956: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_b0863698 (temporal-reasoning): 42 sessions
+  [engram_lme_s_user_patched] gpt4_b0863698: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_68e94287 (temporal-reasoning): 50 sessions
+  [engram_lme_s_user_patched] gpt4_68e94287: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_e414231e (temporal-reasoning): 46 sessions
+  [engram_lme_s_user_patched] gpt4_e414231e: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_7ca326fa (temporal-reasoning): 54 sessions
+  [engram_lme_s_user_patched] gpt4_7ca326fa: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_7bc6cf22 (temporal-reasoning): 48 sessions
+  [engram_lme_s_user_patched] gpt4_7bc6cf22: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 2ebe6c92 (temporal-reasoning): 48 sessions
+  [engram_lme_s_user_patched] 2ebe6c92: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_e061b84g (temporal-reasoning): 58 sessions
+  [engram_lme_s_user_patched] gpt4_e061b84g: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 71017277 (temporal-reasoning): 51 sessions
+  [engram_lme_s_user_patched] 71017277: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] b46e15ee (temporal-reasoning): 42 sessions
+  [engram_lme_s_user_patched] b46e15ee: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_d6585ce9 (temporal-reasoning): 42 sessions
+  [engram_lme_s_user_patched] gpt4_d6585ce9: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_1e4a8aec (temporal-reasoning): 50 sessions
+  [engram_lme_s_user_patched] gpt4_1e4a8aec: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_f420262d (temporal-reasoning): 43 sessions
+  [engram_lme_s_user_patched] gpt4_f420262d: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_59149c78 (temporal-reasoning): 51 sessions
+  [engram_lme_s_user_patched] gpt4_59149c78: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_e414231f (temporal-reasoning): 46 sessions
+  [engram_lme_s_user_patched] gpt4_e414231f: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_4929293b (temporal-reasoning): 49 sessions
+  [engram_lme_s_user_patched] gpt4_4929293b: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_468eb064 (temporal-reasoning): 48 sessions
+  [engram_lme_s_user_patched] gpt4_468eb064: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_fa19884d (temporal-reasoning): 50 sessions
+  [engram_lme_s_user_patched] gpt4_fa19884d: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 9a707b82 (temporal-reasoning): 53 sessions
+  [engram_lme_s_user_patched] eac54add (temporal-reasoning): 43 sessions
+  [engram_lme_s_user_patched] 9a707b82: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] eac54add: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 4dfccbf8 (temporal-reasoning): 43 sessions
+  [engram_lme_s_user_patched] 4dfccbf8: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 0bc8ad93 (temporal-reasoning): 47 sessions
+  [engram_lme_s_user_patched] 0bc8ad93: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 6e984302 (temporal-reasoning): 43 sessions
+  [engram_lme_s_user_patched] 6e984302: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_8279ba03 (temporal-reasoning): 43 sessions
+  [engram_lme_s_user_patched] gpt4_8279ba03: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_b5700ca0 (temporal-reasoning): 50 sessions
+  [engram_lme_s_user_patched] gpt4_b5700ca0: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_68e94288 (temporal-reasoning): 44 sessions
+  [engram_lme_s_user_patched] gpt4_68e94288: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_2655b836 (temporal-reasoning): 45 sessions
+  [engram_lme_s_user_patched] gpt4_2655b836: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_2487a7cb (temporal-reasoning): 47 sessions
+  [engram_lme_s_user_patched] gpt4_2487a7cb: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_76048e76 (temporal-reasoning): 44 sessions
+  [engram_lme_s_user_patched] gpt4_76048e76: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_2312f94c (temporal-reasoning): 45 sessions
+  [engram_lme_s_user_patched] gpt4_2312f94c: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 0bb5a684 (temporal-reasoning): 42 sessions
+  [engram_lme_s_user_patched] 0bb5a684: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 08f4fc43 (temporal-reasoning): 47 sessions
+  [engram_lme_s_user_patched] 08f4fc43: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 2c63a862 (temporal-reasoning): 54 sessions
+  [engram_lme_s_user_patched] 2c63a862: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_385a5000 (temporal-reasoning): 51 sessions
+  [engram_lme_s_user_patched] gpt4_385a5000: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 2a1811e2 (temporal-reasoning): 46 sessions
+  [engram_lme_s_user_patched] 2a1811e2: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] bbf86515 (temporal-reasoning): 45 sessions
+  [engram_lme_s_user_patched] bbf86515: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_5dcc0aab (temporal-reasoning): 50 sessions
+  [engram_lme_s_user_patched] gpt4_5dcc0aab: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_0b2f1d21 (temporal-reasoning): 53 sessions
+  [engram_lme_s_user_patched] gpt4_0b2f1d21: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] f0853d11 (temporal-reasoning): 46 sessions
+  [engram_lme_s_user_patched] f0853d11: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_6ed717ea (temporal-reasoning): 46 sessions
+  [engram_lme_s_user_patched] gpt4_6ed717ea: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_70e84552 (temporal-reasoning): 48 sessions
+  [engram_lme_s_user_patched] gpt4_70e84552: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] a3838d2b (temporal-reasoning): 47 sessions
+  [engram_lme_s_user_patched] a3838d2b: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_93159ced (temporal-reasoning): 42 sessions
+  [engram_lme_s_user_patched] gpt4_93159ced: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_2d58bcd6 (temporal-reasoning): 46 sessions
+  [engram_lme_s_user_patched] gpt4_2d58bcd6: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_65aabe59 (temporal-reasoning): 42 sessions
+  [engram_lme_s_user_patched] gpt4_65aabe59: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 982b5123 (temporal-reasoning): 47 sessions
+  [engram_lme_s_user_patched] 982b5123: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] b9cfe692 (temporal-reasoning): 48 sessions
+  [engram_lme_s_user_patched] b9cfe692: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_4edbafa2 (temporal-reasoning): 41 sessions
+  [engram_lme_s_user_patched] gpt4_4edbafa2: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] c8090214 (temporal-reasoning): 47 sessions
+  [engram_lme_s_user_patched] c8090214: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_483dd43c (temporal-reasoning): 52 sessions
+  [engram_lme_s_user_patched] gpt4_483dd43c: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] e4e14d04 (temporal-reasoning): 45 sessions
+  [engram_lme_s_user_patched] e4e14d04: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] c9f37c46 (temporal-reasoning): 50 sessions
+  [engram_lme_s_user_patched] c9f37c46: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_2c50253f (temporal-reasoning): 56 sessions
+  [engram_lme_s_user_patched] gpt4_2c50253f: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] dcfa8644 (temporal-reasoning): 46 sessions
+  [engram_lme_s_user_patched] dcfa8644: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_b4a80587 (temporal-reasoning): 47 sessions
+  [engram_lme_s_user_patched] gpt4_b4a80587: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_9a159967 (temporal-reasoning): 46 sessions
+  [engram_lme_s_user_patched] gpt4_9a159967: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] cc6d1ec1 (temporal-reasoning): 46 sessions
+  [engram_lme_s_user_patched] cc6d1ec1: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_8c8961ae (temporal-reasoning): 50 sessions
+  [engram_lme_s_user_patched] gpt4_8c8961ae: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_d9af6064 (temporal-reasoning): 51 sessions
+  [engram_lme_s_user_patched] gpt4_d9af6064: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_7de946e7 (temporal-reasoning): 49 sessions
+  [engram_lme_s_user_patched] gpt4_7de946e7: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] d01c6aa8 (temporal-reasoning): 42 sessions
+  [engram_lme_s_user_patched] d01c6aa8: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 993da5e2 (temporal-reasoning): 49 sessions
+  [engram_lme_s_user_patched] 993da5e2: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] a3045048 (temporal-reasoning): 53 sessions
+  [engram_lme_s_user_patched] a3045048: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_d31cdae3 (temporal-reasoning): 50 sessions
+  [engram_lme_s_user_patched] gpt4_d31cdae3: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_cd90e484 (temporal-reasoning): 52 sessions
+  [engram_lme_s_user_patched] gpt4_cd90e484: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_88806d6e (temporal-reasoning): 49 sessions
+  [engram_lme_s_user_patched] gpt4_88806d6e: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_4cd9eba1 (temporal-reasoning): 45 sessions
+  [engram_lme_s_user_patched] gpt4_4cd9eba1: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_93f6379c (temporal-reasoning): 42 sessions
+  [engram_lme_s_user_patched] gpt4_93f6379c: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] b29f3365 (temporal-reasoning): 50 sessions
+  [engram_lme_s_user_patched] b29f3365: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_2f56ae70 (temporal-reasoning): 45 sessions
+  [engram_lme_s_user_patched] gpt4_2f56ae70: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 6613b389 (temporal-reasoning): 41 sessions
+  [engram_lme_s_user_patched] 6613b389: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_78cf46a3 (temporal-reasoning): 49 sessions
+  [engram_lme_s_user_patched] gpt4_78cf46a3: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_0a05b494 (temporal-reasoning): 45 sessions
+  [engram_lme_s_user_patched] gpt4_0a05b494: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_1a1dc16d (temporal-reasoning): 46 sessions
+  [engram_lme_s_user_patched] gpt4_1a1dc16d: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_2f584639 (temporal-reasoning): 45 sessions
+  [engram_lme_s_user_patched] gpt4_2f584639: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_213fd887 (temporal-reasoning): 45 sessions
+  [engram_lme_s_user_patched] gpt4_213fd887: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_5438fa52 (temporal-reasoning): 50 sessions
+  [engram_lme_s_user_patched] gpt4_5438fa52: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_c27434e8 (temporal-reasoning): 51 sessions
+  [engram_lme_s_user_patched] gpt4_c27434e8: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_fe651585 (temporal-reasoning): 48 sessions
+  [engram_lme_s_user_patched] gpt4_fe651585: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 8c18457d (temporal-reasoning): 41 sessions
+  [engram_lme_s_user_patched] 8c18457d: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_70e84552_abs (temporal-reasoning): 50 sessions
+  [engram_lme_s_user_patched] gpt4_70e84552_abs: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_93159ced_abs (temporal-reasoning): 44 sessions
+  [engram_lme_s_user_patched] gpt4_93159ced_abs: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 982b5123_abs (temporal-reasoning): 44 sessions
+  [engram_lme_s_user_patched] 982b5123_abs: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] c8090214_abs (temporal-reasoning): 53 sessions
+  [engram_lme_s_user_patched] c8090214_abs: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_c27434e8_abs (temporal-reasoning): 47 sessions
+  [engram_lme_s_user_patched] gpt4_c27434e8_abs: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] gpt4_fe651585_abs (temporal-reasoning): 49 sessions
+  [engram_lme_s_user_patched] gpt4_fe651585_abs: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 6a1eabeb (knowledge-update): 40 sessions
+  [engram_lme_s_user_patched] 6a1eabeb: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 6aeb4375 (knowledge-update): 47 sessions
+  [engram_lme_s_user_patched] 6aeb4375: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 830ce83f (knowledge-update): 47 sessions
+  [engram_lme_s_user_patched] 830ce83f: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 852ce960 (knowledge-update): 39 sessions
+  [engram_lme_s_user_patched] 852ce960: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 945e3d21 (knowledge-update): 48 sessions
+  [engram_lme_s_user_patched] 945e3d21: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] d7c942c3 (knowledge-update): 49 sessions
+  [engram_lme_s_user_patched] d7c942c3: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 71315a70 (knowledge-update): 53 sessions
+  [engram_lme_s_user_patched] 71315a70: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 89941a93 (knowledge-update): 51 sessions
+  [engram_lme_s_user_patched] 89941a93: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] ce6d2d27 (knowledge-update): 51 sessions
+  [engram_lme_s_user_patched] ce6d2d27: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 9ea5eabc (knowledge-update): 53 sessions
+  [engram_lme_s_user_patched] 9ea5eabc: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 07741c44 (knowledge-update): 50 sessions
+  [engram_lme_s_user_patched] 07741c44: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] a1eacc2a (knowledge-update): 44 sessions
+  [engram_lme_s_user_patched] a1eacc2a: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 184da446 (knowledge-update): 42 sessions
+  [engram_lme_s_user_patched] 184da446: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 031748ae (knowledge-update): 46 sessions
+  [engram_lme_s_user_patched] 031748ae: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 4d6b87c8 (knowledge-update): 52 sessions
+  [engram_lme_s_user_patched] 4d6b87c8: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 0f05491a (knowledge-update): 45 sessions
+  [engram_lme_s_user_patched] 0f05491a: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 08e075c7 (knowledge-update): 45 sessions
+  [engram_lme_s_user_patched] 08e075c7: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] f9e8c073 (knowledge-update): 53 sessions
+  [engram_lme_s_user_patched] f9e8c073: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 41698283 (knowledge-update): 45 sessions
+  [engram_lme_s_user_patched] 41698283: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 2698e78f (knowledge-update): 48 sessions
+  [engram_lme_s_user_patched] 2698e78f: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] b6019101 (knowledge-update): 49 sessions
+  [engram_lme_s_user_patched] b6019101: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 45dc21b6 (knowledge-update): 49 sessions
+  [engram_lme_s_user_patched] 45dc21b6: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 5a4f22c0 (knowledge-update): 49 sessions
+  [engram_lme_s_user_patched] 5a4f22c0: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 6071bd76 (knowledge-update): 46 sessions
+  [engram_lme_s_user_patched] 6071bd76: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] e493bb7c (knowledge-update): 51 sessions
+  [engram_lme_s_user_patched] e493bb7c: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 618f13b2 (knowledge-update): 49 sessions
+  [engram_lme_s_user_patched] 618f13b2: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 72e3ee87 (knowledge-update): 51 sessions
+  [engram_lme_s_user_patched] 72e3ee87: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] c4ea545c (knowledge-update): 46 sessions
+  [engram_lme_s_user_patched] c4ea545c: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 01493427 (knowledge-update): 47 sessions
+  [engram_lme_s_user_patched] 01493427: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 6a27ffc2 (knowledge-update): 51 sessions
+  [engram_lme_s_user_patched] 6a27ffc2: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 2133c1b5 (knowledge-update): 51 sessions
+  [engram_lme_s_user_patched] 2133c1b5: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 18bc8abd (knowledge-update): 44 sessions
+  [engram_lme_s_user_patched] 18bc8abd: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] db467c8c (knowledge-update): 48 sessions
+  [engram_lme_s_user_patched] db467c8c: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 7a87bd0c (knowledge-update): 48 sessions
+  [engram_lme_s_user_patched] 7a87bd0c: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] e61a7584 (knowledge-update): 50 sessions
+  [engram_lme_s_user_patched] e61a7584: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 1cea1afa (knowledge-update): 49 sessions
+  [engram_lme_s_user_patched] 1cea1afa: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] ed4ddc30 (knowledge-update): 46 sessions
+  [engram_lme_s_user_patched] ed4ddc30: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 8fb83627 (knowledge-update): 44 sessions
+  [engram_lme_s_user_patched] 8fb83627: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] b01defab (knowledge-update): 50 sessions
+  [engram_lme_s_user_patched] b01defab: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 22d2cb42 (knowledge-update): 48 sessions
+  [engram_lme_s_user_patched] 22d2cb42: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 0e4e4c46 (knowledge-update): 49 sessions
+  [engram_lme_s_user_patched] 0e4e4c46: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 4b24c848 (knowledge-update): 51 sessions
+  [engram_lme_s_user_patched] 4b24c848: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 7e974930 (knowledge-update): 47 sessions
+  [engram_lme_s_user_patched] 7e974930: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 603deb26 (knowledge-update): 48 sessions
+  [engram_lme_s_user_patched] 603deb26: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 59524333 (knowledge-update): 44 sessions
+  [engram_lme_s_user_patched] 59524333: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 5831f84d (knowledge-update): 40 sessions
+  [engram_lme_s_user_patched] 5831f84d: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] eace081b (knowledge-update): 47 sessions
+  [engram_lme_s_user_patched] eace081b: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] affe2881 (knowledge-update): 44 sessions
+  [engram_lme_s_user_patched] affe2881: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 50635ada (knowledge-update): 48 sessions
+  [engram_lme_s_user_patched] 50635ada: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] e66b632c (knowledge-update): 47 sessions
+  [engram_lme_s_user_patched] e66b632c: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 0ddfec37 (knowledge-update): 50 sessions
+  [engram_lme_s_user_patched] 0ddfec37: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] f685340e (knowledge-update): 41 sessions
+  [engram_lme_s_user_patched] f685340e: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] cc5ded98 (knowledge-update): 53 sessions
+  [engram_lme_s_user_patched] cc5ded98: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] dfde3500 (knowledge-update): 47 sessions
+  [engram_lme_s_user_patched] dfde3500: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 69fee5aa (knowledge-update): 49 sessions
+  [engram_lme_s_user_patched] 69fee5aa: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 7401057b (knowledge-update): 47 sessions
+  [engram_lme_s_user_patched] 7401057b: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] cf22b7bf (knowledge-update): 55 sessions
+  [engram_lme_s_user_patched] cf22b7bf: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] a2f3aa27 (knowledge-update): 44 sessions
+  [engram_lme_s_user_patched] a2f3aa27: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] c7dc5443 (knowledge-update): 46 sessions
+  [engram_lme_s_user_patched] c7dc5443: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 06db6396 (knowledge-update): 51 sessions
+  [engram_lme_s_user_patched] 06db6396: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 3ba21379 (knowledge-update): 44 sessions
+  [engram_lme_s_user_patched] 3ba21379: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 9bbe84a2 (knowledge-update): 48 sessions
+  [engram_lme_s_user_patched] 9bbe84a2: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 10e09553 (knowledge-update): 45 sessions
+  [engram_lme_s_user_patched] 10e09553: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] dad224aa (knowledge-update): 48 sessions
+  [engram_lme_s_user_patched] dad224aa: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] ba61f0b9 (knowledge-update): 45 sessions
+  [engram_lme_s_user_patched] ba61f0b9: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 42ec0761 (knowledge-update): 48 sessions
+  [engram_lme_s_user_patched] 42ec0761: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 5c40ec5b (knowledge-update): 51 sessions
+  [engram_lme_s_user_patched] 5c40ec5b: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] c6853660 (knowledge-update): 46 sessions
+  [engram_lme_s_user_patched] c6853660: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 26bdc477 (knowledge-update): 48 sessions
+  [engram_lme_s_user_patched] 26bdc477: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 0977f2af (knowledge-update): 44 sessions
+  [engram_lme_s_user_patched] 0977f2af: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 6aeb4375_abs (knowledge-update): 46 sessions
+  [engram_lme_s_user_patched] 6aeb4375_abs: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 031748ae_abs (knowledge-update): 52 sessions
+  [engram_lme_s_user_patched] 031748ae_abs: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 2698e78f_abs (knowledge-update): 46 sessions
+  [engram_lme_s_user_patched] 2698e78f_abs: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 2133c1b5_abs (knowledge-update): 50 sessions
+  [engram_lme_s_user_patched] 2133c1b5_abs: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 0ddfec37_abs (knowledge-update): 45 sessions
+  [engram_lme_s_user_patched] 0ddfec37_abs: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] f685340e_abs (knowledge-update): 43 sessions
+  [engram_lme_s_user_patched] f685340e_abs: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 89941a94 (knowledge-update): 46 sessions
+  [engram_lme_s_user_patched] 89941a94: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 07741c45 (knowledge-update): 49 sessions
+  [engram_lme_s_user_patched] 07741c45: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 7161e7e2 (single-session-assistant): 48 sessions
+  [engram_lme_s_user_patched] 7161e7e2: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] c4f10528 (single-session-assistant): 44 sessions
+  [engram_lme_s_user_patched] c4f10528: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 89527b6b (single-session-assistant): 45 sessions
+  [engram_lme_s_user_patched] 89527b6b: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] e9327a54 (single-session-assistant): 50 sessions
+  [engram_lme_s_user_patched] e9327a54: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 4c36ccef (single-session-assistant): 49 sessions
+  [engram_lme_s_user_patched] 4c36ccef: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 6ae235be (single-session-assistant): 48 sessions
+  [engram_lme_s_user_patched] 6ae235be: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 7e00a6cb (single-session-assistant): 62 sessions
+  [engram_lme_s_user_patched] 7e00a6cb: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 1903aded (single-session-assistant): 47 sessions
+  [engram_lme_s_user_patched] 1903aded: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] ceb54acb (single-session-assistant): 50 sessions
+  [engram_lme_s_user_patched] ceb54acb: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] f523d9fe (single-session-assistant): 50 sessions
+  [engram_lme_s_user_patched] f523d9fe: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 0e5e2d1a (single-session-assistant): 46 sessions
+  [engram_lme_s_user_patched] 0e5e2d1a: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] fea54f57 (single-session-assistant): 50 sessions
+  [engram_lme_s_user_patched] fea54f57: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] cc539528 (single-session-assistant): 48 sessions
+  [engram_lme_s_user_patched] cc539528: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] dc439ea3 (single-session-assistant): 47 sessions
+  [engram_lme_s_user_patched] dc439ea3: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 18dcd5a5 (single-session-assistant): 50 sessions
+  [engram_lme_s_user_patched] 18dcd5a5: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 488d3006 (single-session-assistant): 47 sessions
+  [engram_lme_s_user_patched] 488d3006: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 58470ed2 (single-session-assistant): 50 sessions
+  [engram_lme_s_user_patched] 58470ed2: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 8cf51dda (single-session-assistant): 46 sessions
+  [engram_lme_s_user_patched] 8cf51dda: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 1d4da289 (single-session-assistant): 55 sessions
+  [engram_lme_s_user_patched] 1d4da289: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 8464fc84 (single-session-assistant): 45 sessions
+  [engram_lme_s_user_patched] 8464fc84: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 8aef76bc (single-session-assistant): 48 sessions
+  [engram_lme_s_user_patched] 8aef76bc: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 71a3fd6b (single-session-assistant): 44 sessions
+  [engram_lme_s_user_patched] 71a3fd6b: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 2bf43736 (single-session-assistant): 44 sessions
+  [engram_lme_s_user_patched] 2bf43736: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 70b3e69b (single-session-assistant): 48 sessions
+  [engram_lme_s_user_patched] 70b3e69b: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 8752c811 (single-session-assistant): 56 sessions
+  [engram_lme_s_user_patched] 8752c811: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 3249768e (single-session-assistant): 47 sessions
+  [engram_lme_s_user_patched] 3249768e: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 1b9b7252 (single-session-assistant): 46 sessions
+  [engram_lme_s_user_patched] 1b9b7252: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 1568498a (single-session-assistant): 47 sessions
+  [engram_lme_s_user_patched] 1568498a: checkpoint found, skipping extraction
+    [warn] LLM judge failed for cc539528: Error code: 429 - {'error': {'message': 'Rate limit reached for gpt-4o-mini in organization org-cM37PKYppthHqFbMcieYpYv5 on tokens per min (TPM): Limit 200000, Used 190341, Requested 14104. Please try again in 1.333s. Visit https://platform.openai.com/account/rate-limits to learn more.', 'type': 'tokens', 'param': None, 'code': 'rate_limit_exceeded'}}
+  [engram_lme_s_user_patched] 6222b6eb (single-session-assistant): 46 sessions
+  [engram_lme_s_user_patched] 6222b6eb: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] e8a79c70 (single-session-assistant): 44 sessions
+  [engram_lme_s_user_patched] e8a79c70: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] d596882b (single-session-assistant): 44 sessions
+  [engram_lme_s_user_patched] d596882b: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] e3fc4d6e (single-session-assistant): 53 sessions
+  [engram_lme_s_user_patched] e3fc4d6e: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 51b23612 (single-session-assistant): 47 sessions
+  [engram_lme_s_user_patched] 51b23612: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 3e321797 (single-session-assistant): 50 sessions
+  [engram_lme_s_user_patched] 3e321797: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] e982271f (single-session-assistant): 54 sessions
+  [engram_lme_s_user_patched] e982271f: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 352ab8bd (single-session-assistant): 49 sessions
+  [engram_lme_s_user_patched] 352ab8bd: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] fca762bc (single-session-assistant): 42 sessions
+  [engram_lme_s_user_patched] fca762bc: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 7a8d0b71 (single-session-assistant): 45 sessions
+  [engram_lme_s_user_patched] 7a8d0b71: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] a40e080f (single-session-assistant): 48 sessions
+  [engram_lme_s_user_patched] a40e080f: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 8b9d4367 (single-session-assistant): 53 sessions
+  [engram_lme_s_user_patched] 8b9d4367: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 5809eb10 (single-session-assistant): 52 sessions
+  [engram_lme_s_user_patched] 5809eb10: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 41275add (single-session-assistant): 53 sessions
+  [engram_lme_s_user_patched] 41275add: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 4388e9dd (single-session-assistant): 43 sessions
+  [engram_lme_s_user_patched] 4388e9dd: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 4baee567 (single-session-assistant): 49 sessions
+  [engram_lme_s_user_patched] 4baee567: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 561fabcd (single-session-assistant): 49 sessions
+  [engram_lme_s_user_patched] 561fabcd: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] b759caee (single-session-assistant): 53 sessions
+  [engram_lme_s_user_patched] b759caee: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] ac031881 (single-session-assistant): 47 sessions
+  [engram_lme_s_user_patched] ac031881: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 28bcfaac (single-session-assistant): 50 sessions
+  [engram_lme_s_user_patched] 28bcfaac: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 16c90bf4 (single-session-assistant): 55 sessions
+  [engram_lme_s_user_patched] 16c90bf4: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] c8f1aeed (single-session-assistant): 50 sessions
+  [engram_lme_s_user_patched] c8f1aeed: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] eaca4986 (single-session-assistant): 47 sessions
+  [engram_lme_s_user_patched] eaca4986: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] c7cf7dfd (single-session-assistant): 51 sessions
+  [engram_lme_s_user_patched] c7cf7dfd: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] e48988bc (single-session-assistant): 50 sessions
+  [engram_lme_s_user_patched] e48988bc: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 1de5cff2 (single-session-assistant): 45 sessions
+  [engram_lme_s_user_patched] 1de5cff2: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 65240037 (single-session-assistant): 51 sessions
+  [engram_lme_s_user_patched] 65240037: checkpoint found, skipping extraction
+  [engram_lme_s_user_patched] 778164c6 (single-session-assistant): 50 sessions
+  [engram_lme_s_user_patched] 778164c6: checkpoint found, skipping extraction
+
+  Results for engram_lme_s_user_patched:
+    keyword accuracy: 63.4%
+    keyword exact:    54.0%
+    avg tokens:       1600
+    llm accuracy:     59.5%  (n=499)
+    by question type:
+      knowledge-update: n=78  kw=80.8%  llm=71.8%
+      multi-session: n=133  kw=53.4%  llm=54.9%
+      single-session-assistant: n=56  kw=82.1%  llm=89.1%
+      single-session-preference: n=30  kw=6.7%  llm=6.7%
+      single-session-user: n=70  kw=61.4%  llm=54.3%
+      temporal-reasoning: n=133  kw=69.2%  llm=59.4%
+
+Results written to benchmarks/longmemeval/results/s_user_patched_fan_out_20260414.json

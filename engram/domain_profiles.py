@@ -195,6 +195,19 @@ EPISODIC_PERSONAL = DomainProfile(
             "Do NOT use for static family relationships (e.g. 'X is Y's sister') — those are facts. "
             "Key test: did something CHANGE between these two people? If yes → relationship_update."
         ),
+        "episode": (
+            "a multi-turn arc inferred across several turns — NOT extractable from any single statement. "
+            "Use ONLY when 3 or more event/fact/outcome/relationship_update nodes together reveal a "
+            "sustained directional trajectory: a person going through a period of change, a situation "
+            "unfolding over time, or a recurring behavioral pattern. "
+            "Examples: a job search arc, a health recovery arc, a relationship deterioration arc, "
+            "a period of travel, an extended creative project. "
+            "The fact text must name: the person, the arc type, the inferred timeframe, the starting "
+            "state, and the direction/trajectory. "
+            "CRITICAL: The supersedes field MUST list the IDs of the 3+ constituent nodes this arc "
+            "is inferred from. If you cannot cite 3+ constituent node IDs, do NOT create the episode node. "
+            "Do NOT invent arcs — only extract when the constituent nodes clearly support the trajectory."
+        ),
     },
     edge_relations={
         "involves": "person, place, or thing participates in or is central to the source event/fact",

@@ -136,7 +136,22 @@ DEFAULT_STRATEGIES = {
     "semantic_rerank": False,  # Post-BFS re-ranking: multiply _score by cosine similarity to query
     "cross_encoder_rerank": False,  # Post-BFS re-ranking: score (query, fact) pairs via cross-encoder
     "process_slots": 5,  # Reserved slots for process nodes before top_k cut (0 = disabled)
+    "preference_fanout": False,  # Inject all preference nodes when query contains preference-signal verbs
 }
+
+# Verbs that indicate a preference/recommendation query — used by preference_fanout to
+# detect when to inject all preference-type nodes into the candidate pool.
+# These are typically NOT in preference node tags (which use product/activity names),
+# so BFS never seeds them without this explicit injection.
+_PREFERENCE_SIGNAL_VERBS: frozenset[str] = frozenset([
+    "recommend", "recommends", "recommendation", "recommendations",
+    "suggest", "suggests", "suggestion", "suggestions",
+    "prefer", "prefers", "preference", "preferences",
+    "like", "likes", "enjoy", "enjoys", "favorite", "favourite",
+    "advise", "advises", "advice",
+    # Question patterns that imply preference-seeking ("what should I serve/make/use/try")
+    "serve", "cook", "prepare", "make", "try", "choose", "pick", "use", "wear", "watch",
+])
 
 
 @dataclass
@@ -340,6 +355,27 @@ def retrieve_with_stats(
             before_filter, len(entry_nodes), sorted(allowed_set),
         )
 
+    # Source-prefix scoping: restrict retrieval to a sub-project path prefix.
+    # Applies to source_transcript — e.g. "health/" matches all nodes extracted
+    # from health/ notes. When multiple prefixes are given, a node is included if
+    # its source_transcript starts with any of them.
+    source_prefixes = strats.get("source_prefix")
+    if source_prefixes:
+        if isinstance(source_prefixes, str):
+            source_prefixes = [source_prefixes]
+        before_filter = len(entry_nodes)
+        entry_nodes = [
+            n for n in entry_nodes
+            if any(
+                n.get("source_transcript", "").startswith(p)
+                for p in source_prefixes
+            )
+        ]
+        log.debug(
+            "Source-prefix filter %s: %d → %d entry nodes",
+            source_prefixes, before_filter, len(entry_nodes),
+        )
+
     if not entry_nodes:
         return RetrievalResult(markdown="No relevant context found.", nodes_before_strategies=0, nodes_after_strategies=0)
 
@@ -431,23 +467,18 @@ def retrieve_with_stats(
     # BFS from entry nodes
     collected_nodes = bfs_collect(store, entry_nodes, hops)
 
-    # Process-node direct injection: bypass BFS depth limits for 'process' nodes.
-    # Process nodes from `reflect` form semi-separate connected components and are
-    # rarely reachable within hops=3 from implementation-heavy seeds. Pull process
-    # nodes whose tags overlap with the query keywords via a type-filtered SQL query —
-    # much more targeted than FTS (which ranks by BM25 and buries process nodes under
-    # thousands of implementation hits). Similar to person_hub exhaustive fan-out.
-    # These are subject to superseded_pruning and slot reservation below.
+    # Process/episode-node direct injection: bypass BFS depth limits for 'process' and 'episode' nodes.
+    # These reflect-type nodes form semi-separate connected components and are rarely reachable
+    # within hops=3 from implementation-heavy seeds. Pull them via type-filtered tag search —
+    # much more targeted than FTS. Subject to superseded_pruning and slot reservation below.
     process_slots = strats.get("process_slots", 0)
     if process_slots > 0 and keywords:
         _bfs_ids = {n["id"] for n in collected_nodes}
-        # Type-filtered tag search: find process nodes whose tags match any keyword.
-        # Limit to process_slots * 4 candidates to keep the injection set tight.
         _proc_limit = process_slots * 4
         _kw_conditions = " OR ".join(["tags LIKE ?" for _ in keywords])
         _kw_params = [f"%{kw}%" for kw in keywords]
         _proc_rows = store.conn.execute(
-            f"SELECT * FROM nodes WHERE type='process' AND ({_kw_conditions})"
+            f"SELECT * FROM nodes WHERE type IN ('process','episode') AND ({_kw_conditions})"
             f" ORDER BY confidence DESC LIMIT {_proc_limit}",
             _kw_params,
         ).fetchall()
@@ -457,7 +488,7 @@ def retrieve_with_stats(
         ]
         if proc_nodes_to_inject:
             log.debug(
-                "Process node injection: %d process nodes injected bypassing BFS",
+                "Process/episode node injection: %d nodes injected bypassing BFS",
                 len(proc_nodes_to_inject),
             )
             collected_nodes.extend(proc_nodes_to_inject)
@@ -466,6 +497,13 @@ def retrieve_with_stats(
 
     # Apply post-retrieval strategy pipeline
     applied = []
+
+    # Bi-temporal filter: restrict results to nodes valid at the requested time.
+    # Applied before superseded_pruning so we don't have to re-check is_active.
+    if strats.get("temporal_valid_at"):
+        valid_at = strats["temporal_valid_at"]
+        collected_nodes = _filter_temporal(collected_nodes, valid_at)
+        applied.append(f"temporal_valid_at({valid_at})")
 
     if strats["superseded_pruning"]:
         collected_nodes = prune_superseded(collected_nodes, store)
@@ -599,6 +637,25 @@ def retrieve_with_stats(
             log.debug("Person hub fan-out: injected %d additional person-tagged nodes", len(person_hub_nodes))
         collected_nodes = collected_nodes + person_hub_nodes
 
+    # Preference fan-out: when query contains recommendation/preference-signal verbs,
+    # fetch ALL preference-type nodes and add them to the candidate pool.
+    # Preference questions ("Can you recommend some coffee shops?") use generic action verbs
+    # that never appear in preference node tags (which use specific product/activity names),
+    # so BFS never seeds them.  We inject all preference nodes here and let semantic_rerank
+    # + top_k filter down to the most relevant ones.
+    if strats.get("preference_fanout"):
+        query_tokens = set(task_description.lower().split())
+        if query_tokens & _PREFERENCE_SIGNAL_VERBS:
+            collected_ids = {n["id"] for n in collected_nodes}
+            pref_nodes = store.get_nodes_by_tags(["preference"])
+            new_pref = [
+                n for n in pref_nodes
+                if n["id"] not in collected_ids and n["id"] not in pinned_ids
+            ]
+            if new_pref:
+                log.debug("Preference fan-out: injected %d preference nodes", len(new_pref))
+            collected_nodes = collected_nodes + new_pref
+
     # Seed preservation: ensure directly query-matched seed nodes (depth=0) are not
     # completely displaced by recency-biased BFS-expanded nodes. Reserve up to 40% of
     # top_k slots for seeds, filling remaining slots with the highest-scoring non-seeds.
@@ -616,9 +673,10 @@ def retrieve_with_stats(
     # with implementation nodes even when highly-relevant process nodes exist.
     # Reserved process nodes are scored-sorted first, so the best ones win the slots.
     # (process_slots already set above in the direct-injection block)
+    # Reserve slots for both 'process' (sw-dev) and 'episode' (episodic personal) reflect-type nodes.
     process_reserved: list[dict] = []
     if process_slots > 0:
-        process_candidates = [n for n in non_hub_collected if n.get("type") == "process"]
+        process_candidates = [n for n in non_hub_collected if n.get("type") in ("process", "episode")]
         process_reserved = process_candidates[:process_slots]
         process_reserved_ids = {n["id"] for n in process_reserved}
         non_hub_collected = [n for n in non_hub_collected if n["id"] not in process_reserved_ids]
@@ -798,21 +856,55 @@ def score_by_relevance(nodes: list[dict], keywords: list[str]) -> list[dict]:
 
 
 def prune_superseded(nodes: list[dict], store: GraphStore) -> list[dict]:
-    """Remove nodes that have been superseded by other nodes in the graph."""
-    # Collect all node IDs that are targets of supersedes edges or listed in supersedes arrays
-    superseded_ids = set()
-    for node in nodes:
-        for sid in node.get("supersedes", []):
-            superseded_ids.add(sid)
+    """Remove nodes that have been superseded by other nodes in the graph.
 
-    # Also check: if a node is the target of a supersedes edge, it's been superseded
+    Fast path: uses the bi-temporal `is_active` column (0 = superseded).
+    Falls back to edge traversal for nodes that predate the column (is_active
+    defaults to 1, so the edge check provides the correctness guarantee).
+    """
+    # Fast path via is_active column (set during merge_extraction / backfill).
+    # is_active == 0 means valid_to is set → node has been superseded globally.
+    superseded_ids: set[str] = {
+        n["id"] for n in nodes if n.get("is_active", 1) == 0
+    }
+
+    # Belt-and-suspenders: also catch supersessions recorded only in the
+    # supersedes[] array or edges table (covers pre-migration DBs where
+    # is_active may still be 1 for superseded nodes).
     node_ids = {n["id"] for n in nodes}
     for node in nodes:
+        if node["id"] in superseded_ids:
+            continue  # already flagged
+        for sid in node.get("supersedes", []):
+            superseded_ids.add(sid)
+    for node in nodes:
+        if node["id"] in superseded_ids:
+            continue
         for edge in store.get_edges_to(node["id"]):
             if edge["relation"] == "supersedes" and edge["from_id"] in node_ids:
                 superseded_ids.add(node["id"])
+                break
 
     return [n for n in nodes if n["id"] not in superseded_ids]
+
+
+def _filter_temporal(nodes: list[dict], valid_at: str) -> list[dict]:
+    """Keep only nodes whose valid window covers `valid_at` (ISO 8601).
+
+    A node is included if:
+      - occurred_at is absent OR occurred_at <= valid_at   (fact started by this time)
+      - valid_to is absent OR valid_to > valid_at          (fact not yet superseded)
+    """
+    result = []
+    for n in nodes:
+        occurred_at = n.get("occurred_at") or ""
+        valid_to = n.get("valid_to") or ""
+        if occurred_at and occurred_at > valid_at:
+            continue  # fact hadn't happened yet at query time
+        if valid_to and valid_to <= valid_at:
+            continue  # fact was already superseded at query time
+        result.append(n)
+    return result
 
 
 def filter_by_confidence(nodes: list[dict], threshold: float) -> list[dict]:
@@ -1357,8 +1449,8 @@ def assemble_markdown(
     for node in undated_nodes:
         by_type.setdefault(node["type"], []).append(node)
 
-    # Order: processes first (always-relevant), then decisions, constraints, implementations, resolved, lessons, preferences, others
-    type_order = ["process", "decision", "transition", "constraint", "implementation", "resolved", "lesson_learned", "preference", "question"]
+    # Order: arc types first (process/episode — always-relevant), then decisions, constraints, implementations, resolved, lessons, preferences, others
+    type_order = ["process", "episode", "decision", "transition", "constraint", "implementation", "resolved", "lesson_learned", "preference", "question"]
     sorted_types = sorted(by_type.keys(), key=lambda t: type_order.index(t) if t in type_order else 99)
 
     for node_type in sorted_types:

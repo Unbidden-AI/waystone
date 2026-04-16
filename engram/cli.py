@@ -104,12 +104,13 @@ _MAX_FILE_BYTES = 50 * 1024 * 1024  # 50 MB hard limit
 @click.option("--questions", is_flag=True, help="Run a targeted pass hunting for open questions and unresolved items")
 @click.option("--constraints", is_flag=True, help="Run a targeted pass hunting for hard constraints and requirements")
 @click.option("--numerics", is_flag=True, help="Run a targeted pass hunting for numeric values, measurements, and quantified facts")
+@click.option("--preferences", is_flag=True, help="Run a targeted pass hunting for personal preferences, habits, tastes, and dislikes")
 @click.option("--synthesize", is_flag=True, help="Run a synthesis pass after extraction: create cross-cutting summary nodes across all graph nodes")
 @click.option("--timeout", type=float, default=None, help="LLM timeout in seconds (overrides config)")
 @click.option("--chunk-size", type=int, default=None, metavar="CHARS",
               help="Max chars per LLM call (default: 20000 for Gemini; auto-applied when file > 20000 chars)")
 @click.pass_context
-def extract_cmd(ctx, project, transcript_file, verify, lessons, decisions, questions, constraints, numerics, synthesize, timeout, chunk_size):
+def extract_cmd(ctx, project, transcript_file, verify, lessons, decisions, questions, constraints, numerics, preferences, synthesize, timeout, chunk_size):
     """Extract facts from a transcript and merge into the project graph."""
     config = _load_cfg(ctx.obj["config_path"])
 
@@ -155,7 +156,7 @@ def extract_cmd(ctx, project, transcript_file, verify, lessons, decisions, quest
     _targeted_categories = [
         c for c, flag in [("lessons", lessons), ("decisions", decisions),
                           ("questions", questions), ("constraints", constraints),
-                          ("numerics", numerics)]
+                          ("numerics", numerics), ("preferences", preferences)]
         if flag
     ]
 
@@ -614,7 +615,9 @@ def reflect_cmd(ctx, project, transcript, since_turn, domain, chunk_size):
     )
 
     store = GraphStore(db_path)
-    existing_process_nodes = [n for n in store.get_all_nodes() if n.get("type") == "process"]
+    _episodic_domains = {"episodic_personal", "episodic_personal_no_dates"}
+    _reflect_type = "episode" if domain in _episodic_domains else "process"
+    existing_process_nodes = [n for n in store.get_all_nodes() if n.get("type") == _reflect_type]
     store.close()
 
     session_nodes: list[dict] = []  # nodes found this session (for dedup across chunks)
@@ -734,9 +737,16 @@ def reflect_cmd(ctx, project, transcript, since_turn, domain, chunk_size):
 @click.option("--disable", "-d", multiple=True, help="Disable a strategy (e.g. -d relevance_scoring)")
 @click.option("--confidence", type=float, default=None, help="Min confidence threshold (e.g. 0.6)")
 @click.option("--token-budget", type=int, default=None, help="Max tokens in output (e.g. 500)")
+@click.option("--source", "source_prefix", multiple=True,
+              help="Restrict results to nodes from this source path prefix (repeatable). "
+                   "E.g. --source health/ --source work/ to scope to two sub-folders.")
 @click.option("--stats", "show_stats", is_flag=True, help="Show retrieval stats (for benchmarking)")
+@click.option("--at-time", "at_time", default=None,
+              help="Bi-temporal point-in-time query: only return nodes whose valid window "
+                   "covers this ISO 8601 timestamp (e.g. 2025-06-01T00:00:00). "
+                   "Answers 'what was true in the world at this moment?'")
 @click.pass_context
-def query(ctx, project, task, hops, top_k, enable, disable, confidence, token_budget, show_stats):
+def query(ctx, project, task, hops, top_k, enable, disable, confidence, token_budget, source_prefix, show_stats, at_time):
     """Retrieve relevant context for a task description."""
     config = _load_cfg(ctx.obj["config_path"])
     db_path = get_db_path(config, project)
@@ -803,6 +813,8 @@ def query(ctx, project, task, hops, top_k, enable, disable, confidence, token_bu
 
     overrides = _parse_strategy_overrides(enable, disable, confidence, token_budget)
     strategies = _resolve_strategies(config, overrides)
+    if source_prefix:
+        strategies["source_prefix"] = list(source_prefix)
 
     store = GraphStore(db_path)
     stats = store.get_stats()
@@ -816,6 +828,12 @@ def query(ctx, project, task, hops, top_k, enable, disable, confidence, token_bu
         )
         store.close()
         sys.exit(1)
+
+    if at_time:
+        # Bi-temporal mode: pass valid_at to the retrieval strategy pipeline so
+        # post-BFS filtering drops nodes outside their valid window.
+        strategies["temporal_valid_at"] = at_time
+        click.echo(f"[temporal] Restricting to nodes valid at {at_time}")
 
     result = retrieve_with_stats(store, task, hops=hops, top_k=top_k, strategies=strategies)
     store.close()
@@ -882,6 +900,67 @@ def show(ctx, project, failures):
                 click.echo(f"  [{node['type']}] {node['fact'][:80]}  ({tags})")
 
     store.close()
+
+
+@cli.command()
+@click.argument("project")
+@click.option("--limit", default=50, type=int, help="Max sources to show (default 50)")
+@click.pass_context
+def sources(ctx, project, limit):
+    """List all source paths ingested into a project, with node counts."""
+    config = _load_cfg(ctx.obj["config_path"])
+    db_path = get_db_path(config, project)
+
+    if not db_path.parent.exists():
+        click.echo(f"Error: Project '{project}' not found.", err=True)
+        sys.exit(1)
+
+    store = GraphStore(db_path)
+    srcs = store.get_sources()[:limit]
+    store.close()
+
+    if not srcs:
+        click.echo("No sources found.")
+        return
+
+    for s in srcs:
+        click.echo(f"{s['count']:6d}  {s['source']}")
+
+
+@cli.command()
+@click.argument("project")
+@click.argument("node_id")
+@click.pass_context
+def history(ctx, project, node_id):
+    """Show belief-revision history for a node (oldest ancestor → current).
+
+    Walks the supersedes[] chain to reconstruct how a fact evolved over time.
+    Each entry shows the node's fact, type, confidence, and valid time window.
+    """
+    config = _load_cfg(ctx.obj["config_path"])
+    db_path = get_db_path(config, project)
+    store = GraphStore(db_path)
+    chain = store.get_revision_history(node_id)
+    store.close()
+
+    if not chain:
+        click.echo(f"Node {node_id} not found.", err=True)
+        sys.exit(1)
+
+    click.echo(f"Revision history for {node_id} ({len(chain)} version(s)):")
+    click.echo("─" * 80)
+    for i, n in enumerate(chain):
+        status = "ACTIVE" if n.get("is_active", 1) else "superseded"
+        valid_from = n.get("occurred_at") or n.get("created_at", "")[:10]
+        valid_to = n.get("valid_to", "")[:10] if n.get("valid_to") else "present"
+        click.echo(
+            f"  [{i+1}] {n['id']}  [{status}]  {valid_from} → {valid_to}\n"
+            f"      {n['fact']}\n"
+            f"      type={n['type']}  confidence={n.get('confidence',0):.2f}"
+        )
+        if n.get("supersedes"):
+            click.echo(f"      supersedes: {n['supersedes']}")
+        click.echo()
 
 
 @cli.command()
@@ -2256,7 +2335,7 @@ def doctor_cmd(ctx):
     path = Path.cwd().resolve()
     for candidate in [path, *path.parents]:
         marker = candidate / ".context-broker"
-        if marker.exists():
+        if marker.is_file():
             marker_found = True
             marker_project = marker.read_text().strip()
             break

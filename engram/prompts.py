@@ -734,6 +734,59 @@ RULES:
 TRANSCRIPT:
 {transcript}""",
 
+    "preferences": """You are a context extraction engine hunting for DURABLE personal preferences, habits, and tastes expressed by the user in casual conversation.
+
+Return ONLY a valid JSON object — no markdown fences, no commentary, no preamble. Start your response with { and end with }.
+
+Schema:
+{
+  "nodes": [
+    {
+      "id": "n1",
+      "fact": "Clear, self-contained statement of the preference: [Person] likes/dislikes/prefers [specific value] for [topic]",
+      "type": "preference",
+      "confidence": 0.85,
+      "source_message": 0,
+      "supersedes": [],
+      "tags": ["topic", "value", "preference"]
+    }
+  ],
+  "edges": [
+    {
+      "from": "n1",
+      "to": "n_existingid",
+      "relation": "relates_to"
+    }
+  ]
+}
+
+EXISTING CONTEXT (already extracted — do NOT re-extract these):
+{existing_context}
+
+EXTRACT only DURABLE, MEANINGFUL preferences — the kind that would answer "what does this person like/dislike?":
+
+1. EXPLICIT STATED LIKES/DISLIKES: "I like X", "I love X", "I hate X", "I can't stand X", "my favorite is X", "I prefer X"
+2. RECURRING HABITS / ROUTINES: "I usually X", "I always X", "I typically X", "every morning I X" — only if the behavior is habitual, not one-time
+3. STRONG IMPLICIT PREFERENCES: Clear positive/negative reaction to a SPECIFIC item (not vague reactions like "that was nice")
+4. PREFERENCE UPDATES: "I used to like X but now I prefer Y" — use supersedes to link to the old preference node if already extracted
+
+SKIP:
+- Fleeting one-off reactions or casual filler ("I liked that movie" when it's the only mention)
+- Opinions about events, news, or other people's choices
+- Context already captured in EXISTING CONTEXT
+
+RULES:
+- Use type: "preference" for all nodes from this pass.
+- The fact must be self-contained: state WHO has the preference, WHAT they like/dislike/do (specific value, not just a category), and any qualifying context.
+- Format as a declarative statement: "The user prefers oat milk lattes over regular coffee" NOT "I like lattes".
+- Tag with the topic (broad: "coffee", "exercise") AND specific value ("oat milk latte", "trail running"). Always include "preference" as a tag.
+- AIM FOR 3–8 NODES per call. Do NOT emit trivial or redundant preferences. Hard cap: 10 nodes maximum per call.
+- If a preference supersedes a previously extracted one, set supersedes to the old node's ID.
+- If nothing meaningful is found, return {"nodes": [], "edges": []}.
+
+TRANSCRIPT:
+{transcript}""",
+
     "decisions_constraints_tradeoffs": """You are a context extraction engine hunting specifically for three interrelated concept types: DECISIONS (choices between alternatives), CONSTRAINTS (hard requirements and non-negotiables), and TRADEOFFS (explicit comparisons of options with rationale).
 
 Return ONLY a valid JSON object — no markdown fences, no commentary, no preamble. Start your response with { and end with }.
@@ -798,7 +851,7 @@ TRANSCRIPT:
 def build_targeted_prompt(category: str, transcript_text: str, existing_nodes: list[dict]) -> str:
     """Build a targeted extraction prompt for a specific category.
 
-    Categories: 'lessons', 'decisions', 'questions', 'constraints', 'decisions_constraints_tradeoffs', 'numerics'
+    Categories: 'lessons', 'decisions', 'questions', 'constraints', 'numerics', 'preferences', 'decisions_constraints_tradeoffs'
     """
     if category not in TARGETED_PASS_PROMPTS:
         raise ValueError(f"Unknown targeted pass category '{category}'. Valid: {list(TARGETED_PASS_PROMPTS)}")
@@ -896,6 +949,87 @@ def build_synthesis_prompt(existing_nodes: list[dict]) -> str:
     return SYNTHESIS_PROMPT.replace("{existing_nodes}", nodes_block)
 
 
+IMPLICIT_PREFS_PROMPT = """You are a preference inference engine. Below are preference and activity nodes extracted from a person's conversations. Your task is to infer IMPLICIT preferences that are strongly implied by the explicit ones — specifically preferences in ADJACENT USAGE DOMAINS that the person would likely have, but did not state directly.
+
+Return ONLY a valid JSON object — no markdown fences, no commentary, no preamble. Start your response with { and end with }.
+
+Schema:
+{
+  "nodes": [
+    {
+      "id": "n1",
+      "fact": "Clear, self-contained statement of the inferred preference",
+      "type": "preference",
+      "confidence": 0.75,
+      "source_message": null,
+      "supersedes": [],
+      "tags": ["topic", "inferred-domain", "preference"]
+    }
+  ],
+  "edges": [
+    {
+      "from": "n1",
+      "to": "n_sourceid",
+      "relation": "relates_to"
+    }
+  ]
+}
+
+EXISTING NODES (source of inference):
+{existing_nodes}
+
+INFERENCE RULES:
+
+1. GARDENING → COOKING: If the person grows, plants, or tends specific herbs/vegetables — including via companion planting — infer they likely prefer cooking with those homegrown ingredients.
+   Trigger phrases: "grows", "planted", "companion plant for", "tends", "harvest", "garden".
+   Example: multiple "prefers X as companion plant for tomatoes" nodes → person grows tomatoes and those herbs → "User grows cherry tomatoes with companion herbs (basil, mint, chives) in their garden; prefers using these homegrown ingredients in cooking and recipes"
+   Combine multiple companion-plant nodes into ONE consolidated inference node listing all the produce.
+
+2. SPORTS/FITNESS → NUTRITION: If the person does specific athletic activities (marathon running, cycling, CrossFit), infer complementary nutrition/meal preferences.
+   Example: "runs marathons" → "likely prefers high-carb meals before long runs, recovery nutrition after"
+
+3. TRAVEL → FOOD/ACCOMMODATION: If the person visits specific places, infer preferences for local cuisine or accommodation style.
+   Example: "excited about Tokyo trip" → "likely interested in trying authentic Japanese cuisine in Tokyo"
+
+4. HOBBY DOMAINS: Other clear domain crossings where an explicit preference implies a strong adjacent preference.
+
+CRITICAL RULES:
+- Only emit inferences with HIGH confidence (≥ 0.7) — ones where ANY reasonable person would agree the inference is correct.
+- The inference must be PRACTICALLY USEFUL: would it help answer "what does this person want?" in a different context than where the preference was stated?
+- Use type: "preference" for all nodes.
+- Link each inferred node to its source node(s) via relates_to edges.
+- Tag with BOTH the source domain AND the inferred domain, plus "inferred-preference". For food/cooking inferences, always include "cooking", "recipe", "homegrown" (if applicable), and the specific ingredient names as tags — these are the terms a retrieval query would use.
+- The fact must state the inferred preference clearly and be self-contained.
+- AIM FOR 3–8 NODES. Hard cap: 10 nodes maximum.
+- If no strong inferences are possible, return {"nodes": [], "edges": []}."""
+
+
+def build_implicit_prefs_prompt(existing_nodes: list[dict]) -> str:
+    """Build the implicit preference inference prompt from existing extracted nodes.
+
+    Takes preference and implementation nodes and generates inferred cross-domain
+    preference nodes (e.g. gardening → cooking, fitness → nutrition).
+    """
+    # Filter to preference and activity-relevant implementation nodes
+    relevant_types = {"preference", "implementation", "transition"}
+    relevant = [n for n in existing_nodes if n.get("type") in relevant_types]
+    if not relevant:
+        relevant = existing_nodes
+
+    lines = []
+    for node in relevant:
+        fact = node["fact"]
+        if len(fact) > 120:
+            fact = fact[:117] + "..."
+        tags_str = ", ".join(node.get("tags", [])[:6])
+        lines.append(
+            f'[{node["id"]}] ({node["type"]}, conf={node.get("confidence", 0.5):.1f})'
+            f' "{fact}" tags:[{tags_str}]'
+        )
+    nodes_block = "\n".join(lines) if lines else "(none)"
+    return IMPLICIT_PREFS_PROMPT.replace("{existing_nodes}", nodes_block)
+
+
 REFLECT_PROMPT = """You are a process discovery engine. Your task is to find PATTERNS and PROTOCOLS that emerged from iteration in the conversation below.
 
 A "process" node captures something the team converged on through trying multiple approaches — not a single decision, but a repeatable procedure, implicit protocol, or hard-won insight about workflow.
@@ -949,15 +1083,91 @@ RULES:
 """
 
 
+REFLECT_EPISODE_PROMPT = """You are an episodic arc discovery engine. Your task is to find SUSTAINED TRAJECTORIES that emerged across multiple turns in the personal conversation below.
+
+An "episode" node captures a multi-turn arc — a period of change, unfolding situation, or recurring behavioral pattern that is NOT stated in any single turn but is clearly inferable from 3 or more individual events, facts, or outcomes together.
+
+Return ONLY a valid JSON object — no markdown fences, no commentary, no preamble. Start your response with { and end with }.
+
+Schema:
+{
+  "nodes": [
+    {
+      "id": "n1",
+      "fact": "Over [timeframe], [person] went through [arc description] — starting from [initial state] and moving toward [trajectory/direction]",
+      "type": "episode",
+      "confidence": 0.75,
+      "source_message": 0,
+      "supersedes": ["constituent_node_id_1", "constituent_node_id_2", "constituent_node_id_3"],
+      "tags": ["person_name", "arc_type", "timeframe"]
+    }
+  ],
+  "edges": [
+    {
+      "from": "n1",
+      "to": "constituent_node_id_1",
+      "relation": "follows"
+    }
+  ]
+}
+
+EXISTING EPISODE NODES (do NOT re-extract these):
+{existing_episode_nodes}
+
+EXISTING EVENT/FACT/OUTCOME NODES (potential arc constituents — use their IDs in supersedes):
+{existing_constituent_nodes}
+
+CONVERSATION WINDOW:
+{transcript_window}
+
+HUNT for these arc patterns:
+
+1. LIFE TRANSITIONS: A person moving through a sustained change — job search, career pivot, relocation, health recovery, grief process
+2. UNFOLDING SITUATIONS: A situation that develops across turns — a relationship evolving, a project being built, a conflict escalating or resolving
+3. RECURRING BEHAVIORAL PATTERNS: Something a person consistently does across multiple events that reveals a pattern — not a one-time event but a trait visible across several instances
+4. EMOTIONAL ARCS: A person's emotional state shifting directionally over the course of the conversation — not a single expressed feeling but a trajectory
+
+RULES:
+
+1. MINIMUM CONSTITUENCY: The supersedes field MUST list 3 or more constituent node IDs. If you cannot cite 3+ node IDs from the EXISTING NODES list above, do NOT create the episode node.
+2. NO HALLUCINATION: Only extract arcs that are CLEARLY supported by the constituent nodes. Do not impose narrative on disconnected facts.
+3. Confidence range: 0.6-0.85. Episodes are inferred arcs — lower confidence than explicit events.
+4. Fact text format: "Over [timeframe], [person] [arc description] — from [initial state] toward [direction/outcome]"
+5. Tags MUST include: the person's name, the arc category (job-search, health, relationship, travel, grief, creative-project, etc.), and the approximate timeframe.
+6. Add follows edges from the episode node to each constituent node in chronological order.
+7. DO NOT duplicate arcs already in EXISTING EPISODE NODES.
+8. If the conversation window shows no clear multi-turn arcs meeting the 3-constituent minimum, return {"nodes": [], "edges": []}.
+"""
+
+
+_EPISODIC_DOMAINS = {"episodic_personal", "episodic_personal_no_dates"}
+
+
+def _format_node_list(nodes: list[dict], max_fact_len: int = 120) -> str:
+    lines = []
+    for node in nodes:
+        fact = node["fact"]
+        if len(fact) > max_fact_len:
+            fact = fact[:max_fact_len - 3] + "..."
+        tags_str = ", ".join(node.get("tags", [])[:6])
+        lines.append(
+            f'[{node["id"]}] (type={node.get("type","?")}, conf={node.get("confidence", 0.5):.1f}) "{fact}" tags:[{tags_str}]'
+        )
+    return "\n".join(lines) if lines else "(none)"
+
+
 def build_reflect_prompt(
     transcript_window: str, existing_process_nodes: list[dict] | None = None, domain: str = "software_dev"
 ) -> str:
-    """Format the reflect prompt with existing process nodes and transcript window.
+    """Format the reflect prompt with existing nodes and transcript window.
+
+    For episodic domains, uses REFLECT_EPISODE_PROMPT (episode arc extraction).
+    For all other domains, uses REFLECT_PROMPT (process pattern extraction).
 
     Args:
         transcript_window: multi-turn conversation text
-        existing_process_nodes: list of already-extracted process nodes (for dedup)
-        domain: domain name (for future use in parameterization)
+        existing_process_nodes: already-extracted reflect-type nodes (process or episode) for dedup
+        domain: domain name
 
     Returns:
         formatted prompt string
@@ -965,17 +1175,16 @@ def build_reflect_prompt(
     if existing_process_nodes is None:
         existing_process_nodes = []
 
-    lines = []
-    for node in existing_process_nodes:
-        fact = node["fact"]
-        if len(fact) > 120:
-            fact = fact[:117] + "..."
-        tags_str = ", ".join(node.get("tags", [])[:6])
-        lines.append(
-            f'[{node["id"]}] (conf={node.get("confidence", 0.5):.1f}) "{fact}" tags:[{tags_str}]'
-        )
-    existing_block = "\n".join(lines) if lines else "(none)"
+    if domain in _EPISODIC_DOMAINS:
+        existing_episodes = [n for n in existing_process_nodes if n.get("type") == "episode"]
+        existing_constituents = [n for n in existing_process_nodes if n.get("type") != "episode"]
+        prompt = REFLECT_EPISODE_PROMPT.replace("{existing_episode_nodes}", _format_node_list(existing_episodes))
+        prompt = prompt.replace("{existing_constituent_nodes}", _format_node_list(existing_constituents))
+        prompt = prompt.replace("{transcript_window}", transcript_window)
+        return prompt
 
+    # Default: software_dev and other non-episodic domains
+    existing_block = _format_node_list(existing_process_nodes)
     prompt = REFLECT_PROMPT.replace("{existing_process_nodes}", existing_block)
     prompt = prompt.replace("{transcript_window}", transcript_window)
     return prompt

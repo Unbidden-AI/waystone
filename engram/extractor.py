@@ -13,6 +13,7 @@ from .prompts import (
     build_extraction_json_schema,
     TARGETED_PASS_PROMPTS,
     build_extraction_prompt,
+    build_implicit_prefs_prompt,
     build_incremental_prompt,
     build_reconcile_prompt,
     build_synthesis_prompt,
@@ -224,10 +225,10 @@ async def _call_llm(prompt: str, config: dict, domain_profile=None) -> str:
         break
 
     log.debug("LLM response: finish_reason=%s len=%d", finish_reason, len(content) if content else 0)
-    if finish_reason == "length":
+    if finish_reason in ("length", "MAX_TOKENS"):
         max_tok = llm_cfg.get("max_tokens", 4096)
         raise ValueError(
-            f"LLM response was truncated (finish_reason=length, max_tokens={max_tok}). "
+            f"LLM response was truncated (finish_reason={finish_reason}, max_tokens={max_tok}). "
             f"The model hit the token limit before completing the JSON. "
             f"Try: (1) increase max_tokens in config.yaml, "
             f"(2) use --chunk-size to split the input, or "
@@ -489,6 +490,34 @@ async def synthesize_extraction(existing_nodes: list[dict], config: dict) -> dic
     return assign_ids_incremental(extraction, existing_ids)
 
 
+async def extract_implicit_prefs(existing_nodes: list[dict], config: dict) -> dict:
+    """Infer implicit cross-domain preferences from already-extracted nodes.
+
+    Unlike extract_targeted (which reads a transcript), this pass reads existing
+    preference/implementation nodes and generates NEW preference nodes that capture
+    strongly implied preferences in adjacent domains — e.g.:
+      - Gardening nodes about growing tomatoes/basil → cooking preference for
+        using homegrown produce in recipes
+      - Fitness nodes about marathon running → nutrition preferences
+
+    This bridges the semantic framing gap between how preferences are extracted
+    (in the original conversation domain) and how they're queried (in the adjacent
+    usage domain).
+
+    Typical use: run once per sample after all session-level extraction is complete,
+    passing in all preference + implementation nodes.
+
+    Returns:
+        dict with "nodes" (list[dict]) and "edges" (list[dict]) for new nodes.
+        Use assign_ids_incremental to resolve IDs before merging.
+    """
+    prompt = build_implicit_prefs_prompt(existing_nodes)
+    content = await _call_llm(prompt, config)
+    extraction = parse_llm_response(content)
+    existing_ids = {n["id"] for n in existing_nodes}
+    return assign_ids_incremental(extraction, existing_ids)
+
+
 async def reflect_extraction(
     transcript_window: str,
     project: str,
@@ -525,8 +554,13 @@ async def reflect_extraction(
         db_path = get_db_path(config, project)
         store = GraphStore(db_path)
 
+    _EPISODIC_DOMAINS = {"episodic_personal", "episodic_personal_no_dates"}
+    _reflect_type = "episode" if domain in _EPISODIC_DOMAINS else "process"
+
     if existing_process_nodes is None:
-        existing_process_nodes = [n for n in store.get_all_nodes() if n.get("type") == "process"]
+        existing_process_nodes = [
+            n for n in store.get_all_nodes() if n.get("type") == _reflect_type
+        ]
 
     prompt = build_reflect_prompt(transcript_window, existing_process_nodes, domain)
     content = await _call_llm(prompt, config)
@@ -534,11 +568,11 @@ async def reflect_extraction(
     existing_ids = {n["id"] for n in existing_process_nodes}
     result = assign_ids_incremental(extraction, existing_ids)
 
-    # Set domain on each new node
+    # Set domain on each new node; enforce the correct reflect type
     for node in result.get("nodes", []):
         node["domain"] = domain
-        if node.get("type") != "process":
-            node["type"] = "process"
+        if node.get("type") != _reflect_type:
+            node["type"] = _reflect_type
 
     return result
 

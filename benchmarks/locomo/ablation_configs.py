@@ -71,6 +71,11 @@ class AblationConfig:
     cross_encoder_model: str | None = None  # override cross-encoder model (default: ms-marco-MiniLM-L-6-v2)
     rrf_rerank: bool = False             # fuse bi-encoder + cross-encoder rankings via Reciprocal Rank Fusion
     rrf_weights: dict | None = None      # per-query-type CE weight: {"temporal": 0.7, "preference": 0.1, "default": 0.5}
+    # Preference fan-out: inject all preference-type nodes when the query contains
+    # recommendation/preference-signal verbs (recommend, suggest, prefer, like, etc.).
+    # Addresses the keyword-mismatch gap: preference nodes are tagged with specific
+    # product/activity names, but preference questions use generic action verbs.
+    preference_fanout: bool = False
     # Absent-information handling: when True and retrieval returns no context, judge prompt
     # is flipped — empty context scores YES if the ground truth is "info not available".
     # Keep False for LOCOMO (no abstention category); set True for LongMemEval.

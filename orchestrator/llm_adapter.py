@@ -259,12 +259,18 @@ def build_tool_schemas(enabled_tools: list[str]) -> list[dict]:
 
 def _resolve_api_key(cfg: dict) -> str | None:
     """Resolve API key from config → env vars in priority order."""
+    # 1. Explicit env var name in config (e.g. api_key_env: GEMINI_API_KEY)
     env_name = cfg.get("api_key_env")
     if env_name:
         val = os.environ.get(env_name)
         if val:
             return val
-    for env in ("CTX_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY"):
+    # 2. Literal key hardcoded in config
+    literal = cfg.get("api_key")
+    if literal:
+        return literal
+    # 3. Well-known env var fallbacks
+    for env in ("GEMINI_API_KEY", "CTX_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY"):
         val = os.environ.get(env)
         if val:
             return val

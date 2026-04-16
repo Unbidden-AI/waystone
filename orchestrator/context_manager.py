@@ -162,7 +162,7 @@ class ContextManager:
 
         For the non-blocking production path, use ``compact_if_needed()``.
         """
-        batch_size = min(self._compaction_batch, len(self._history))
+        batch_size = _safe_batch_size(self._history, min(self._compaction_batch, len(self._history)))
         batch = self._history[:batch_size]
 
         transcript_parts: list[str] = []
@@ -226,7 +226,7 @@ class ContextManager:
             log.debug("Compaction already in progress, skipping this trigger")
             return None
 
-        batch_size = min(self._compaction_batch, len(self._history))
+        batch_size = _safe_batch_size(self._history, min(self._compaction_batch, len(self._history)))
         batch = self._history[:batch_size]
 
         transcript_parts: list[str] = []
@@ -376,3 +376,49 @@ class ContextManager:
             "idle_seconds": time.monotonic() - self._last_activity,
             "window_size": self._window_size,
         }
+
+
+# ---------------------------------------------------------------------------
+# Module-level helpers
+# ---------------------------------------------------------------------------
+
+
+def _safe_batch_size(history: list[Message], target: int) -> int:
+    """Return the largest cut index <= target that doesn't orphan tool responses.
+
+    Compaction slices ``history[:k]``. If ``k`` lands between an assistant
+    message with tool_calls and its subsequent tool-response messages, the tool
+    messages remain in history without their matching assistant message — causing
+    Gemini (and other providers) to reject the conversation with
+    "Missing corresponding tool call for tool response message".
+
+    This function walks forward grouping tool-call exchanges into atomic units
+    (assistant-with-tool-calls + all following tool messages) and returns the
+    largest safe cut that fits within *target*.
+    """
+    if target <= 0:
+        return 0
+    if target >= len(history):
+        return len(history)
+
+    i = 0
+    safe = 0
+    while i < target:
+        msg = history[i]
+        if msg.role == "assistant" and getattr(msg, "raw_tool_calls", None):
+            # Atomic group: this assistant message + all consecutive tool responses
+            j = i + 1
+            while j < len(history) and history[j].role == "tool":
+                j += 1
+            group_end = j
+        else:
+            group_end = i + 1
+
+        if group_end <= target:
+            safe = group_end
+            i = group_end
+        else:
+            # Including this group would exceed target — stop here
+            break
+
+    return safe

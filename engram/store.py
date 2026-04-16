@@ -72,6 +72,14 @@ class GraphStore:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(str(self.db_path))
         self.conn.row_factory = sqlite3.Row
+        # Performance tuning — applied before any schema work
+        self.conn.executescript("""
+            PRAGMA journal_mode=WAL;
+            PRAGMA synchronous=NORMAL;
+            PRAGMA cache_size=-65536;
+            PRAGMA temp_store=MEMORY;
+            PRAGMA mmap_size=268435456;
+        """)
         self._vec_available = self._load_sqlite_vec()
         self._dedup_threshold = dedup_threshold
         self.init_db()
@@ -115,9 +123,10 @@ class GraphStore:
                 PRIMARY KEY (from_id, to_id, relation)
             );
 
-            CREATE INDEX IF NOT EXISTS idx_nodes_type ON nodes(type);
-            CREATE INDEX IF NOT EXISTS idx_edges_from ON edges(from_id);
-            CREATE INDEX IF NOT EXISTS idx_edges_to ON edges(to_id);
+            CREATE INDEX IF NOT EXISTS idx_nodes_type   ON nodes(type);
+            CREATE INDEX IF NOT EXISTS idx_nodes_source ON nodes(source_transcript);
+            CREATE INDEX IF NOT EXISTS idx_edges_from   ON edges(from_id);
+            CREATE INDEX IF NOT EXISTS idx_edges_to     ON edges(to_id);
         """)
         # feedback table — added after initial release, migration-safe
         self.conn.execute("""
@@ -212,6 +221,53 @@ class GraphStore:
         except sqlite3.OperationalError:
             pass  # Column already exists
 
+        # Migration: bi-temporal schema — valid_to + is_active
+        #
+        # valid_to (TEXT, ISO 8601): when this fact stopped being true in the
+        #   world (NULL = still current).  Set by merge_extraction() when a
+        #   superseding node is ingested.  Semantically the end of the "valid
+        #   time" window; the start is recorded in occurred_at / created_at.
+        #
+        # is_active (INTEGER, 0|1): cached `valid_to IS NULL` flag.  Maintained
+        #   by merge_extraction() and the backfill below.  Indexed for O(log N)
+        #   superseded_pruning without edge traversal.
+        for col_def, col_name in [
+            ("ALTER TABLE nodes ADD COLUMN valid_to TEXT", "valid_to"),
+            ("ALTER TABLE nodes ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1", "is_active"),
+        ]:
+            try:
+                self.conn.execute(col_def)
+                self.conn.commit()
+                log.info("Migrated nodes table: added %s column", col_name)
+            except sqlite3.OperationalError:
+                pass  # Column already exists
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_nodes_is_active ON nodes(is_active)"
+        )
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_nodes_valid_range ON nodes(occurred_at, valid_to)"
+        )
+        self.conn.commit()
+        # Backfill: mark nodes that appear in any supersedes[] array as inactive.
+        # Uses the superseding node's created_at as the expiry time.
+        # Only updates rows where is_active is still 1 (unset) to be idempotent.
+        self.conn.execute("""
+            UPDATE nodes
+            SET is_active = 0,
+                valid_to  = COALESCE(valid_to, (
+                    SELECT MIN(n2.created_at)
+                    FROM nodes n2, json_each(n2.supersedes) je
+                    WHERE je.value = nodes.id
+                ))
+            WHERE id IN (
+                SELECT DISTINCT je.value
+                FROM nodes n, json_each(n.supersedes) je
+                WHERE json_type(n.supersedes) = 'array'
+            )
+            AND is_active = 1
+        """)
+        self.conn.commit()
+
         # Create FTS5 virtual table for BM25 full-text search on fact text.
         # Self-contained (no content= link) so rowid alignment isn't required.
         # Triggers keep the FTS index in sync with the nodes table.
@@ -244,6 +300,22 @@ class GraphStore:
                 f"node_id TEXT PRIMARY KEY, embedding float[{EMBEDDING_DIM}])"
             )
             self.conn.commit()
+
+        # node_tags junction table — indexed tag lookup replacing O(N) LIKE scans.
+        # Each (tag, node_id) pair gets its own row; the index on `tag` makes
+        # tag-based entry node discovery O(log N) regardless of corpus size.
+        self.conn.executescript("""
+            CREATE TABLE IF NOT EXISTS node_tags (
+                tag     TEXT NOT NULL,
+                node_id TEXT NOT NULL,
+                PRIMARY KEY (tag, node_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_node_tags_tag  ON node_tags(tag);
+            CREATE INDEX IF NOT EXISTS idx_node_tags_node ON node_tags(node_id);
+        """)
+        self.conn.commit()
+        # Backfill node_tags for any nodes whose tags haven't been indexed yet.
+        self._backfill_node_tags()
 
         # Raw sentence index: per-sentence transcript storage for semantic fallback.
         # Populated by ingestion when sentence_index.enabled=True in config.
@@ -296,6 +368,7 @@ class GraphStore:
                 "UPDATE nodes SET tags = ?, confidence = ? WHERE id = ?",
                 (json.dumps(merged_tags), merged_conf, existing_id),
             )
+            self._upsert_node_tags(existing_id, merged_tags)
             self.conn.commit()
             log.debug("Dedup: merged node %s into existing %s", node["id"], existing_id)
             return existing_id
@@ -325,6 +398,7 @@ class GraphStore:
                                     "UPDATE nodes SET tags = ?, confidence = ? WHERE id = ?",
                                     (json.dumps(merged_tags2), merged_conf2, nid),
                                 )
+                                self._upsert_node_tags(nid, merged_tags2)
                                 self.conn.commit()
                                 log.debug(
                                     "Semantic dedup at insert: merged into %s (sim=%.3f)", nid, sim
@@ -337,8 +411,9 @@ class GraphStore:
         self.conn.execute(
             """INSERT OR REPLACE INTO nodes
                (id, fact, type, confidence, source_transcript,
-                source_message_index, tags, created_at, occurred_at, supersedes, fact_hash, domain)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                source_message_index, tags, created_at, occurred_at, supersedes, fact_hash, domain,
+                valid_to, is_active)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 node["id"],
                 node["fact"],
@@ -352,9 +427,27 @@ class GraphStore:
                 json.dumps(node.get("supersedes", [])),
                 fhash,
                 node.get("domain"),
+                node.get("valid_to"),        # None = still current
+                node.get("is_active", 1),    # default: active
             ),
         )
+        self._upsert_node_tags(node["id"], tags)
         self.conn.commit()
+
+        # Expire any nodes listed in supersedes[] — set valid_to + is_active=0
+        supersedes_ids = node.get("supersedes", [])
+        if supersedes_ids:
+            expiry = node.get("occurred_at") or node.get("created_at") or datetime.now(timezone.utc).isoformat()
+            for sid in supersedes_ids:
+                self.conn.execute(
+                    """UPDATE nodes
+                       SET valid_to  = COALESCE(valid_to, ?),
+                           is_active = 0
+                       WHERE id = ? AND is_active = 1""",
+                    (expiry, sid),
+                )
+            self.conn.commit()
+
         # Eagerly store the embedding so future add_node calls can find this node
         if _new_blob is not None:
             try:
@@ -370,6 +463,7 @@ class GraphStore:
             return False
         self.conn.execute("DELETE FROM edges WHERE from_id = ? OR to_id = ?", (node_id, node_id))
         self.conn.execute("DELETE FROM nodes WHERE id = ?", (node_id,))
+        self.conn.execute("DELETE FROM node_tags WHERE node_id = ?", (node_id,))
         self.conn.commit()
         return True
 
@@ -527,6 +621,7 @@ class GraphStore:
             "UPDATE nodes SET tags = ?, confidence = ? WHERE id = ?",
             (json.dumps(merged_tags), merged_conf, keep_id),
         )
+        self._upsert_node_tags(keep_id, merged_tags)
         # Copy drop's outgoing edges to keep (skip self-loops and conflicts via OR IGNORE)
         self.conn.execute(
             "INSERT OR IGNORE INTO edges (from_id, to_id, relation) "
@@ -542,6 +637,7 @@ class GraphStore:
         # Remove all edges that still reference drop_id
         self.conn.execute("DELETE FROM edges WHERE from_id = ? OR to_id = ?", (drop_id, drop_id))
         self.conn.execute("DELETE FROM nodes WHERE id = ?", (drop_id,))
+        self.conn.execute("DELETE FROM node_tags WHERE node_id = ?", (drop_id,))
         if self._vec_available:
             self.conn.execute("DELETE FROM node_embeddings WHERE node_id = ?", (drop_id,))
         self.conn.commit()
@@ -569,6 +665,7 @@ class GraphStore:
                 "UPDATE nodes SET fact = ?, fact_hash = ?, tags = ? WHERE id = ?",
                 (new_fact, new_hash, json.dumps(new_tags), node_id),
             )
+        self._upsert_node_tags(node_id, new_tags)
         self.conn.commit()
         return True
 
@@ -594,6 +691,76 @@ class GraphStore:
         rows = self.conn.execute("SELECT * FROM nodes").fetchall()
         return [self._row_to_node(r) for r in rows]
 
+    def get_active_nodes(self) -> list[dict]:
+        """Fetch only currently active (non-superseded) nodes."""
+        rows = self.conn.execute(
+            "SELECT * FROM nodes WHERE is_active = 1"
+        ).fetchall()
+        return [self._row_to_node(r) for r in rows]
+
+    def get_nodes_at_time(
+        self,
+        valid_at: str | None = None,
+        transaction_at: str | None = None,
+    ) -> list[dict]:
+        """Bi-temporal point-in-time query.
+
+        valid_at (ISO 8601): return facts whose valid window covers this
+            moment — i.e. occurred_at <= valid_at AND (valid_to IS NULL OR
+            valid_to > valid_at).  Approximates "what was true in the world
+            at this point in time."
+
+        transaction_at (ISO 8601): return only facts that were ingested on
+            or before this timestamp — i.e. created_at <= transaction_at.
+            Approximates "what did the system know at this point in time."
+
+        Both filters stack; omit either to skip that dimension.
+        """
+        clauses: list[str] = []
+        params: list[str] = []
+
+        if valid_at:
+            clauses.append(
+                "(occurred_at IS NULL OR occurred_at <= ?)"
+                " AND (valid_to IS NULL OR valid_to > ?)"
+            )
+            params.extend([valid_at, valid_at])
+
+        if transaction_at:
+            clauses.append("created_at <= ?")
+            params.append(transaction_at)
+
+        where = " AND ".join(clauses) if clauses else "1"
+        rows = self.conn.execute(
+            f"SELECT * FROM nodes WHERE {where} ORDER BY occurred_at, created_at",
+            params,
+        ).fetchall()
+        return [self._row_to_node(r) for r in rows]
+
+    def get_revision_history(self, node_id: str) -> list[dict]:
+        """Return the belief-revision chain ending at node_id.
+
+        Walks the supersedes[] arrays backwards to find the full lineage:
+        [oldest_ancestor, ..., node_id].  Each entry is a full node dict.
+        The returned list is ordered from oldest to newest.
+        """
+        visited: set[str] = set()
+        chain: list[dict] = []
+
+        def _walk(nid: str) -> None:
+            if nid in visited:
+                return
+            visited.add(nid)
+            node = self.get_node(nid)
+            if not node:
+                return
+            for prior_id in node.get("supersedes", []):
+                _walk(prior_id)
+            chain.append(node)
+
+        _walk(node_id)
+        return chain  # oldest-first
+
     def get_recent_nodes(self, limit: int = 20) -> list[dict]:
         """Fetch most recent nodes."""
         rows = self.conn.execute(
@@ -604,32 +771,61 @@ class GraphStore:
     def get_nodes_by_tags(self, tags: list[str]) -> list[dict]:
         """Find nodes whose tags overlap with the given list.
 
-        Falls back to fact-text search if tag matching returns no results.
-        Batches queries into chunks of 200 to avoid SQLite's expression-tree
-        depth limit (1000) when the tag list is very large.
+        Uses the node_tags junction index (O(log N) per tag) when available,
+        falling back to the legacy LIKE scan for DBs that haven't been
+        backfilled yet. Falls back further to fact-text search if no tag
+        matches are found.
         """
         if not tags:
             return []
-        _CHUNK = 200
-        seen_ids: set[str] = set()
-        result_rows: list = []
-        for i in range(0, len(tags), _CHUNK):
-            chunk = tags[i : i + _CHUNK]
-            conditions = " OR ".join(["tags LIKE ?" for _ in chunk])
-            params = [f'%{tag}%' for tag in chunk]
-            rows = self.conn.execute(
-                f"SELECT * FROM nodes WHERE {conditions}", params
-            ).fetchall()
-            for row in rows:
-                if row[0] not in seen_ids:
-                    seen_ids.add(row[0])
-                    result_rows.append(row)
-        if result_rows:
-            return [self._row_to_node(r) for r in result_rows]
+
+        # Fast path: node_tags index exists and is populated
+        index_count = self.conn.execute("SELECT COUNT(*) FROM node_tags").fetchone()[0]
+        if index_count > 0:
+            lower_tags = [str(t).lower() for t in tags if t]
+            if not lower_tags:
+                return []
+            _CHUNK = 900  # stay well under SQLite's 1000-variable limit
+            seen_ids: set[str] = set()
+            matched_ids: list[str] = []
+            for i in range(0, len(lower_tags), _CHUNK):
+                chunk = lower_tags[i : i + _CHUNK]
+                placeholders = ",".join("?" * len(chunk))
+                rows = self.conn.execute(
+                    f"SELECT DISTINCT node_id FROM node_tags WHERE tag IN ({placeholders})",
+                    chunk,
+                ).fetchall()
+                for row in rows:
+                    nid = row[0]
+                    if nid not in seen_ids:
+                        seen_ids.add(nid)
+                        matched_ids.append(nid)
+            if matched_ids:
+                return self.get_nodes_by_ids(matched_ids)
+
+        else:
+            # Legacy fallback for DBs with empty node_tags (pre-migration open)
+            _CHUNK = 200
+            seen_ids = set()
+            result_rows: list = []
+            for i in range(0, len(tags), _CHUNK):
+                chunk = tags[i : i + _CHUNK]
+                conditions = " OR ".join(["tags LIKE ?" for _ in chunk])
+                params = [f'%{tag}%' for tag in chunk]
+                rows = self.conn.execute(
+                    f"SELECT * FROM nodes WHERE {conditions}", params
+                ).fetchall()
+                for row in rows:
+                    if row[0] not in seen_ids:
+                        seen_ids.add(row[0])
+                        result_rows.append(row)
+            if result_rows:
+                return [self._row_to_node(r) for r in result_rows]
 
         # Fallback: search fact text when no tag matches found
         seen_ids = set()
         result_rows = []
+        _CHUNK = 200
         for i in range(0, len(tags), _CHUNK):
             chunk = tags[i : i + _CHUNK]
             fact_conditions = " OR ".join(["fact LIKE ?" for _ in chunk])
@@ -804,6 +1000,23 @@ class GraphStore:
                             (json.dumps(supersedes_list), from_id),
                         )
                         self.conn.commit()
+                # Bi-temporal: expire the superseded node (valid_to + is_active).
+                # Prefer occurred_at of superseding node (when the change happened
+                # in the world) over created_at (when we ingested it); fall back
+                # to created_at if occurred_at is absent.
+                superseding = self.get_node(from_id)
+                expiry = None
+                if superseding:
+                    expiry = superseding.get("occurred_at") or superseding.get("created_at")
+                expiry = expiry or datetime.now(timezone.utc).isoformat()
+                self.conn.execute(
+                    """UPDATE nodes
+                       SET valid_to  = COALESCE(valid_to, ?),
+                           is_active = 0
+                       WHERE id = ? AND is_active = 1""",
+                    (expiry, to_id),
+                )
+                self.conn.commit()
         return id_map
 
     def propagate_edge_tags(self):
@@ -1002,6 +1215,36 @@ class GraphStore:
             "edge_count": edge_count,
             "type_counts": type_counts,
         }
+
+    def get_sources(self) -> list[dict]:
+        """Return all distinct source_transcript values with node counts.
+
+        Useful for discovering which files/sessions have been ingested and
+        how many nodes each contributed. Results are sorted by node count
+        descending (most content first).
+
+        Returns list of {"source": str, "count": int} dicts.
+        """
+        rows = self.conn.execute(
+            """SELECT source_transcript, COUNT(*) AS cnt
+               FROM nodes
+               WHERE source_transcript IS NOT NULL AND source_transcript != ''
+               GROUP BY source_transcript
+               ORDER BY cnt DESC"""
+        ).fetchall()
+        return [{"source": r[0], "count": r[1]} for r in rows]
+
+    def get_nodes_by_source_prefix(self, prefix: str) -> list[dict]:
+        """Return all nodes whose source_transcript starts with prefix.
+
+        Enables sub-project scoping: pass a folder path (e.g. 'health/')
+        to retrieve only nodes from notes in that folder.
+        """
+        rows = self.conn.execute(
+            "SELECT * FROM nodes WHERE source_transcript LIKE ?",
+            (f"{prefix}%",),
+        ).fetchall()
+        return [self._row_to_node(r) for r in rows]
 
     def _buf_path(self) -> Path:
         return self.db_path.parent / "buffer.json"
@@ -1352,6 +1595,12 @@ class GraphStore:
 
     def _backfill_fts(self) -> None:
         """Populate FTS index for any existing nodes not yet covered."""
+        # Fast pre-check: if FTS row count >= node count, nothing to do (O(1)).
+        node_count, fts_count = self.conn.execute(
+            "SELECT (SELECT COUNT(*) FROM nodes), (SELECT COUNT(*) FROM nodes_fts)"
+        ).fetchone()
+        if fts_count >= node_count:
+            return
         missing = self.conn.execute(
             """SELECT n.id, n.fact FROM nodes n
                WHERE NOT EXISTS (SELECT 1 FROM nodes_fts WHERE node_id = n.id)"""
@@ -1363,6 +1612,66 @@ class GraphStore:
             )
             self.conn.commit()
             log.debug("FTS backfill: indexed %d nodes", len(missing))
+
+    def _backfill_node_tags(self) -> None:
+        """Populate node_tags for any nodes not yet covered.
+
+        Compares node IDs in `nodes` against those already in `node_tags` and
+        inserts the missing (tag, node_id) pairs in chunks to avoid holding a
+        large write lock on the DB during the one-time migration.
+        """
+        # Fast pre-check: if every node is already in node_tags, nothing to do.
+        # DISTINCT node_id count vs node count — both are fast indexed reads (O(1)).
+        node_count, indexed_count = self.conn.execute(
+            "SELECT (SELECT COUNT(*) FROM nodes), (SELECT COUNT(DISTINCT node_id) FROM node_tags)"
+        ).fetchone()
+        if indexed_count >= node_count:
+            return
+        missing_nodes = self.conn.execute(
+            """SELECT n.id, n.tags FROM nodes n
+               WHERE NOT EXISTS (SELECT 1 FROM node_tags WHERE node_id = n.id)"""
+        ).fetchall()
+        if not missing_nodes:
+            return
+        _COMMIT_CHUNK = 2000  # nodes per commit batch — keeps write lock duration short
+        total_pairs = 0
+        batch: list[tuple[str, str]] = []
+        for i, row in enumerate(missing_nodes):
+            node_id = row[0]
+            try:
+                tags = json.loads(row[1]) if row[1] else []
+            except (json.JSONDecodeError, TypeError):
+                tags = []
+            for tag in tags:
+                if tag:
+                    batch.append((str(tag).lower(), node_id))
+            if (i + 1) % _COMMIT_CHUNK == 0 and batch:
+                self.conn.executemany(
+                    "INSERT OR IGNORE INTO node_tags(tag, node_id) VALUES (?, ?)", batch
+                )
+                self.conn.commit()
+                total_pairs += len(batch)
+                batch = []
+        if batch:
+            self.conn.executemany(
+                "INSERT OR IGNORE INTO node_tags(tag, node_id) VALUES (?, ?)", batch
+            )
+            self.conn.commit()
+            total_pairs += len(batch)
+        log.debug("node_tags backfill: indexed tags for %d nodes (%d pairs)", len(missing_nodes), total_pairs)
+
+    def _upsert_node_tags(self, node_id: str, tags: list[str]) -> None:
+        """Replace all tag entries for a node in the node_tags index.
+
+        Deletes any existing rows for node_id then inserts the current set.
+        Call after any operation that changes a node's tag list.
+        """
+        self.conn.execute("DELETE FROM node_tags WHERE node_id = ?", (node_id,))
+        pairs = [(str(t).lower(), node_id) for t in tags if t]
+        if pairs:
+            self.conn.executemany(
+                "INSERT OR IGNORE INTO node_tags(tag, node_id) VALUES (?, ?)", pairs
+            )
 
     def search_by_fts(self, query: str, top_k: int = 50) -> list[tuple[str, float]]:
         """BM25 full-text search on node fact text via FTS5.

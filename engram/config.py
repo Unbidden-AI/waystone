@@ -7,6 +7,15 @@ from pathlib import Path
 
 import yaml
 
+# Load project-local .env (e.g. GEMINI_API_KEY) if python-dotenv is available.
+# The .env file is gitignored — safe for API keys that should persist across
+# shell sessions without polluting the global environment.
+try:
+    from dotenv import load_dotenv as _load_dotenv
+    _load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env", override=False)
+except ImportError:
+    pass
+
 DEFAULTS = {
     "llm": {
         "base_url": "http://localhost:1234/v1",

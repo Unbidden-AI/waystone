@@ -61,28 +61,75 @@ def from_claude_jsonl(path: Path) -> list[Utterance]:
     return utterances
 
 
-def from_plain_text(text: str) -> list[Utterance]:
-    """Parse a simple Human:/Assistant: markdown transcript into Utterances.
+_SPEAKER_RE = None
 
-    Lines starting with "Human:" or "**Human:**" mark user turns.
-    Lines starting with "Assistant:" or "**Assistant:**" mark assistant turns.
+
+def _get_speaker_re():
+    global _SPEAKER_RE
+    if _SPEAKER_RE is None:
+        import re
+        # Matches optional ** markdown bold, a capitalized speaker name (1+ words),
+        # optional **, then ": ". Captures the speaker name.
+        _SPEAKER_RE = re.compile(r"^\*?\*?([A-Z][A-Za-z0-9 ]*)\*?\*?:\s*(.*)")
+    return _SPEAKER_RE
+
+
+def from_plain_text(text: str) -> list[Utterance]:
+    """Parse a conversation transcript into Utterances.
+
+    Supports two formats:
+    - Human:/Assistant: (or **Human:**/**Assistant:**)
+    - Any consistent speaker-labeled format (e.g. "Caroline: ...", "Melanie: ...")
+      where each speaker name starts with a capital letter.
+
+    For non-Human/Assistant formats, speakers alternate: the first speaker seen
+    maps to "user", the second to "assistant", and so on (alternating).
     """
+    import re
+    speaker_re = _get_speaker_re()
+
+    # First pass: detect all unique speakers in order of first appearance
+    speakers_seen: list[str] = []
+    for line in text.splitlines():
+        m = speaker_re.match(line)
+        if m:
+            name = m.group(1).strip().rstrip("*")
+            if name not in speakers_seen:
+                speakers_seen.append(name)
+
+    # Build role map: Human/Assistant get their literal roles; others alternate user/assistant
+    role_map: dict[str, str] = {}
+    alternating = ["user", "assistant"]
+    alt_idx = 0
+    for name in speakers_seen:
+        lower = name.lower().replace("*", "")
+        if lower == "human":
+            role_map[name] = "user"
+        elif lower == "assistant":
+            role_map[name] = "assistant"
+        else:
+            role_map[name] = alternating[alt_idx % 2]
+            alt_idx += 1
+
     utterances = []
     current_role = None
+    current_speaker = None
     current_lines: list[str] = []
+
     for line in text.splitlines():
-        if line.startswith("**Human:**") or line.startswith("Human:"):
-            if current_role:
-                utterances.append(Utterance(role=current_role, content="\n".join(current_lines).strip()))
-            current_role = "user"
-            current_lines = [line.split(":", 1)[-1].strip()]
-        elif line.startswith("**Assistant:**") or line.startswith("Assistant:"):
-            if current_role:
-                utterances.append(Utterance(role=current_role, content="\n".join(current_lines).strip()))
-            current_role = "assistant"
-            current_lines = [line.split(":", 1)[-1].strip()]
-        else:
-            current_lines.append(line)
+        m = speaker_re.match(line)
+        if m:
+            name = m.group(1).strip().rstrip("*")
+            rest = m.group(2).strip()
+            if name in role_map:
+                if current_role and current_lines:
+                    utterances.append(Utterance(role=current_role, content="\n".join(current_lines).strip()))
+                current_speaker = name
+                current_role = role_map[name]
+                current_lines = [rest] if rest else []
+                continue
+        current_lines.append(line)
+
     if current_role and current_lines:
         utterances.append(Utterance(role=current_role, content="\n".join(current_lines).strip()))
     return utterances
