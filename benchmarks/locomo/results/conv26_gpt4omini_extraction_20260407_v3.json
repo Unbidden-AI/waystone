@@ -1,0 +1,2493 @@
+{
+  "dataset": "benchmarks/locomo/data/locomo10.json",
+  "split": "dev",
+  "sample_ids": [
+    "conv-26"
+  ],
+  "timestamp": "2026-04-08T00:20:44Z",
+  "configs": {
+    "engram_gpt4o_mini_extraction": {
+      "config_name": "engram_gpt4o_mini_extraction",
+      "aggregate": {
+        "n": 152,
+        "keyword_accuracy": 0.3553,
+        "keyword_exact": 0.3026,
+        "avg_tokens": 731.4,
+        "llm_accuracy": 0.5395,
+        "llm_partial_credit": 0.6283,
+        "llm_n": 152
+      },
+      "token_budget": {
+        "query_count": 152,
+        "avg_retrieval_tokens": 731.4,
+        "total_ingestion_tokens": 0,
+        "total_judge_tokens": 0,
+        "total_tokens": 111166
+      },
+      "ingestion": [
+        {
+          "sample_id": "conv-26",
+          "nodes_created": 98,
+          "elapsed_seconds": 288.03,
+          "errors": []
+        }
+      ],
+      "per_question": [
+        {
+          "question": "When did Caroline go to the LGBTQ support group?",
+          "answer": "7 May 2023",
+          "category": "temporal",
+          "keyword_score": 1.0,
+          "llm_score": 0.0,
+          "tokens": 882
+        },
+        {
+          "question": "When did Melanie paint a sunrise?",
+          "answer": 2022,
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 852
+        },
+        {
+          "question": "What fields would Caroline be likely to pursue in her educaton?",
+          "answer": "Psychology, counseling certification",
+          "category": "open_domain",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 991
+        },
+        {
+          "question": "What did Caroline research?",
+          "answer": "Adoption agencies",
+          "category": "single_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 615
+        },
+        {
+          "question": "What is Caroline's identity?",
+          "answer": "Transgender woman",
+          "category": "single_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 673
+        },
+        {
+          "question": "When did Melanie run a charity race?",
+          "answer": "The sunday before 25 May 2023",
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 660
+        },
+        {
+          "question": "When is Melanie planning on going camping?",
+          "answer": "June 2023",
+          "category": "temporal",
+          "keyword_score": 1.0,
+          "llm_score": 0.5,
+          "tokens": 660
+        },
+        {
+          "question": "What is Caroline's relationship status?",
+          "answer": "Single",
+          "category": "single_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 599
+        },
+        {
+          "question": "When did Caroline give a speech at a school?",
+          "answer": "The week before 9 June 2023",
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 619
+        },
+        {
+          "question": "When did Caroline meet up with her friends, family, and mentors?",
+          "answer": "The week before 9 June 2023",
+          "category": "temporal",
+          "keyword_score": 1.0,
+          "llm_score": 0.0,
+          "tokens": 923
+        },
+        {
+          "question": "How long has Caroline had her current group of friends for?",
+          "answer": "4 years",
+          "category": "temporal",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 988
+        },
+        {
+          "question": "Where did Caroline move from 4 years ago?",
+          "answer": "Sweden",
+          "category": "single_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 687
+        },
+        {
+          "question": "How long ago was Caroline's 18th birthday?",
+          "answer": "10 years ago",
+          "category": "temporal",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 735
+        },
+        {
+          "question": "What career path has Caroline decided to persue?",
+          "answer": "counseling or mental health for Transgender people",
+          "category": "single_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 729
+        },
+        {
+          "question": "Would Caroline still want to pursue counseling as a career if she hadn't receive",
+          "answer": "Likely no",
+          "category": "open_domain",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 830
+        },
+        {
+          "question": "What activities does Melanie partake in?",
+          "answer": "pottery, camping, painting, swimming",
+          "category": "single_hop",
+          "keyword_score": 0.75,
+          "llm_score": 1.0,
+          "tokens": 660
+        },
+        {
+          "question": "When did Melanie sign up for a pottery class?",
+          "answer": "2 July 2023",
+          "category": "temporal",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 631
+        },
+        {
+          "question": "When is Caroline going to the transgender conference?",
+          "answer": "July 2023",
+          "category": "temporal",
+          "keyword_score": 1.0,
+          "llm_score": 0.0,
+          "tokens": 832
+        },
+        {
+          "question": "Where has Melanie camped?",
+          "answer": "beach, mountains, forest",
+          "category": "single_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 658
+        },
+        {
+          "question": "What do Melanie's kids like?",
+          "answer": "dinosaurs, nature",
+          "category": "single_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 519
+        },
+        {
+          "question": "When did Melanie go to the museum?",
+          "answer": "5 July 2023",
+          "category": "temporal",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 660
+        },
+        {
+          "question": "When did Caroline have a picnic?",
+          "answer": "The week before 6 July 2023",
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 617
+        },
+        {
+          "question": "Would Caroline likely have Dr. Seuss books on her bookshelf?",
+          "answer": "Yes, since she collects classic children's books",
+          "category": "open_domain",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1006
+        },
+        {
+          "question": "What books has Melanie read?",
+          "answer": "\"Nothing is Impossible\", \"Charlotte's Web\"",
+          "category": "single_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 643
+        },
+        {
+          "question": "What does Melanie do to destress?",
+          "answer": "Running, pottery",
+          "category": "single_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 660
+        },
+        {
+          "question": "When did Caroline go to the LGBTQ conference?",
+          "answer": "10 July 2023",
+          "category": "temporal",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1004
+        },
+        {
+          "question": "When did Melanie read the book \"nothing is impossible\"?",
+          "answer": 2022,
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 646
+        },
+        {
+          "question": "Would Caroline pursue writing as a career option?",
+          "answer": "LIkely no; though she likes reading, she wants to be a counselor",
+          "category": "open_domain",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 726
+        },
+        {
+          "question": "When did Caroline go to the adoption meeting?",
+          "answer": "The friday before 15 July 2023",
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 909
+        },
+        {
+          "question": "When did Melanie go to the pottery workshop?",
+          "answer": "The Friday before 15 July 2023",
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 694
+        },
+        {
+          "question": "Would Melanie be considered a member of the LGBTQ community?",
+          "answer": "Likely no, she does not refer to herself as part of it",
+          "category": "open_domain",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 830
+        },
+        {
+          "question": "When did Melanie go camping in June?",
+          "answer": "The week before 27 June 2023",
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 735
+        },
+        {
+          "question": "What LGBTQ+ events has Caroline participated in?",
+          "answer": "Pride parade, school speech, support group",
+          "category": "single_hop",
+          "keyword_score": 0.8333333333333334,
+          "llm_score": 0.5,
+          "tokens": 696
+        },
+        {
+          "question": "When did Caroline go to a pride parade during the summer?",
+          "answer": "The week before 3 July 2023",
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1011
+        },
+        {
+          "question": "What events has Caroline participated in to help children?",
+          "answer": "Mentoring program, school speech",
+          "category": "single_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 771
+        },
+        {
+          "question": "When did Melanie go camping in July?",
+          "answer": "two weekends before 17 July 2023",
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 671
+        },
+        {
+          "question": "When did Caroline join a mentorship program?",
+          "answer": "The weekend before 17 July 2023",
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 556
+        },
+        {
+          "question": "What did Melanie paint recently?",
+          "answer": "sunset",
+          "category": "single_hop",
+          "keyword_score": 1.0,
+          "llm_score": 0.0,
+          "tokens": 945
+        },
+        {
+          "question": "What activities has Melanie done with her family?",
+          "answer": "Pottery, painting, camping, museum, swimming, hiking",
+          "category": "single_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 678
+        },
+        {
+          "question": "In what ways is Caroline participating in the LGBTQ community?",
+          "answer": "Joining activist group, going to pride parades, participating in an art show, mentoring program",
+          "category": "single_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 979
+        },
+        {
+          "question": "How many times has Melanie gone to the beach in 2023?",
+          "answer": 2,
+          "category": "single_hop",
+          "keyword_score": 1.0,
+          "llm_score": 0.5,
+          "tokens": 880
+        },
+        {
+          "question": "When did Caroline join a new activist group?",
+          "answer": "The Tuesday before 20 July 2023",
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 624
+        },
+        {
+          "question": "Would Melanie be more interested in going to a national park or a theme park?",
+          "answer": "National park; she likes the outdoors",
+          "category": "open_domain",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 666
+        },
+        {
+          "question": "What kind of art does Caroline make?",
+          "answer": "abstract art",
+          "category": "single_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 822
+        },
+        {
+          "question": "When is Melanie's daughter's birthday?",
+          "answer": "13 August",
+          "category": "temporal",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 387
+        },
+        {
+          "question": "When did Caroline attend a pride parade in August?",
+          "answer": "The Friday before 14 August 2023",
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 892
+        },
+        {
+          "question": "Would Melanie be considered an ally to the transgender community?",
+          "answer": "Yes, she is supportive",
+          "category": "open_domain",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 813
+        },
+        {
+          "question": "Who supports Caroline when she has a negative experience?",
+          "answer": "Her mentors, family, and friends",
+          "category": "single_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1007
+        },
+        {
+          "question": "What types of pottery have Melanie and her kids made?",
+          "answer": "bowls, cup",
+          "category": "single_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 736
+        },
+        {
+          "question": "When did Caroline and Melanie go to a pride fesetival together?",
+          "answer": 2022,
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 1029
+        },
+        {
+          "question": "What would Caroline's political leaning likely be?",
+          "answer": "Liberal",
+          "category": "open_domain",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 637
+        },
+        {
+          "question": "What has Melanie painted?",
+          "answer": "Horse, sunset, sunrise",
+          "category": "single_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 701
+        },
+        {
+          "question": "What are Melanie's pets' names?",
+          "answer": "Oliver, Luna, Bailey",
+          "category": "single_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 288
+        },
+        {
+          "question": "When did Caroline apply to adoption agencies?",
+          "answer": "The week of 23 August 2023",
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 654
+        },
+        {
+          "question": "When did Caroline draw a self-portrait?",
+          "answer": "The week before 23 August 2023",
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 799
+        },
+        {
+          "question": "What subject have Caroline and Melanie both painted?",
+          "answer": "Sunsets",
+          "category": "single_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 864
+        },
+        {
+          "question": "What symbols are important to Caroline?",
+          "answer": "Rainbow flag, transgender symbol",
+          "category": "single_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 789
+        },
+        {
+          "question": "When did Caroline encounter people on a hike and have a negative experience?",
+          "answer": "The week before 25 August 2023",
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 873
+        },
+        {
+          "question": "When did Melanie make a plate in pottery class?",
+          "answer": "24 August 2023",
+          "category": "temporal",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 631
+        },
+        {
+          "question": "Would Caroline be considered religious?",
+          "answer": "Somewhat, but not extremely religious",
+          "category": "open_domain",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 683
+        },
+        {
+          "question": "What instruments does Melanie play?",
+          "answer": "clarinet and violin",
+          "category": "single_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 659
+        },
+        {
+          "question": "What musical artists/bands has Melanie seen?",
+          "answer": "Summer Sounds, Matt Patterson",
+          "category": "single_hop",
+          "keyword_score": 0.75,
+          "llm_score": 1.0,
+          "tokens": 736
+        },
+        {
+          "question": "When did Melanie go to the park?",
+          "answer": "27 August 2023",
+          "category": "temporal",
+          "keyword_score": 1.0,
+          "llm_score": 0.0,
+          "tokens": 660
+        },
+        {
+          "question": "When is Caroline's youth center putting on a talent show?",
+          "answer": "September 2023",
+          "category": "temporal",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 819
+        },
+        {
+          "question": "Would Melanie likely enjoy the song \"The Four Seasons\" by Vivaldi?",
+          "answer": "Yes; it's classical music",
+          "category": "open_domain",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 663
+        },
+        {
+          "question": "What are some changes Caroline has faced during her transition journey?",
+          "answer": "Changes to her body, losing unsupportive friends",
+          "category": "single_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 966
+        },
+        {
+          "question": "What does Melanie do with her family on hikes?",
+          "answer": "Roast marshmallows, tell stories",
+          "category": "single_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 679
+        },
+        {
+          "question": "When did Caroline go biking with friends?",
+          "answer": "The weekend before 13 September 2023",
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 837
+        },
+        {
+          "question": "How long has Melanie been practicing art?",
+          "answer": "Since 2016",
+          "category": "temporal",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 821
+        },
+        {
+          "question": "What personality traits might Melanie say Caroline has?",
+          "answer": "Thoughtful, authentic, driven",
+          "category": "open_domain",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 594
+        },
+        {
+          "question": "What transgender-specific events has Caroline attended?",
+          "answer": "Poetry reading, conference",
+          "category": "single_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 890
+        },
+        {
+          "question": "What book did Melanie read from Caroline's suggestion?",
+          "answer": "\"Becoming Nicole\"",
+          "category": "single_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 645
+        },
+        {
+          "question": "When did Melanie's friend adopt a child?",
+          "answer": 2022,
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 707
+        },
+        {
+          "question": "When did Melanie get hurt?",
+          "answer": "September 2023",
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 659
+        },
+        {
+          "question": "When did Melanie's family go on a roadtrip?",
+          "answer": "The weekend before 20 October 2023",
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 714
+        },
+        {
+          "question": "How many children does Melanie have?",
+          "answer": 3,
+          "category": "single_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 747
+        },
+        {
+          "question": "When did Melanie go on a hike after the roadtrip?",
+          "answer": "19 October 2023",
+          "category": "single_hop",
+          "keyword_score": 1.0,
+          "llm_score": 0.0,
+          "tokens": 663
+        },
+        {
+          "question": "Would Melanie go on another roadtrip soon?",
+          "answer": "Likely no; since this one went badly",
+          "category": "open_domain",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 660
+        },
+        {
+          "question": "What items has Melanie bought?",
+          "answer": "Figurines, shoes",
+          "category": "single_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 659
+        },
+        {
+          "question": "When did Caroline pass the adoption interview?",
+          "answer": "The Friday before 22 October 2023",
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 654
+        },
+        {
+          "question": "When did Melanie buy the figurines?",
+          "answer": "21 October 2023",
+          "category": "temporal",
+          "keyword_score": 1.0,
+          "llm_score": 0.0,
+          "tokens": 660
+        },
+        {
+          "question": "Would Caroline want to move back to her home country soon?",
+          "answer": "No; she's in the process of adopting children.",
+          "category": "open_domain",
+          "keyword_score": 0.75,
+          "llm_score": 1.0,
+          "tokens": 860
+        },
+        {
+          "question": "What did the charity race raise awareness for?",
+          "answer": "mental health",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 84
+        },
+        {
+          "question": "What did Melanie realize after the charity race?",
+          "answer": "self-care is important",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 661
+        },
+        {
+          "question": "How does Melanie prioritize self-care?",
+          "answer": "by carving out some me-time each day for activities like running, reading, or playing the violin",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 785
+        },
+        {
+          "question": "What are Caroline's plans for the summer?",
+          "answer": "researching adoption agencies",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 810
+        },
+        {
+          "question": "What type of individuals does the adoption agency Caroline is considering suppor",
+          "answer": "LGBTQ+ individuals",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 886
+        },
+        {
+          "question": "Why did Caroline choose the adoption agency?",
+          "answer": "because of their inclusivity and support for LGBTQ+ individuals",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 654
+        },
+        {
+          "question": "What is Caroline excited about in the adoption process?",
+          "answer": "creating a family for kids who need one",
+          "category": "multi_hop",
+          "keyword_score": 0.8,
+          "llm_score": 1.0,
+          "tokens": 670
+        },
+        {
+          "question": "What does Melanie think about Caroline's decision to adopt?",
+          "answer": "she thinks Caroline is doing something amazing and will be an awesome mom",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 807
+        },
+        {
+          "question": "How long have Mel and her husband been married?",
+          "answer": "Mel and her husband have been married for 5 years.",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 0.0,
+          "tokens": 858
+        },
+        {
+          "question": "What does Caroline's necklace symbolize?",
+          "answer": "love, faith, and strength",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 731
+        },
+        {
+          "question": "What country is Caroline's grandma from?",
+          "answer": "Sweden",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 688
+        },
+        {
+          "question": "What was grandma's gift to Caroline?",
+          "answer": "necklace",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 617
+        },
+        {
+          "question": "What is Melanie's hand-painted bowl a reminder of?",
+          "answer": "art and self-expression",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 771
+        },
+        {
+          "question": "What did Melanie and her family do while camping?",
+          "answer": "explored nature, roasted marshmallows, and went on a hike",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 679
+        },
+        {
+          "question": "What kind of counseling and mental health services is Caroline interested in pur",
+          "answer": "working with trans people, helping them accept themselves and supporting their mental health",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 613
+        },
+        {
+          "question": "What workshop did Caroline attend recently?",
+          "answer": "LGBTQ+ counseling workshop",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 0.5,
+          "tokens": 876
+        },
+        {
+          "question": "What was discussed in the LGBTQ+ counseling workshop?",
+          "answer": "therapeutic methods and how to best work with trans people",
+          "category": "multi_hop",
+          "keyword_score": 0.8333333333333334,
+          "llm_score": 1.0,
+          "tokens": 899
+        },
+        {
+          "question": "What motivated Caroline to pursue counseling?",
+          "answer": "her own journey and the support she received, and how counseling improved her life",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 630
+        },
+        {
+          "question": "What kind of place does Caroline want to create for people?",
+          "answer": "a safe and inviting place for people to grow",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 912
+        },
+        {
+          "question": "Did Melanie make the black and white bowl in the photo?",
+          "answer": "Yes",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 685
+        },
+        {
+          "question": "What kind of books does Caroline have in her library?",
+          "answer": "kids' books - classics, stories from different cultures, educational books",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 997
+        },
+        {
+          "question": "What was Melanie's favorite book from her childhood?",
+          "answer": "\"Charlotte's Web\"",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 856
+        },
+        {
+          "question": "What book did Caroline recommend to Melanie?",
+          "answer": "\"Becoming Nicole\"",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 0.5,
+          "tokens": 599
+        },
+        {
+          "question": "What did Caroline take away from the book \"Becoming Nicole\"?",
+          "answer": "Lessons on self-acceptance and finding support",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 654
+        },
+        {
+          "question": "What are the new shoes that Melanie got used for?",
+          "answer": "Running",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 0.0,
+          "tokens": 663
+        },
+        {
+          "question": "What is Melanie's reason for getting into running?",
+          "answer": "To de-stress and clear her mind",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 510
+        },
+        {
+          "question": "What does Melanie say running has been great for?",
+          "answer": "Her mental health",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 662
+        },
+        {
+          "question": "What did Mel and her kids make during the pottery workshop?",
+          "answer": "pots",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 835
+        },
+        {
+          "question": "What kind of pot did Mel and her kids make with clay?",
+          "answer": "a cup with a dog face on it",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 771
+        },
+        {
+          "question": "What creative project do Mel and her kids do together besides pottery?",
+          "answer": "painting",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 774
+        },
+        {
+          "question": "What did Mel and her kids paint in their latest project in July 2023?",
+          "answer": "a sunset with a palm tree",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 955
+        },
+        {
+          "question": "What did Caroline see at the council meeting for adoption?",
+          "answer": "many people wanting to create loving homes for children in need",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 738
+        },
+        {
+          "question": "What do sunflowers represent according to Caroline?",
+          "answer": "warmth and happiness",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 752
+        },
+        {
+          "question": "Why are flowers important to Melanie?",
+          "answer": "They remind her to appreciate the small moments and were a part of her wedding decor",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 660
+        },
+        {
+          "question": "What inspired Caroline's painting for the art show?",
+          "answer": "visiting an LGBTQ center and wanting to capture unity and strength",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 945
+        },
+        {
+          "question": "How often does Melanie go to the beach with her kids?",
+          "answer": "once or twice a year",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 819
+        },
+        {
+          "question": "What did Melanie and her family see during their camping trip last year?",
+          "answer": "Perseid meteor shower",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 703
+        },
+        {
+          "question": "How did Melanie feel while watching the meteor shower?",
+          "answer": "in awe of the universe",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 759
+        },
+        {
+          "question": "Whose birthday did Melanie celebrate recently?",
+          "answer": "Melanie's daughter",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 758
+        },
+        {
+          "question": "Who performed at the concert at Melanie's daughter's birthday?",
+          "answer": "Matt Patterson",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 390
+        },
+        {
+          "question": "Why did Melanie choose to use colors and patterns in her pottery project?",
+          "answer": "She wanted to catch the eye and make people smile.",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 837
+        },
+        {
+          "question": "What pet does Caroline have?",
+          "answer": "guinea pig",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 616
+        },
+        {
+          "question": "What pets does Melanie have?",
+          "answer": "Two cats and a dog",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 659
+        },
+        {
+          "question": "Where did Oliver hide his bone once?",
+          "answer": "In Melanie's slipper",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 159
+        },
+        {
+          "question": "What activity did Caroline used to do with her dad?",
+          "answer": "Horseback riding",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 990
+        },
+        {
+          "question": "What did Caroline make for a local church?",
+          "answer": "a stained glass window",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 746
+        },
+        {
+          "question": "What did Caroline find in her neighborhood during her walk?",
+          "answer": "a rainbow sidewalk",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 986
+        },
+        {
+          "question": "Which song motivates Caroline to be courageous?",
+          "answer": "Brave by Sara Bareilles",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 667
+        },
+        {
+          "question": "Which  classical musicians does Melanie enjoy listening to?",
+          "answer": "Bach and Mozart",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 661
+        },
+        {
+          "question": "Who is Melanie a fan of in terms of modern music?",
+          "answer": "Ed Sheeran",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 740
+        },
+        {
+          "question": "How long has Melanie been creating art?",
+          "answer": "7 years",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 888
+        },
+        {
+          "question": "What precautionary sign did Melanie see at the caf\u00e9?",
+          "answer": "A sign stating that someone is not being able to leave",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 662
+        },
+        {
+          "question": "What advice does Caroline give for getting started with adoption?",
+          "answer": "Do research, find an adoption agency or lawyer, gather necessary documents, and prepare emotionally.",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 753
+        },
+        {
+          "question": "What setback did Melanie face in October 2023?",
+          "answer": "She got hurt and had to take a break from pottery.",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 845
+        },
+        {
+          "question": "What does Melanie do to keep herself busy during her pottery break?",
+          "answer": "Read a book and paint.",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 732
+        },
+        {
+          "question": "What painting did Melanie show to Caroline on October 13, 2023?",
+          "answer": "A painting inspired by sunsets with a pink sky.",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 927
+        },
+        {
+          "question": "What kind of painting did Caroline share with Melanie on October 13, 2023?",
+          "answer": "An abstract painting with blue streaks on a wall.",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 918
+        },
+        {
+          "question": "What was the poetry reading that Caroline attended about?",
+          "answer": "It was a transgender poetry reading where transgender people shared their stories.",
+          "category": "multi_hop",
+          "keyword_score": 0.75,
+          "llm_score": 1.0,
+          "tokens": 779
+        },
+        {
+          "question": "What did the posters at the poetry reading say?",
+          "answer": "\"Trans Lives Matter\"",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 92
+        },
+        {
+          "question": "What does Caroline's drawing symbolize for her?",
+          "answer": "Freedom and being true to herself.",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 989
+        },
+        {
+          "question": "How do Melanie and Caroline describe their journey through life together?",
+          "answer": "An ongoing adventure of learning and growing.",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 846
+        },
+        {
+          "question": "What happened to Melanie's son on their road trip?",
+          "answer": "He got into an accident",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 470
+        },
+        {
+          "question": "How did Melanie's son handle the accident?",
+          "answer": "He was scared but reassured by his family",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 566
+        },
+        {
+          "question": "How did Melanie feel about her family after the accident?",
+          "answer": "They are important and mean the world to her",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 605
+        },
+        {
+          "question": "How did Melanie's children handle the accident?",
+          "answer": "They were scared but resilient",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 476
+        },
+        {
+          "question": "How did Melanie feel after the accident?",
+          "answer": "Grateful and thankful for her family",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 660
+        },
+        {
+          "question": "What was Melanie's reaction to her children enjoying the Grand Canyon?",
+          "answer": "She was happy and thankful",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 720
+        },
+        {
+          "question": "What do Melanie's family give her?",
+          "answer": "Strength and motivation",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 756
+        },
+        {
+          "question": "How did Melanie feel about her family supporting her?",
+          "answer": "She appreciated them a lot",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 735
+        },
+        {
+          "question": "What did Melanie do after the road trip to relax?",
+          "answer": "Went on a nature walk or hike",
+          "category": "multi_hop",
+          "keyword_score": 0.75,
+          "llm_score": 0.5,
+          "tokens": 663
+        }
+      ]
+    },
+    "engram_semantic_rerank_gpt4omini": {
+      "config_name": "engram_semantic_rerank_gpt4omini",
+      "aggregate": {
+        "n": 152,
+        "keyword_accuracy": 0.4211,
+        "keyword_exact": 0.3421,
+        "avg_tokens": 1052.8,
+        "llm_accuracy": 0.5921,
+        "llm_partial_credit": 0.6809,
+        "llm_n": 152
+      },
+      "token_budget": {
+        "query_count": 152,
+        "avg_retrieval_tokens": 1052.8,
+        "total_ingestion_tokens": 0,
+        "total_judge_tokens": 0,
+        "total_tokens": 160032
+      },
+      "ingestion": [],
+      "per_question": [
+        {
+          "question": "When did Caroline go to the LGBTQ support group?",
+          "answer": "7 May 2023",
+          "category": "temporal",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1210
+        },
+        {
+          "question": "When did Melanie paint a sunrise?",
+          "answer": 2022,
+          "category": "temporal",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1200
+        },
+        {
+          "question": "What fields would Caroline be likely to pursue in her educaton?",
+          "answer": "Psychology, counseling certification",
+          "category": "open_domain",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1098
+        },
+        {
+          "question": "What did Caroline research?",
+          "answer": "Adoption agencies",
+          "category": "single_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1119
+        },
+        {
+          "question": "What is Caroline's identity?",
+          "answer": "Transgender woman",
+          "category": "single_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 674
+        },
+        {
+          "question": "When did Melanie run a charity race?",
+          "answer": "The sunday before 25 May 2023",
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 943
+        },
+        {
+          "question": "When is Melanie planning on going camping?",
+          "answer": "June 2023",
+          "category": "temporal",
+          "keyword_score": 1.0,
+          "llm_score": 0.5,
+          "tokens": 1115
+        },
+        {
+          "question": "What is Caroline's relationship status?",
+          "answer": "Single",
+          "category": "single_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 600
+        },
+        {
+          "question": "When did Caroline give a speech at a school?",
+          "answer": "The week before 9 June 2023",
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1123
+        },
+        {
+          "question": "When did Caroline meet up with her friends, family, and mentors?",
+          "answer": "The week before 9 June 2023",
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 1330
+        },
+        {
+          "question": "How long has Caroline had her current group of friends for?",
+          "answer": "4 years",
+          "category": "temporal",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1116
+        },
+        {
+          "question": "Where did Caroline move from 4 years ago?",
+          "answer": "Sweden",
+          "category": "single_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 1153
+        },
+        {
+          "question": "How long ago was Caroline's 18th birthday?",
+          "answer": "10 years ago",
+          "category": "temporal",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 735
+        },
+        {
+          "question": "What career path has Caroline decided to persue?",
+          "answer": "counseling or mental health for Transgender people",
+          "category": "single_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1113
+        },
+        {
+          "question": "Would Caroline still want to pursue counseling as a career if she hadn't receive",
+          "answer": "Likely no",
+          "category": "open_domain",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1180
+        },
+        {
+          "question": "What activities does Melanie partake in?",
+          "answer": "pottery, camping, painting, swimming",
+          "category": "single_hop",
+          "keyword_score": 0.75,
+          "llm_score": 1.0,
+          "tokens": 910
+        },
+        {
+          "question": "When did Melanie sign up for a pottery class?",
+          "answer": "2 July 2023",
+          "category": "temporal",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1155
+        },
+        {
+          "question": "When is Caroline going to the transgender conference?",
+          "answer": "July 2023",
+          "category": "temporal",
+          "keyword_score": 1.0,
+          "llm_score": 0.0,
+          "tokens": 1162
+        },
+        {
+          "question": "Where has Melanie camped?",
+          "answer": "beach, mountains, forest",
+          "category": "single_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 909
+        },
+        {
+          "question": "What do Melanie's kids like?",
+          "answer": "dinosaurs, nature",
+          "category": "single_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 519
+        },
+        {
+          "question": "When did Melanie go to the museum?",
+          "answer": "5 July 2023",
+          "category": "temporal",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1235
+        },
+        {
+          "question": "When did Caroline have a picnic?",
+          "answer": "The week before 6 July 2023",
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 1130
+        },
+        {
+          "question": "Would Caroline likely have Dr. Seuss books on her bookshelf?",
+          "answer": "Yes, since she collects classic children's books",
+          "category": "open_domain",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1102
+        },
+        {
+          "question": "What books has Melanie read?",
+          "answer": "\"Nothing is Impossible\", \"Charlotte's Web\"",
+          "category": "single_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 969
+        },
+        {
+          "question": "What does Melanie do to destress?",
+          "answer": "Running, pottery",
+          "category": "single_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 910
+        },
+        {
+          "question": "When did Caroline go to the LGBTQ conference?",
+          "answer": "10 July 2023",
+          "category": "temporal",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1172
+        },
+        {
+          "question": "When did Melanie read the book \"nothing is impossible\"?",
+          "answer": 2022,
+          "category": "temporal",
+          "keyword_score": 1.0,
+          "llm_score": 0.0,
+          "tokens": 972
+        },
+        {
+          "question": "Would Caroline pursue writing as a career option?",
+          "answer": "LIkely no; though she likes reading, she wants to be a counselor",
+          "category": "open_domain",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1247
+        },
+        {
+          "question": "When did Caroline go to the adoption meeting?",
+          "answer": "The friday before 15 July 2023",
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 1138
+        },
+        {
+          "question": "When did Melanie go to the pottery workshop?",
+          "answer": "The Friday before 15 July 2023",
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 1236
+        },
+        {
+          "question": "Would Melanie be considered a member of the LGBTQ community?",
+          "answer": "Likely no, she does not refer to herself as part of it",
+          "category": "open_domain",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1242
+        },
+        {
+          "question": "When did Melanie go camping in June?",
+          "answer": "The week before 27 June 2023",
+          "category": "temporal",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1354
+        },
+        {
+          "question": "What LGBTQ+ events has Caroline participated in?",
+          "answer": "Pride parade, school speech, support group",
+          "category": "single_hop",
+          "keyword_score": 0.8333333333333334,
+          "llm_score": 1.0,
+          "tokens": 993
+        },
+        {
+          "question": "When did Caroline go to a pride parade during the summer?",
+          "answer": "The week before 3 July 2023",
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 1231
+        },
+        {
+          "question": "What events has Caroline participated in to help children?",
+          "answer": "Mentoring program, school speech",
+          "category": "single_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1008
+        },
+        {
+          "question": "When did Melanie go camping in July?",
+          "answer": "two weekends before 17 July 2023",
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 1432
+        },
+        {
+          "question": "When did Caroline join a mentorship program?",
+          "answer": "The weekend before 17 July 2023",
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 1124
+        },
+        {
+          "question": "What did Melanie paint recently?",
+          "answer": "sunset",
+          "category": "single_hop",
+          "keyword_score": 1.0,
+          "llm_score": 0.0,
+          "tokens": 1199
+        },
+        {
+          "question": "What activities has Melanie done with her family?",
+          "answer": "Pottery, painting, camping, museum, swimming, hiking",
+          "category": "single_hop",
+          "keyword_score": 0.8333333333333334,
+          "llm_score": 0.5,
+          "tokens": 1263
+        },
+        {
+          "question": "In what ways is Caroline participating in the LGBTQ community?",
+          "answer": "Joining activist group, going to pride parades, participating in an art show, mentoring program",
+          "category": "single_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1049
+        },
+        {
+          "question": "How many times has Melanie gone to the beach in 2023?",
+          "answer": 2,
+          "category": "single_hop",
+          "keyword_score": 1.0,
+          "llm_score": 0.5,
+          "tokens": 1239
+        },
+        {
+          "question": "When did Caroline join a new activist group?",
+          "answer": "The Tuesday before 20 July 2023",
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1121
+        },
+        {
+          "question": "Would Melanie be more interested in going to a national park or a theme park?",
+          "answer": "National park; she likes the outdoors",
+          "category": "open_domain",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 945
+        },
+        {
+          "question": "What kind of art does Caroline make?",
+          "answer": "abstract art",
+          "category": "single_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1131
+        },
+        {
+          "question": "When is Melanie's daughter's birthday?",
+          "answer": "13 August",
+          "category": "temporal",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 387
+        },
+        {
+          "question": "When did Caroline attend a pride parade in August?",
+          "answer": "The Friday before 14 August 2023",
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 943
+        },
+        {
+          "question": "Would Melanie be considered an ally to the transgender community?",
+          "answer": "Yes, she is supportive",
+          "category": "open_domain",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 1224
+        },
+        {
+          "question": "Who supports Caroline when she has a negative experience?",
+          "answer": "Her mentors, family, and friends",
+          "category": "single_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1089
+        },
+        {
+          "question": "What types of pottery have Melanie and her kids made?",
+          "answer": "bowls, cup",
+          "category": "single_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 1236
+        },
+        {
+          "question": "When did Caroline and Melanie go to a pride fesetival together?",
+          "answer": 2022,
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 1250
+        },
+        {
+          "question": "What would Caroline's political leaning likely be?",
+          "answer": "Liberal",
+          "category": "open_domain",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 638
+        },
+        {
+          "question": "What has Melanie painted?",
+          "answer": "Horse, sunset, sunrise",
+          "category": "single_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 1198
+        },
+        {
+          "question": "What are Melanie's pets' names?",
+          "answer": "Oliver, Luna, Bailey",
+          "category": "single_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 289
+        },
+        {
+          "question": "When did Caroline apply to adoption agencies?",
+          "answer": "The week of 23 August 2023",
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1048
+        },
+        {
+          "question": "When did Caroline draw a self-portrait?",
+          "answer": "The week before 23 August 2023",
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 1173
+        },
+        {
+          "question": "What subject have Caroline and Melanie both painted?",
+          "answer": "Sunsets",
+          "category": "single_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1141
+        },
+        {
+          "question": "What symbols are important to Caroline?",
+          "answer": "Rainbow flag, transgender symbol",
+          "category": "single_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1107
+        },
+        {
+          "question": "When did Caroline encounter people on a hike and have a negative experience?",
+          "answer": "The week before 25 August 2023",
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1013
+        },
+        {
+          "question": "When did Melanie make a plate in pottery class?",
+          "answer": "24 August 2023",
+          "category": "temporal",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 971
+        },
+        {
+          "question": "Would Caroline be considered religious?",
+          "answer": "Somewhat, but not extremely religious",
+          "category": "open_domain",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 1119
+        },
+        {
+          "question": "What instruments does Melanie play?",
+          "answer": "clarinet and violin",
+          "category": "single_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1081
+        },
+        {
+          "question": "What musical artists/bands has Melanie seen?",
+          "answer": "Summer Sounds, Matt Patterson",
+          "category": "single_hop",
+          "keyword_score": 0.75,
+          "llm_score": 1.0,
+          "tokens": 910
+        },
+        {
+          "question": "When did Melanie go to the park?",
+          "answer": "27 August 2023",
+          "category": "temporal",
+          "keyword_score": 1.0,
+          "llm_score": 0.0,
+          "tokens": 1235
+        },
+        {
+          "question": "When is Caroline's youth center putting on a talent show?",
+          "answer": "September 2023",
+          "category": "temporal",
+          "keyword_score": 1.0,
+          "llm_score": 0.5,
+          "tokens": 819
+        },
+        {
+          "question": "Would Melanie likely enjoy the song \"The Four Seasons\" by Vivaldi?",
+          "answer": "Yes; it's classical music",
+          "category": "open_domain",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 951
+        },
+        {
+          "question": "What are some changes Caroline has faced during her transition journey?",
+          "answer": "Changes to her body, losing unsupportive friends",
+          "category": "single_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1147
+        },
+        {
+          "question": "What does Melanie do with her family on hikes?",
+          "answer": "Roast marshmallows, tell stories",
+          "category": "single_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1208
+        },
+        {
+          "question": "When did Caroline go biking with friends?",
+          "answer": "The weekend before 13 September 2023",
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 1204
+        },
+        {
+          "question": "How long has Melanie been practicing art?",
+          "answer": "Since 2016",
+          "category": "temporal",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1232
+        },
+        {
+          "question": "What personality traits might Melanie say Caroline has?",
+          "answer": "Thoughtful, authentic, driven",
+          "category": "open_domain",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1101
+        },
+        {
+          "question": "What transgender-specific events has Caroline attended?",
+          "answer": "Poetry reading, conference",
+          "category": "single_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1057
+        },
+        {
+          "question": "What book did Melanie read from Caroline's suggestion?",
+          "answer": "\"Becoming Nicole\"",
+          "category": "single_hop",
+          "keyword_score": 1.0,
+          "llm_score": 0.0,
+          "tokens": 1278
+        },
+        {
+          "question": "When did Melanie's friend adopt a child?",
+          "answer": 2022,
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 779
+        },
+        {
+          "question": "When did Melanie get hurt?",
+          "answer": "September 2023",
+          "category": "temporal",
+          "keyword_score": 1.0,
+          "llm_score": 0.5,
+          "tokens": 909
+        },
+        {
+          "question": "When did Melanie's family go on a roadtrip?",
+          "answer": "The weekend before 20 October 2023",
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 810
+        },
+        {
+          "question": "How many children does Melanie have?",
+          "answer": 3,
+          "category": "single_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 997
+        },
+        {
+          "question": "When did Melanie go on a hike after the roadtrip?",
+          "answer": "19 October 2023",
+          "category": "single_hop",
+          "keyword_score": 1.0,
+          "llm_score": 0.0,
+          "tokens": 1314
+        },
+        {
+          "question": "Would Melanie go on another roadtrip soon?",
+          "answer": "Likely no; since this one went badly",
+          "category": "open_domain",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1235
+        },
+        {
+          "question": "What items has Melanie bought?",
+          "answer": "Figurines, shoes",
+          "category": "single_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 909
+        },
+        {
+          "question": "When did Caroline pass the adoption interview?",
+          "answer": "The Friday before 22 October 2023",
+          "category": "temporal",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1048
+        },
+        {
+          "question": "When did Melanie buy the figurines?",
+          "answer": "21 October 2023",
+          "category": "temporal",
+          "keyword_score": 1.0,
+          "llm_score": 0.0,
+          "tokens": 910
+        },
+        {
+          "question": "Would Caroline want to move back to her home country soon?",
+          "answer": "No; she's in the process of adopting children.",
+          "category": "open_domain",
+          "keyword_score": 0.75,
+          "llm_score": 1.0,
+          "tokens": 1152
+        },
+        {
+          "question": "What did the charity race raise awareness for?",
+          "answer": "mental health",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 85
+        },
+        {
+          "question": "What did Melanie realize after the charity race?",
+          "answer": "self-care is important",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1002
+        },
+        {
+          "question": "How does Melanie prioritize self-care?",
+          "answer": "by carving out some me-time each day for activities like running, reading, or playing the violin",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1338
+        },
+        {
+          "question": "What are Caroline's plans for the summer?",
+          "answer": "researching adoption agencies",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 810
+        },
+        {
+          "question": "What type of individuals does the adoption agency Caroline is considering suppor",
+          "answer": "LGBTQ+ individuals",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1104
+        },
+        {
+          "question": "Why did Caroline choose the adoption agency?",
+          "answer": "because of their inclusivity and support for LGBTQ+ individuals",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1043
+        },
+        {
+          "question": "What is Caroline excited about in the adoption process?",
+          "answer": "creating a family for kids who need one",
+          "category": "multi_hop",
+          "keyword_score": 0.8,
+          "llm_score": 1.0,
+          "tokens": 1047
+        },
+        {
+          "question": "What does Melanie think about Caroline's decision to adopt?",
+          "answer": "she thinks Caroline is doing something amazing and will be an awesome mom",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 1346
+        },
+        {
+          "question": "How long have Mel and her husband been married?",
+          "answer": "Mel and her husband have been married for 5 years.",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1294
+        },
+        {
+          "question": "What does Caroline's necklace symbolize?",
+          "answer": "love, faith, and strength",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 732
+        },
+        {
+          "question": "What country is Caroline's grandma from?",
+          "answer": "Sweden",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 689
+        },
+        {
+          "question": "What was grandma's gift to Caroline?",
+          "answer": "necklace",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1120
+        },
+        {
+          "question": "What is Melanie's hand-painted bowl a reminder of?",
+          "answer": "art and self-expression",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 824
+        },
+        {
+          "question": "What did Melanie and her family do while camping?",
+          "answer": "explored nature, roasted marshmallows, and went on a hike",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1251
+        },
+        {
+          "question": "What kind of counseling and mental health services is Caroline interested in pur",
+          "answer": "working with trans people, helping them accept themselves and supporting their mental health",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1053
+        },
+        {
+          "question": "What workshop did Caroline attend recently?",
+          "answer": "LGBTQ+ counseling workshop",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1080
+        },
+        {
+          "question": "What was discussed in the LGBTQ+ counseling workshop?",
+          "answer": "therapeutic methods and how to best work with trans people",
+          "category": "multi_hop",
+          "keyword_score": 0.8333333333333334,
+          "llm_score": 1.0,
+          "tokens": 946
+        },
+        {
+          "question": "What motivated Caroline to pursue counseling?",
+          "answer": "her own journey and the support she received, and how counseling improved her life",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1123
+        },
+        {
+          "question": "What kind of place does Caroline want to create for people?",
+          "answer": "a safe and inviting place for people to grow",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1239
+        },
+        {
+          "question": "Did Melanie make the black and white bowl in the photo?",
+          "answer": "Yes",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 1013
+        },
+        {
+          "question": "What kind of books does Caroline have in her library?",
+          "answer": "kids' books - classics, stories from different cultures, educational books",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1105
+        },
+        {
+          "question": "What was Melanie's favorite book from her childhood?",
+          "answer": "\"Charlotte's Web\"",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 1284
+        },
+        {
+          "question": "What book did Caroline recommend to Melanie?",
+          "answer": "\"Becoming Nicole\"",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1064
+        },
+        {
+          "question": "What did Caroline take away from the book \"Becoming Nicole\"?",
+          "answer": "Lessons on self-acceptance and finding support",
+          "category": "multi_hop",
+          "keyword_score": 0.8,
+          "llm_score": 1.0,
+          "tokens": 1117
+        },
+        {
+          "question": "What are the new shoes that Melanie got used for?",
+          "answer": "Running",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 948
+        },
+        {
+          "question": "What is Melanie's reason for getting into running?",
+          "answer": "To de-stress and clear her mind",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 510
+        },
+        {
+          "question": "What does Melanie say running has been great for?",
+          "answer": "Her mental health",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 912
+        },
+        {
+          "question": "What did Mel and her kids make during the pottery workshop?",
+          "answer": "pots",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1245
+        },
+        {
+          "question": "What kind of pot did Mel and her kids make with clay?",
+          "answer": "a cup with a dog face on it",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 1242
+        },
+        {
+          "question": "What creative project do Mel and her kids do together besides pottery?",
+          "answer": "painting",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1282
+        },
+        {
+          "question": "What did Mel and her kids paint in their latest project in July 2023?",
+          "answer": "a sunset with a palm tree",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 1377
+        },
+        {
+          "question": "What did Caroline see at the council meeting for adoption?",
+          "answer": "many people wanting to create loving homes for children in need",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1052
+        },
+        {
+          "question": "What do sunflowers represent according to Caroline?",
+          "answer": "warmth and happiness",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 1118
+        },
+        {
+          "question": "Why are flowers important to Melanie?",
+          "answer": "They remind her to appreciate the small moments and were a part of her wedding decor",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 967
+        },
+        {
+          "question": "What inspired Caroline's painting for the art show?",
+          "answer": "visiting an LGBTQ center and wanting to capture unity and strength",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1099
+        },
+        {
+          "question": "How often does Melanie go to the beach with her kids?",
+          "answer": "once or twice a year",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 1287
+        },
+        {
+          "question": "What did Melanie and her family see during their camping trip last year?",
+          "answer": "Perseid meteor shower",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 1214
+        },
+        {
+          "question": "How did Melanie feel while watching the meteor shower?",
+          "answer": "in awe of the universe",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 1241
+        },
+        {
+          "question": "Whose birthday did Melanie celebrate recently?",
+          "answer": "Melanie's daughter",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1050
+        },
+        {
+          "question": "Who performed at the concert at Melanie's daughter's birthday?",
+          "answer": "Matt Patterson",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 390
+        },
+        {
+          "question": "Why did Melanie choose to use colors and patterns in her pottery project?",
+          "answer": "She wanted to catch the eye and make people smile.",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 1164
+        },
+        {
+          "question": "What pet does Caroline have?",
+          "answer": "guinea pig",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 1109
+        },
+        {
+          "question": "What pets does Melanie have?",
+          "answer": "Two cats and a dog",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 909
+        },
+        {
+          "question": "Where did Oliver hide his bone once?",
+          "answer": "In Melanie's slipper",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 160
+        },
+        {
+          "question": "What activity did Caroline used to do with her dad?",
+          "answer": "Horseback riding",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 1119
+        },
+        {
+          "question": "What did Caroline make for a local church?",
+          "answer": "a stained glass window",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1113
+        },
+        {
+          "question": "What did Caroline find in her neighborhood during her walk?",
+          "answer": "a rainbow sidewalk",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1227
+        },
+        {
+          "question": "Which song motivates Caroline to be courageous?",
+          "answer": "Brave by Sara Bareilles",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1117
+        },
+        {
+          "question": "Which  classical musicians does Melanie enjoy listening to?",
+          "answer": "Bach and Mozart",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 933
+        },
+        {
+          "question": "Who is Melanie a fan of in terms of modern music?",
+          "answer": "Ed Sheeran",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 1048
+        },
+        {
+          "question": "How long has Melanie been creating art?",
+          "answer": "7 years",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1335
+        },
+        {
+          "question": "What precautionary sign did Melanie see at the caf\u00e9?",
+          "answer": "A sign stating that someone is not being able to leave",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 1134
+        },
+        {
+          "question": "What advice does Caroline give for getting started with adoption?",
+          "answer": "Do research, find an adoption agency or lawyer, gather necessary documents, and prepare emotionally.",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 1143
+        },
+        {
+          "question": "What setback did Melanie face in October 2023?",
+          "answer": "She got hurt and had to take a break from pottery.",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1248
+        },
+        {
+          "question": "What does Melanie do to keep herself busy during her pottery break?",
+          "answer": "Read a book and paint.",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 1181
+        },
+        {
+          "question": "What painting did Melanie show to Caroline on October 13, 2023?",
+          "answer": "A painting inspired by sunsets with a pink sky.",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 1404
+        },
+        {
+          "question": "What kind of painting did Caroline share with Melanie on October 13, 2023?",
+          "answer": "An abstract painting with blue streaks on a wall.",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 1396
+        },
+        {
+          "question": "What was the poetry reading that Caroline attended about?",
+          "answer": "It was a transgender poetry reading where transgender people shared their stories.",
+          "category": "multi_hop",
+          "keyword_score": 0.875,
+          "llm_score": 1.0,
+          "tokens": 983
+        },
+        {
+          "question": "What did the posters at the poetry reading say?",
+          "answer": "\"Trans Lives Matter\"",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 93
+        },
+        {
+          "question": "What does Caroline's drawing symbolize for her?",
+          "answer": "Freedom and being true to herself.",
+          "category": "multi_hop",
+          "keyword_score": 0.75,
+          "llm_score": 1.0,
+          "tokens": 1395
+        },
+        {
+          "question": "How do Melanie and Caroline describe their journey through life together?",
+          "answer": "An ongoing adventure of learning and growing.",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.0,
+          "tokens": 1077
+        },
+        {
+          "question": "What happened to Melanie's son on their road trip?",
+          "answer": "He got into an accident",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 471
+        },
+        {
+          "question": "How did Melanie's son handle the accident?",
+          "answer": "He was scared but reassured by his family",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 567
+        },
+        {
+          "question": "How did Melanie feel about her family after the accident?",
+          "answer": "They are important and mean the world to her",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1303
+        },
+        {
+          "question": "How did Melanie's children handle the accident?",
+          "answer": "They were scared but resilient",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 477
+        },
+        {
+          "question": "How did Melanie feel after the accident?",
+          "answer": "Grateful and thankful for her family",
+          "category": "multi_hop",
+          "keyword_score": 0.75,
+          "llm_score": 0.5,
+          "tokens": 1298
+        },
+        {
+          "question": "What was Melanie's reaction to her children enjoying the Grand Canyon?",
+          "answer": "She was happy and thankful",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 0.5,
+          "tokens": 1366
+        },
+        {
+          "question": "What do Melanie's family give her?",
+          "answer": "Strength and motivation",
+          "category": "multi_hop",
+          "keyword_score": 1.0,
+          "llm_score": 1.0,
+          "tokens": 1347
+        },
+        {
+          "question": "How did Melanie feel about her family supporting her?",
+          "answer": "She appreciated them a lot",
+          "category": "multi_hop",
+          "keyword_score": 0.0,
+          "llm_score": 1.0,
+          "tokens": 1382
+        },
+        {
+          "question": "What did Melanie do after the road trip to relax?",
+          "answer": "Went on a nature walk or hike",
+          "category": "multi_hop",
+          "keyword_score": 0.75,
+          "llm_score": 0.5,
+          "tokens": 972
+        }
+      ]
+    }
+  }
+}

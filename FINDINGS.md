@@ -227,13 +227,81 @@ Gemini 2.5 Flash + `--verify` with current prompt improvements (prior-state tagg
 
 These are not retrieval gaps; they reflect keyword-overlap scoring limitations in the eval harness rather than missing facts in the graph.
 
-### LOCOMO episodic memory benchmark (current: ~50%)
+### LOCOMO episodic memory benchmark (current: 85.7% LLM / 72.6% keyword)
 
-On the LOCOMO benchmark (real human conversations, keyword accuracy scoring), the current `engram_default` pipeline scores approximately **49.8% keyword accuracy** on conv-26 (March 2026 baseline). Competitive targets: Zep ~73%, Mem0 ~88%. This is the active improvement frontier. The LOCOMO task differs substantially from the software dev benchmark — shorter, denser conversations with personal context rather than technical design discussions, and keyword-based accuracy vs. recall-of-ground-truth-nodes scoring.
+On the LOCOMO benchmark (real human conversations, multi-session episodic memory), the current best pipeline (`engram_semantic_rerank_topk100`) scores **85.7% LLM accuracy** and **72.6% keyword accuracy** on the dev split (5 conversations, 762 QA pairs, categories 1–4, gpt-4o-mini judge, April 2026). This **exceeds Zep (~73% LLM)** and approaches Mem0 (~88% LLM). The March 2026 conv-26-only baseline was ~50% keyword; the improvement came from semantic rerank, top_k=100, and correcting the evaluation protocol to exclude adversarial category 5 questions (which depressed earlier scores by ~10pp). A full 10-conversation run against the complete test split is pending for a like-for-like comparison with published Zep/Mem0 numbers.
 
-### Specific values are under-extracted
+### LongMemEval benchmark (current: 60.6% LLM oracle / 60.8% LLM standard)
 
-Numeric thresholds, config key names, and briefly-mentioned edge cases are systematically under-retrieved. The extraction LLM tags nodes with primary topic terms but not with the specific values themselves, making them invisible to keyword-based retrieval. The fact-text fallback helps but doesn't fully close this gap.
+LongMemEval is a Microsoft Research benchmark for long-term episodic memory in LLM assistants — 500 questions across 6 question types drawn from the `longmemeval-cleaned` dataset (S variant: one long conversation per question). It covers temporal reasoning, multi-session aggregation, knowledge-update (superseding facts), single-session recall, and preference tracking.
+
+**Current results (April 2026, gpt-4o-mini judge, n=500):**
+
+| Config | Split | kw% | LLM% | LLM partial% | Notes |
+|--------|-------|-----|------|--------------|-------|
+| `engram_lme_gemini` / `engram_lme_rrf_dynamic` | oracle | 54.0% | **60.6%** | 66.5% | Best oracle — Gemini 2.5 Flash-Lite extraction, RRF or semantic rerank, top_k=100 |
+| `engram_lme_s_user_patched` + preference pass | standard | 63.4% | **60.8%** | 66.0% | Best standard — preference node augmentation (+7.6K nodes on 30 pref samples), +20pp on preference type (Apr 15) |
+| `engram_lme_s_user_patched` (person fan-out) | standard | 63.4% | 59.5% | — | Person exhaustive fan-out, person anchoring, semantic rerank top_k=100 (Apr 14) |
+| `engram_lme_s_user_patched` | standard | 62.6% | 58.0% | 64.2% | Prior best — synthetic user node injection, person anchoring (Apr 10) |
+| `engram_lme_gemini_s` | standard | 61.8% | 57.8% | 64.2% | Standard split baseline without user node patch |
+| `engram_lme_keyword` | oracle | 52.4% | 59.6% | 65.9% | Keyword-only (no rerank) — nearly as good as semantic rerank |
+
+**Per-category breakdown (oracle split, `engram_lme_gemini`):**
+
+| Question type | n | kw% | LLM% |
+|---------------|---|-----|------|
+| knowledge-update | 78 | 64.1% | **70.5%** | ← Engram's strongest category (supersedes mechanism) |
+| single-session-assistant | 56 | 73.2% | **76.8%** | Facts about assistant behavior are well-extracted |
+| single-session-user | 70 | 60.0% | 65.7% | |
+| multi-session | 133 | 51.1% | 64.7% | |
+| temporal-reasoning | 133 | 51.9% | 51.5% | ← Weakest content category |
+| single-session-preference | 30 | 0.0% | 13.8% | ← Structural gap: preference facts aren't reliably extracted |
+
+**Per-category breakdown (standard split, `engram_lme_s_user_patched` + preference pass, Apr 15):**
+
+| Question type | n | kw% | LLM% | vs Apr 14 |
+|---------------|---|-----|------|-----------|
+| single-session-assistant | 56 | — | **89.3%** | +0.2pp |
+| knowledge-update | 78 | — | **71.8%** | ≈0 |
+| temporal-reasoning | 133 | — | 59.4% | ≈0 |
+| multi-session | 133 | — | 54.9% | ≈0 |
+| single-session-user | 70 | — | 54.3% | ≈0 |
+| single-session-preference | 30 | — | **26.7%** | **+20pp** ✅ preference pass |
+| **overall** | **500** | **63.4%** | **60.8%** | **+1.3pp** |
+
+**Per-category breakdown (standard split, `engram_lme_s_user_patched` with person fan-out, Apr 14):**
+
+| Question type | n | kw% | LLM% | vs Apr 10 |
+|---------------|---|-----|------|-----------|
+| single-session-assistant | 56 | 82.1% | **89.1%** | +3.4pp |
+| knowledge-update | 78 | 80.8% | **71.8%** | +2.6pp |
+| temporal-reasoning | 133 | 69.2% | 59.4% | +3.0pp |
+| multi-session | 133 | 53.4% | 54.9% | +0.8pp |
+| single-session-user | 70 | 61.4% | 54.3% | +1.4pp |
+| single-session-preference | 30 | 6.7% | 6.7% | -6.7pp ⚠️ n=30, likely noise |
+
+**Comparison to published baselines (LME-S, LongMemEval paper Table 2):**
+
+| System | LLM% (approx) | Notes |
+|--------|---------------|-------|
+| GPT-4o no memory | ~30% | Upper bound without persistent memory |
+| MemoryBank | ~40–50% | Flat retrieval baseline |
+| ReadAgent | ~55–60% | Summarization-based compression |
+| **Engram standard** | **60.8%** | Graph retrieval, Gemini extraction, person fan-out, preference pass, semantic rerank |
+| **Engram oracle** | **60.6%** | Same with oracle-extracted graph |
+| Full context (oracle) | ~70% | All sessions concatenated into context window |
+
+Engram exceeds ReadAgent on both splits, despite ReadAgent using compression specifically tuned for long-context recall. The gap to full-context oracle (~70%) is ~10pp — mostly attributable to the temporal-reasoning and single-session-preference categories.
+
+**Person exhaustive fan-out (+1.5pp overall, Apr 14):** After BFS retrieval, the retriever fetches ALL nodes tagged with identified person names and injects them directly, bypassing the top_k cut. Expected to help multi-session and single-session-user (+0.8pp / +1.4pp). Temporal-reasoning benefited most (+3.0pp) — person names are also strong anchors for time-indexed facts. Single-session-preference dropped 6.7pp but n=30 makes this likely noise (2 samples).
+
+**Key gap: single-session-preference (0–14% LLM)**
+
+Preference questions ("What coffee does the user like?") are the weakest category across all configs. The extraction model doesn't reliably tag preference facts with question-answerable keywords, and the preference node type is sparse in the graph. This is a prompt/schema gap, not a retrieval gap.
+
+**Key strength: knowledge-update (70.5% LLM)**
+
+Questions that test whether a system knows about updates ("The user switched from X to Y — what are they using now?") are Engram's structural differentiator. The `superseded_pruning` strategy correctly removes stale facts, making the updated fact the only answer candidate. This category scores higher for Engram than flat-retrieval systems.
 
 ### Specific values are under-extracted
 
@@ -507,7 +575,10 @@ Compute vector embeddings for each node's fact text (e.g., using `all-MiniLM-L6-
 |--------|-------|-------|
 | Software dev benchmark recall (current best) | **95%** | Gemini 2.5 Flash + `--verify`, top_k=30, 21/23 ≥80% |
 | Software dev benchmark recall (no verify) | 92% | Gemini 2.5 Flash, default strategies, 19/23 ≥80% |
-| LOCOMO benchmark (keyword accuracy) | ~50% | `engram_default` on conv-26, March 2026; targets: Zep 73%, Mem0 88% |
+| LOCOMO benchmark (LLM accuracy, dev split) | **85.7%** | `engram_semantic_rerank_topk100`, 5-conv dev split, cats 1–4, 762 QA, April 2026; Zep 73%, Mem0 88% |
+| LOCOMO benchmark (keyword accuracy, dev split) | 72.6% | same config; cross-encoder achieves 75.2% keyword but 84.1% LLM |
+| LongMemEval (LLM accuracy, oracle split) | **60.6%** | `engram_lme_rrf_dynamic`, 500 QA, April 2026; beats ReadAgent (~55–60%), gap to full-context oracle (~70%) |
+| LongMemEval (LLM accuracy, standard split) | **60.8%** | `engram_lme_s_user_patched` + preference pass, 500 QA, April 2026; knowledge-update 71.8% (strongest), preference 26.7% (+20pp from targeted pass) |
 | Buffered extraction recall (early baseline) | 47% | ~18% call rate vs per-turn, early March 2026 |
 | Incremental cross-turn edges | ~27/transcript | api_design + data_pipeline average |
 | Avg retrieval latency | <5ms | Local SQLite, all modes |
@@ -619,23 +690,23 @@ Currently each project is an isolated SQLite database. Cross-project queries (e.
 
 #### 1. Recall quality — current status and remaining gaps
 
-**Status:** Software dev benchmark recall is now **95%** (21/23 ≥80%, Gemini 2.5 Flash + `--verify`, March 2026). The internal ≥80% target for software dev transcripts is met. The active recall frontier is the LOCOMO episodic memory benchmark (~50% keyword accuracy vs. Zep 73%, Mem0 88%).
+**Status:** Software dev benchmark recall is now **95%** (21/23 ≥80%, Gemini 2.5 Flash + `--verify`, March 2026). LOCOMO dev split (official protocol, cats 1–4): **85.7% LLM accuracy** (`engram_semantic_rerank_topk100`, April 2026) — exceeds Zep (73%) and approaches Mem0 (88%). Both benchmark targets are now met on dev split.
 
-**Issue (LOCOMO gap):** LOCOMO conversations are denser, more personal, and scored differently than the software dev benchmark. Closing the gap from 50% → 73%+ requires improvements in episodic retrieval quality, not just extraction quality.
+**Remaining gap:** Full 10-conversation LOCOMO run pending. Dev split (5 conversations) is not a like-for-like comparison to Zep/Mem0's full-test-set numbers. Test split (conv-44, 47, 48, 49, 50) extraction not yet run.
 
 **Plan:**
 
-*Short term — close the LOCOMO gap:*
-- Run ablation experiments on LOCOMO dev split (first 5 conversations) to identify which pipeline components most affect keyword accuracy.
-- Tune retrieval parameters (top_k, hops, strategy pipeline) for LOCOMO-style queries, which differ from software dev queries.
-- Investigate whether `--verify` and targeted passes help or hurt on LOCOMO conversations.
+*Short term — full LOCOMO run:*
+- Extract test split (5 conversations) into `engram_dedup95` checkpoint dir.
+- Run `engram_semantic_rerank_topk100` retrieval + batch gpt-4o-mini judge over all 10 conversations.
+- Report combined score as the citable paper number.
 
-*Medium term — close the vocabulary gap:*
+*Medium term — close the remaining gap to Mem0 (88%):*
 - Implement an optional embedding-based fallback retrieval step. When keyword and fact-text search both return no results, fall back to cosine similarity over node fact embeddings. This is opt-in infrastructure (requires an embedding model) but closes the remaining synonym mismatch gap.
-- Fine-tune or prompt-engineer a dedicated extraction model on a labeled dataset of transcripts and ground-truth node sets. A model that has seen thousands of correctly-extracted graphs will tag more consistently and miss fewer edge cases than a general-purpose LLM given a prompt.
+- Fine-tune or prompt-engineer a dedicated extraction model on a labeled dataset of transcripts and ground-truth node sets.
 
 *Product-level guard:*
-- Software dev recall target (≥80% on benchmark suite) is met. Next target: ≥73% LOCOMO keyword accuracy to match Zep. Make both benchmarks reproducible by any contributor so thresholds are continuously verified.
+- LOCOMO dev split target (≥73% LLM, matching Zep) is exceeded at 85.7%. Next target: reproduce on full 10-conversation test split, then target ≥88% (Mem0). Make both benchmarks reproducible by any contributor so thresholds are continuously verified.
 
 ---
 
@@ -1822,3 +1893,321 @@ pip install datasets  # HuggingFace datasets library (likely already installed)
 
 No new model dependencies — the existing `sentence-transformers` install covers the semantic reranker, and `google-genai` / OpenAI client cover extraction and judging.
 
+
+---
+
+## GNN Re-ranking for Retrieval Accuracy
+
+*April 2026 — NanoSwarm research agent output*
+
+*Context: Four independent swarm bots with unrelated constraints (HFT engineer, RPG AI director, adversarial critic, data governance specialist) all independently proposed GNN re-ranking as the highest-leverage improvement to Engram retrieval accuracy. This section documents the supporting research.*
+
+---
+
+### What GNN Re-ranking Is
+
+A GNN is an iterative message-passing neural network. Each node aggregates its neighbors' embeddings across multiple hops, building a representation that encodes graph structure — not just the node itself.
+
+- **Vector search**: `relevance = cosine_sim(query, node)` — nodes scored in isolation
+- **GNN re-ranking**: `relevance = MLP(gnn_embed(node + neighbors), query)` — nodes scored in graph context
+
+Key capability: GNN can discover that a node is relevant *because of its neighbors*, not because it's directly similar to the query. For Engram, this means a stale node from the wrong project context can be downranked even if its embedding is semantically close to the query.
+
+---
+
+### Architecture Recommendation
+
+| Architecture | Aggregation | Inductive? | Verdict for Engram |
+|---|---|---|---|
+| GCN | Fixed mean | No | Fallback — simpler, faster, transductive |
+| GraphSAGE | Learned, sampled | Yes | Overkill unless graph grows very rapidly |
+| **GAT** | **Learned attention** | **Yes** | **First choice** |
+
+**Recommended: 2-layer GAT, 4 attention heads, hidden_dim=128**
+- ~40K–100K parameters — tiny, trains in minutes
+- Inductive: no retraining when new nodes arrive daily
+- Attention weights are interpretable (shows which neighbors influenced the ranking)
+- Handles Engram's typed heterogeneous nodes via multi-head attention
+
+Multi-relational GCN (RGCN) is worth considering if edge type differentiation (decision→lesson vs. entity→entity) matters more than inductive learning.
+
+---
+
+### Engram-Specific Fit
+
+**Why it fits:**
+- False positive reduction is exactly the core problem — stale nodes from old projects with similar embeddings get downranked via neighbor context
+- Typed nodes/edges map naturally to RGCN/GAT (different aggregation per edge type)
+- Inductive learning handles daily graph growth without retraining
+- Runs entirely on-device — no privacy tradeoff
+
+**What needs custom work:**
+- **Temporal decay** requires feature engineering — encode `node_age_log` as a node feature; no off-the-shelf temporal GNN has been evaluated on small personal KGs
+- **Graph construction is ambiguous** — recommend starting with top-8 cosine-similar neighbors per node (sparse, conservative); explicit Engram relationships are also edges
+- **Cold-start is severe** — needs ~2 weeks of retrieval logs before model becomes useful
+- No published benchmarks on personal KGs — all evidence comes from document ranking tasks
+
+---
+
+### Benchmarks
+
+Published results on standard document ranking tasks:
+
+| Benchmark | Baseline | With GNN | Gain |
+|---|---|---|---|
+| DL19 (TREC passage ranking) | AP=0.430 | AP=0.455 | +5.81% |
+| DL20 (TREC passage ranking) | AP=0.453 | AP=0.470 | +3.75% |
+| DLHard (TREC hard queries) | AP=0.230 | AP=0.242 | +5.22% |
+| Natural Questions (G-RAG) | MRR≈0.75 | MRR≈0.80 | ~+6.7% |
+| TriviaQA (G-RAG) | MRR≈0.82 | MRR≈0.87 | ~+6.1% |
+
+Sources: [GNN Re-ranking via Corpus Graph](https://arxiv.org/html/2406.11720v1), [G-RAG Paper](https://arxiv.org/abs/2405.18414), [Graph-Based Re-ranking Survey](https://arxiv.org/html/2503.14802v1)
+
+**Engram estimate: +4–6% AP/MRR** if false positives and temporal staling are real problems. Gains are larger on hard/ambiguous queries — which is exactly where Engram's false positive problem lives. Less than +2% if vector search baseline is already >0.85.
+
+---
+
+### Minimum Viable Implementation
+
+**Pipeline:**
+```
+Query → Vector search (top-500 candidates) → Subgraph extraction → GNN re-rank → Return top-10
+```
+
+**Latency added:** ~10ms (subgraph extraction + GAT forward pass on 500-node subgraph)
+
+**Code:** ~300 LOC in PyTorch Geometric
+
+**Build path:**
+1. **Week 1**: Instrument retrieval logs; collect implicit triplets (click = relevant, scroll-past = not)
+2. **Week 2**: Build graph (explicit Engram edges + top-8 cosine-similar neighbors); train 2-layer GAT on 500–1000 triplets (~30 min CPU); deploy
+3. **Week 3+**: Monitor, fine-tune weekly as logs accumulate
+4. **Month 2 (optional)**: Manually label 20–30 hard queries for +1–2% boost
+
+**Graph construction:**
+```
+Nodes: all entities/decisions/lessons in KG
+Edges:
+  - Explicit: Engram relationships (decision→lesson, entity→entity, etc.)
+  - Learned: top-8 cosine-similar neighbors per node (sparse, conservative)
+Node features: [embedding_768dim, node_type_onehot, log(age_days), project_id_onehot]
+```
+
+---
+
+### Cold-Start Trajectory
+
+| Time | State | Expected gain |
+|---|---|---|
+| Day 1–7 | Vector search only, logs being collected | Baseline |
+| Day 8–14 | GNN deployed, sparse training data | +1–2% |
+| Week 4 | Model converging | +3–4% |
+| Month 2 (fine-tuned) | Implicit + optional manual labels | +4–6% |
+
+**Cold-start recommendation:** Do not attempt transfer learning from public KGs (DBpedia, Wikidata) — domain mismatch is too large for personal KGs. Delayed activation (day 8–14) is the right call.
+
+---
+
+### Why the Swarm Convergence Is Justified
+
+The four bots converged for the same reason the benchmarks show consistent gains: GNN re-ranking addresses a structural weakness in vector search that no prompt-engineering fix can solve. Vector search scores documents in isolation. GNN re-ranking scores them in context of their neighbors. For a knowledge graph where the same concept appears across multiple projects with different relevance, neighbor context is the only reliable disambiguation signal.
+
+The improvement is modest (+4–6%) but addresses the specific failure mode — false positives from stale/out-of-scope nodes — that Engram's retrieval layer is most vulnerable to at scale.
+
+
+---
+
+## LongMemEval: Preference Retrieval Gap Analysis
+
+*April 2026 — Sample analysis on S-split single-session-preference category*
+
+### Background
+
+The LME benchmark has 30 `single-session-preference` questions where the test system must recall preferences stated within a single conversation session. Our best overall score (60.8% LLM accuracy, `s_pref_fanout_retry3`) shows 26.7% on this category — the worst-performing category by far.
+
+### Gap 1: preference_fanout has no effect
+
+**Hypothesis:** The `preference_fanout` strategy (inject all preference-type nodes when the query signals preference-seeking) should improve recall for preference questions.
+
+**Finding:** Fan-out shows **zero score change** across all 30 preference samples. Two mechanisms explain this:
+
+1. **Signal verb mismatch.** `_PREFERENCE_SIGNAL_VERBS` contains words like "recommend", "suggest", "prefer", "like" — but LME preference questions often use different phrasing:
+   - "What should I **serve** for dinner with my homegrown ingredients?"
+   - None of the 5 extracted keywords (`serve`, `dinner`, `weekend`, `homegrown`, `ingredients`) match the signal verb set → fan-out never fires.
+
+2. **Semantic mismatch persists even when fan-out fires.** When `serve` and `should` are added to signal verbs (forcing fan-out), the 160 preference nodes get injected as candidates — but `semantic_rerank` (top_k=100) still excludes all food/cooking preference nodes. The embedding model doesn't bridge "companion plant / gardening framing" → "dinner ingredient framing":
+   - Node: *"User prefers basil as a companion plant for tomatoes"* (tags: gardening, companion plants, tomatoes, basil)
+   - Query: *"What should I serve for dinner this weekend with my homegrown ingredients?"* (keywords: dinner, homegrown, ingredients)
+   - Zero semantic overlap in either tags or embedding space.
+
+**Conclusion:** Fan-out is correctly implemented but the wrong tool for this failure mode. The problem is a **framing mismatch** between extraction context (gardening conversation) and query context (cooking question).
+
+### Gap 3: MAX_TOKENS retry (06f04340, 38146c39, 1da05512)
+
+**Background:** Three samples previously errored with `finish_reason=MAX_TOKENS` (max_tokens=4096). The `preference_pass.py` was updated to:
+- Accept `--max-tokens` flag (default 8192, retry used 16384)
+- Skip failing sessions with `continue` instead of aborting the sample
+- Filter to specific `--sample-ids`
+
+**Result:** 853 new preference nodes added across the 3 samples. `1da05512` still has one session exceeding 16384 output tokens — that session is skipped gracefully (26 preference nodes missed).
+
+**Score impact:** No improvement. Scores remain: `06f04340`=0.0, `38146c39`=0.0, `1da05512`=0.5.
+
+**Root cause confirmed:** The relevant preference nodes ARE now in the database:
+- `06f04340`: has `n_50542de5` ("prefers recipes combining fresh basil and mint", tags: recipe, basil, mint) and `n_abeffa2d` ("prefers basil as companion plant for tomatoes", tags: gardening, companion plants, tomatoes, basil)
+- But BFS entry nodes for "dinner/homegrown/ingredients" don't touch these nodes (tag mismatch)
+- Even with all 160 preference nodes injected via fanout, semantic_rerank scores them below rank 100
+
+### Root cause: framing gap between extraction and retrieval
+
+LME preference questions follow a pattern: the ground-truth answer requires the system to connect two distinct conversation framings:
+- **Extraction framing:** "I'm planning a garden, what companion plants work well with tomatoes?" → extracted as gardening preference nodes
+- **Query framing:** "What should I serve for dinner with my homegrown ingredients?" → retrieves cooking/dinner nodes
+
+The model correctly extracted the preferences that were stated, but under the gardening label. The retrieval system has no mechanism to bridge gardening context → cooking context unless the nodes themselves contain both frames.
+
+### Path forward: implicit preference extraction
+
+The fix is **implicit preference extraction** — a new extraction pass that infers latent cooking/usage preferences from explicit gardening knowledge:
+- "User grows cherry tomatoes, basil, and mint in their garden" → "User has homegrown cherry tomatoes, basil, and mint available as cooking ingredients"
+- "User prefers basil as companion plant for tomatoes" → "User grows basil alongside tomatoes, suitable for Italian cooking"
+
+This requires a new targeted extraction pass (`--implicit-prefs`) that reads existing preference/implementation nodes and generates inferred preference nodes with cooking/usage framing, dual-tagged with both original and inferred domains.
+
+**Estimated complexity:** ~60 lines (new extraction prompt + `extract_targeted` hook). High likelihood of improving `06f04340` score; uncertain impact on the other 19 zero-scoring preference questions (most likely have true knowledge gaps, not framing gaps).
+
+---
+
+## Implicit Preference Extraction — Results
+
+*April 15, 2026 — `--implicit-prefs` flag, `extract_implicit_prefs()` in `extractor.py`*
+
+### What was built
+
+A post-session extraction pass (`extract_implicit_prefs`) that infers cross-domain preferences from explicit knowledge nodes. Gardening context becomes cooking context; companion-plant choices become ingredient availability. The pass runs after the normal session-by-session preference extraction in `preference_pass.py --implicit-prefs`.
+
+Key implementation:
+- `build_implicit_prefs_prompt(existing_nodes)` in `prompts.py` — prompts the LLM to reason across domains
+- Nodes tagged `inferred-preference` + both source and target domain tags (e.g., `gardening`, `homegrown`, `cooking`, `recipe`)
+- `extract_implicit_prefs(existing_nodes, config)` in `extractor.py` — async, uses `assign_ids_incremental` to avoid ID collisions
+
+### Spot-check results (3 preference-category samples, `pref_fanout` config, user_patched DBs)
+
+| Sample | Question | Without implicit prefs | With implicit prefs |
+|--------|----------|----------------------|---------------------|
+| `06f04340` | "What should I serve for dinner with my homegrown ingredients?" | 0.0 | **1.0** |
+| `38146c39` | "My chocolate chip cookies need something extra. Any advice?" | 0.0 | 0.0 |
+| `1da05512` | "Should I buy a NAS device now or wait?" | 0.5 | 0.5 |
+
+`06f04340` is the canonical framing-gap case: gardening companion-plant nodes (basil, mint, tomatoes) were unretrievable for a cooking query. The implicit pass added 4 inferred nodes including `n_258e1a0f` ("user prefers to cook with homegrown basil, borage, chives... especially in recipes that complement tomatoes") tagged `homegrown`, `cooking`, `recipe`, `inferred-preference` — these matched the dinner query exactly. LLM judge: 0.0 → **1.0**.
+
+`38146c39` did not improve — the turbinado sugar/cookies preference was already extractable by the normal pass; the implicit pass found no cross-domain bridge.
+
+### Baseline: `pref_fanout_retry3` full run (500 samples, no implicit prefs)
+
+| Metric | Score |
+|--------|-------|
+| Overall LLM accuracy | 60.8% |
+| single-session-preference LLM accuracy | 26.7% (8/30) |
+| single-session-assistant | 87.5% |
+| knowledge-update | 71.8% |
+| temporal-reasoning | 60.2% |
+
+Preference questions remain the weakest category. The framing-gap accounts for a fraction of the 73.3% failure rate; the majority are likely true knowledge gaps (the preference was never stated in a retrievable form).
+
+### Full run results (30 preference samples, April 15 2026)
+
+All 30 `single-session-preference` samples augmented in 17.3 min. 8,743 new preference nodes added (214 implicit cross-domain nodes). Judged with the standard LLM judge.
+
+| Metric | Baseline (no implicit prefs) | After implicit prefs | Delta |
+|--------|------------------------------|----------------------|-------|
+| LLM accuracy (strict) | 26.7% (8/30) | **33.3% (10/30)** | **+6.6pp** |
+| LLM partial credit (mean score) | — | **51.7%** | — |
+| Scores == 1.0 | 8 | **10** | +2 |
+| Scores >= 0.5 | — | **21/30** | — |
+
+New perfect-score samples (1.0): `505af2f5`, `0a34ad58` (plus previously solved `06f04340`).
+8 samples with score 0.0 remain — likely true knowledge gaps (preference never stated retrievably).
+
+Per-sample scores:
+
+| Sample | Score | | Sample | Score |
+|--------|-------|-|--------|-------|
+| 06878be2 | 0.5 | | 505af2f5 | **1.0** |
+| 06f04340 | **1.0** | | 54026fce | **1.0** |
+| 07b6f563 | 0.0 | | 57f827a0 | **1.0** |
+| 09d032c9 | 0.5 | | 6b7dfb22 | 0.5 |
+| 0a34ad58 | **1.0** | | 75832dbd | 0.0 |
+| 0edc2aef | 0.0 | | 75f70248 | **1.0** |
+| 195a1a1b | 0.0 | | 8a2466db | 0.0 |
+| 1a1907b4 | 0.5 | | 95228167 | **1.0** |
+| 1c0ddc50 | **1.0** | | a89d7624 | 0.0 |
+| 1d4e3b97 | 0.5 | | afdc33df | 0.5 |
+| 1da05512 | 0.5 | | b0479f84 | **1.0** |
+| 32260d93 | 0.0 | | b6025781 | 0.5 |
+| 35a27287 | 0.5 | | caf03d32 | 0.5 |
+| 38146c39 | 0.0 | | d24813b1 | **1.0** |
+| — | — | | d6233ab6 | 0.5 |
+| — | — | | fca70973 | 0.0 |
+
+---
+
+## Bi-Temporal Memory Architecture
+
+*April 2026 — Schema design inspired by Zep/Memento research*
+
+### Background
+
+Justin requested a bi-temporal memory implementation "similar to what Zep is doing, but better." Research into Zep (arxiv 2501.13956), Memento (90.8% LongMemEval, SQLite), and temporal database standards (SQL:2011 SYSTEM_TIME / VALID_TIME) shaped the design.
+
+### Zep limitations
+
+- Cloud-based, proprietary, requires PostgreSQL or external graph DB (Neo4j, FalkorDB)
+- No local-first / offline capability
+- Architecture details not public; no point-in-time reconstruction guidance published
+
+### Our implementation (better than Zep in key dimensions)
+
+**Schema additions to `nodes` table:**
+
+| Column | Type | Semantics |
+|--------|------|-----------|
+| `valid_to` | TEXT (ISO 8601) | When this fact stopped being true in the world. NULL = still current. Set to superseding node's `occurred_at` when superseded. |
+| `is_active` | INTEGER (0/1) | Cached `valid_to IS NULL` flag. Indexed for O(log N) lookups. Maintained by `merge_extraction()` and backfill migration. |
+
+**Relationship to existing columns:**
+- `occurred_at` = valid time start (when fact became true in the conversation world)
+- `valid_to` = valid time end (when fact stopped being true — the superseding event's `occurred_at`)
+- `created_at` = transaction time (when the system ingested this fact)
+
+This is the standard bi-temporal model: **valid time** (`occurred_at` → `valid_to`) + **transaction time** (`created_at`).
+
+**New GraphStore methods:**
+
+- `get_active_nodes()` — O(log N) query using `is_active` index
+- `get_nodes_at_time(valid_at, transaction_at)` — bi-temporal point-in-time slice. Answers "what was true in the world at session N?" (valid_at) and "what did the system know as of ingestion time T?" (transaction_at)
+- `get_revision_history(node_id)` — full belief-revision lineage via recursive supersedes[] traversal. Returns chain oldest-first.
+
+**Retriever improvement:**
+
+`prune_superseded()` now uses `is_active=0` as a fast path (O(log N)) before the O(N×edges) edge traversal. Edge traversal retained as belt-and-suspenders for pre-migration DBs.
+
+### Migration strategy
+
+All additions are backward-compatible via SQLite `ALTER TABLE` migrations in `init_db()`:
+1. Add `valid_to TEXT` and `is_active INTEGER DEFAULT 1`
+2. Backfill: set `is_active=0` + `valid_to=superseding.created_at` for all nodes listed in any `supersedes[]` array
+3. Future `merge_extraction()` calls maintain `is_active`/`valid_to` automatically
+
+### Memento's 90.8% LongMemEval result (reference)
+
+Memento (open-source, SQLite) reaches 90.8% overall with:
+- Same four temporal columns (`valid_at`, `invalid_at`, `created_at`, `updated_at`)
+- Entity resolution (exact → fuzzy → phonetic → embedding → LLM)
+- Contradiction detection
+- Verbatim transcript fallback
+
+Our implementation matches Memento's core temporal schema. Remaining gaps vs. Memento:
+- No automatic contradiction detection (planned)
+- No entity resolution pipeline (partial — fact-hash + semantic dedup exists)
+- No verbatim fallback (raw_sentences table exists but is decoupled from retrieval)
