@@ -780,6 +780,14 @@ RULES:
 - The fact must be self-contained: state WHO has the preference, WHAT they like/dislike/do (specific value, not just a category), and any qualifying context.
 - Format as a declarative statement: "The user prefers oat milk lattes over regular coffee" NOT "I like lattes".
 - Tag with the topic (broad: "coffee", "exercise") AND specific value ("oat milk latte", "trail running"). Always include "preference" as a tag.
+- CRITICAL — CATEGORY BRIDGING TAGS: For any preference involving a specific brand, product model, or named item, ALSO add generic category tags that a question would use to find it. Examples:
+    • "Zagg screen protectors for iPhone 13 Pro" → also tag: "phone accessories", "mobile accessories", "phone", "accessories"
+    • "prefers Merrell trail shoes" → also tag: "footwear", "shoes", "hiking gear"
+    • "wind down by 9:30pm" or "reads before bed" → also tag: "evening", "evening routine", "nighttime", "bedtime"
+    • "morning cold brew" → also tag: "morning", "morning routine", "coffee", "morning drink"
+    • "vegetarian diet" or "avoids gluten" → also tag: "diet", "food", "eating", "dietary restrictions"
+    • "uses standing desk at work" → also tag: "work setup", "workspace", "office"
+  The goal: if someone asks "what accessories does this person use for their phone?", the tag "phone accessories" must be present even if the fact says "Zagg screen protector for iPhone 13 Pro".
 - AIM FOR 3–8 NODES per call. Do NOT emit trivial or redundant preferences. Hard cap: 10 nodes maximum per call.
 - If a preference supersedes a previously extracted one, set supersedes to the old node's ID.
 - If nothing meaningful is found, return {"nodes": [], "edges": []}.

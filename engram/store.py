@@ -192,6 +192,15 @@ class GraphStore:
             log.info("Migrated edges table: added weight column")
         except sqlite3.OperationalError:
             pass  # Column already exists
+        # BFS covering index for reverse direction (to_id → from_id, relation, weight).
+        # Created after the weight migration so all columns are guaranteed to exist.
+        # Forward direction is already covered by the PK (from_id, to_id, relation);
+        # this index makes `WHERE to_id IN (...)` fully covering — no table row fetch.
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_edges_to_covering "
+            "ON edges(to_id, from_id, relation, weight)"
+        )
+        self.conn.commit()
 
         # Migration: add occurred_at column (conversation date, for accurate recency decay)
         try:
@@ -720,6 +729,14 @@ class GraphStore:
         ).fetchall()
         return [self._row_to_node(r) for r in rows]
 
+    def get_nodes_by_type(self, node_type: str) -> list[dict]:
+        """Fetch all active nodes of a given type."""
+        rows = self.conn.execute(
+            "SELECT * FROM nodes WHERE type = ? AND is_active = 1",
+            (node_type,),
+        ).fetchall()
+        return [self._row_to_node(r) for r in rows]
+
     def get_nodes_at_time(
         self,
         valid_at: str | None = None,
@@ -861,8 +878,12 @@ class GraphStore:
                     result_rows.append(row)
         return [self._row_to_node(r) for r in result_rows]
 
-    def get_nodes_by_fact_text(self, keywords: list[str]) -> list[dict]:
-        """Find nodes whose fact text contains any of the given keywords."""
+    def get_nodes_by_fact_text(self, keywords: list[str], limit: int = 150) -> list[dict]:
+        """Find nodes whose fact text contains any of the given keywords.
+
+        Active nodes only.  ``limit`` caps results per chunk to avoid full-table
+        scans on generic keywords (e.g. "work", "week") that match thousands of rows.
+        """
         if not keywords:
             return []
         _CHUNK = 200
@@ -873,7 +894,8 @@ class GraphStore:
             conditions = " OR ".join(["fact LIKE ?" for _ in chunk])
             params = [f"%{kw}%" for kw in chunk]
             rows = self.conn.execute(
-                f"SELECT * FROM nodes WHERE {conditions}", params
+                f"SELECT * FROM nodes WHERE is_active = 1 AND ({conditions}) LIMIT {limit}",
+                params,
             ).fetchall()
             for row in rows:
                 if row[0] not in seen_ids:
@@ -943,24 +965,41 @@ class GraphStore:
         return cursor.rowcount
 
     def get_edges_for_nodes(self, node_ids: list[str]) -> list[dict]:
-        """Fetch all edges where from_id or to_id is in node_ids, chunked for SQLite limits."""
+        """Fetch all edges where from_id or to_id is in node_ids, chunked for SQLite limits.
+
+        Uses two separate IN queries instead of ``from_id IN (...) OR to_id IN (...)``.
+        The OR form triggers SQLite's MULTI-INDEX OR path which iterates per element
+        (``from_id=?`` × N) rather than doing a single range scan per index.  Splitting
+        into two queries lets each index serve a proper range scan, then Python
+        deduplicates by (from_id, to_id, relation).
+
+        Index coverage:
+        - Forward direction (``from_id IN``): served by PK ``(from_id, to_id, relation)``
+          which is a clustered B-tree; ``weight`` fetch is one extra column read.
+        - Reverse direction (``to_id IN``): served by ``idx_edges_to_covering``
+          ``(to_id, from_id, relation, weight)`` — fully covering, no table fetch needed.
+        """
         if not node_ids:
             return []
-        results = []
-        seen_rowids: set = set()
-        for chunk in _chunk(node_ids, 499):  # doubled in query, so 499*2 < 999
-            placeholders = ",".join("?" * len(chunk))
-            rows = self.conn.execute(
-                f"SELECT rowid, * FROM edges WHERE from_id IN ({placeholders}) OR to_id IN ({placeholders})",
-                chunk + chunk,
-            ).fetchall()
+        seen_key: set[tuple] = set()
+        results: list[dict] = []
+
+        def _add_rows(rows) -> None:
             for r in rows:
-                if r[0] not in seen_rowids:
-                    seen_rowids.add(r[0])
+                key = (r["from_id"], r["to_id"], r["relation"])
+                if key not in seen_key:
+                    seen_key.add(key)
                     results.append(dict(r))
-        # Strip the synthetic rowid key we added for dedup
-        for d in results:
-            d.pop("rowid", None)
+
+        for chunk in _chunk(node_ids, 999):
+            placeholders = ",".join("?" * len(chunk))
+            _add_rows(self.conn.execute(
+                f"SELECT * FROM edges WHERE from_id IN ({placeholders})", chunk
+            ).fetchall())
+            _add_rows(self.conn.execute(
+                f"SELECT * FROM edges WHERE to_id IN ({placeholders})", chunk
+            ).fetchall())
+
         return results
 
     def get_edges_from(self, node_id: str) -> list[dict]:
@@ -1658,6 +1697,7 @@ class GraphStore:
         _COMMIT_CHUNK = 2000  # nodes per commit batch — keeps write lock duration short
         total_pairs = 0
         batch: list[tuple[str, str]] = []
+        seen_in_batch: set[tuple[str, str]] = set()
         for i, row in enumerate(missing_nodes):
             node_id = row[0]
             try:
@@ -1666,7 +1706,10 @@ class GraphStore:
                 tags = []
             for tag in tags:
                 if tag:
-                    batch.append((str(tag).lower(), node_id))
+                    for pair in self._tag_pairs(tag, node_id):
+                        if pair not in seen_in_batch:
+                            seen_in_batch.add(pair)
+                            batch.append(pair)
             if (i + 1) % _COMMIT_CHUNK == 0 and batch:
                 self.conn.executemany(
                     "INSERT OR IGNORE INTO node_tags(tag, node_id) VALUES (?, ?)", batch
@@ -1674,6 +1717,7 @@ class GraphStore:
                 self.conn.commit()
                 total_pairs += len(batch)
                 batch = []
+                seen_in_batch = set()
         if batch:
             self.conn.executemany(
                 "INSERT OR IGNORE INTO node_tags(tag, node_id) VALUES (?, ?)", batch
@@ -1682,14 +1726,49 @@ class GraphStore:
             total_pairs += len(batch)
         log.debug("node_tags backfill: indexed tags for %d nodes (%d pairs)", len(missing_nodes), total_pairs)
 
+    @staticmethod
+    def _tag_pairs(tag: str, node_id: str) -> list[tuple[str, str]]:
+        """Return (tag, node_id) pairs for a single tag.
+
+        For multi-word tags (e.g. "screen protector", "iPhone 13 Pro"), emits
+        both the full lowercase tag AND each individual word that is 3+ characters
+        and not a common stop word.  This ensures single-word query keywords like
+        "screen" or "iphone" can find nodes tagged "screen protector" or "iPhone 13 Pro"
+        via the exact-match node_tags fast path.
+        """
+        _TAG_STOP = frozenset({
+            "the", "and", "for", "with", "from", "that", "this", "are",
+            "was", "not", "but", "has", "had", "have", "its", "their",
+        })
+        tag_lower = str(tag).lower().strip()
+        if not tag_lower:
+            return []
+        pairs: list[tuple[str, str]] = [(tag_lower, node_id)]
+        words = tag_lower.split()
+        if len(words) > 1:
+            for word in words:
+                w = word.strip(".,;:!?\"'()[]{}")
+                if len(w) >= 3 and w not in _TAG_STOP:
+                    pairs.append((w, node_id))
+        return pairs
+
     def _upsert_node_tags(self, node_id: str, tags: list[str]) -> None:
         """Replace all tag entries for a node in the node_tags index.
 
         Deletes any existing rows for node_id then inserts the current set.
+        Multi-word tags also emit word-split entries so single-word query keywords
+        can find them via the exact-match fast path.
         Call after any operation that changes a node's tag list.
         """
         self.conn.execute("DELETE FROM node_tags WHERE node_id = ?", (node_id,))
-        pairs = [(str(t).lower(), node_id) for t in tags if t]
+        pairs: list[tuple[str, str]] = []
+        seen: set[tuple[str, str]] = set()
+        for t in tags:
+            if t:
+                for pair in self._tag_pairs(t, node_id):
+                    if pair not in seen:
+                        seen.add(pair)
+                        pairs.append(pair)
         if pairs:
             self.conn.executemany(
                 "INSERT OR IGNORE INTO node_tags(tag, node_id) VALUES (?, ?)", pairs

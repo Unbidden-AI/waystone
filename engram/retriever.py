@@ -134,9 +134,13 @@ DEFAULT_STRATEGIES = {
     "token_budget": 0,
     "relevance_scoring": False,
     "semantic_rerank": False,  # Post-BFS re-ranking: multiply _score by cosine similarity to query
+    "semantic_rerank_cap": 300,  # Max nodes to rerank (pre-sorted by _score; 0 = no cap)
     "cross_encoder_rerank": False,  # Post-BFS re-ranking: score (query, fact) pairs via cross-encoder
     "process_slots": 5,  # Reserved slots for process nodes before top_k cut (0 = disabled)
     "preference_fanout": False,  # Inject all preference nodes when query contains preference-signal verbs
+    "preference_fanout_cap": 20,  # Max preference nodes to inject (ranked by cosine sim to query; 0 = unlimited)
+    "semantic_retrieval": False,  # Independent linear scan: all node embeddings → top-K by cosine, union with BFS pool
+    "semantic_retrieval_k": 40,   # How many top-cosine nodes to inject from the linear scan
 }
 
 # Verbs that indicate a preference/recommendation query — used by preference_fanout to
@@ -289,7 +293,7 @@ def retrieve_with_stats(
     sem_ranked: list[str] = []
     query_blob: bytes | None = None
     from engram import embedder
-    if (strats["semantic"] or strats.get("semantic_rerank")) and embedder.is_available() and store._vec_available:
+    if (strats["semantic"] or strats.get("semantic_rerank") or strats.get("semantic_retrieval")) and embedder.is_available() and store._vec_available:
         query_blob = embedder.embed_text(task_description)
     if strats["semantic"] and query_blob is not None:
         sem_ranked = [nid for nid in store.search_by_embedding(query_blob, top_k=top_k)
@@ -301,14 +305,19 @@ def retrieve_with_stats(
     all_entry_ids_ordered = [nid for nid, _ in rrf_results]
     rrf_score_map = {nid: score for nid, score in rrf_results}
 
-    # Also include any fact-text matches not already in tag results
-    fact_nodes = store.get_nodes_by_fact_text(keywords)
-    fact_only_ids = [n["id"] for n in fact_nodes
-                     if n["id"] not in pinned_ids and n["id"] not in rrf_score_map]
-    if fact_only_ids:
-        # Append at end of RRF list (no RRF score contribution — treat as tail)
-        all_entry_ids_ordered.extend(fact_only_ids)
-        log.debug("Fact-text fallback added %d nodes not in RRF results", len(fact_only_ids))
+    # Fact-text LIKE fallback: catches nodes that FTS5 missed (e.g. partial compound
+    # matches).  Only fires when the combined RRF pool is sparse — FTS5 already covers
+    # this for most queries, so running an unindexed LIKE scan unconditionally wastes
+    # ~35ms on generic keywords ("work", "week") that match thousands of rows.
+    _fact_fallback_threshold = top_k * 3
+    if len(all_entry_ids_ordered) < _fact_fallback_threshold:
+        fact_nodes = store.get_nodes_by_fact_text(keywords)
+        fact_only_ids = [n["id"] for n in fact_nodes
+                         if n["id"] not in pinned_ids and n["id"] not in rrf_score_map]
+        if fact_only_ids:
+            # Append at end of RRF list (no RRF score contribution — treat as tail)
+            all_entry_ids_ordered.extend(fact_only_ids)
+            log.debug("Fact-text fallback added %d nodes not in RRF results", len(fact_only_ids))
 
     # Hydrate all entry node dicts in one pass
     node_by_id = {n["id"]: n for n in tag_nodes_raw}
@@ -538,9 +547,96 @@ def retrieve_with_stats(
                 node["_score"] = node.get("_score", node.get("confidence", 0.0)) * w
         applied.append("edge_weight_scoring")
 
+    # Preference fan-out: inject preference-type nodes before scoring so that
+    # semantic_rerank (and cross_encoder/rrf below) can properly rank them against the query.
+    # Injecting after scoring (original position) caused all preference nodes to sort by raw
+    # confidence=0.9, displacing well-ranked BFS nodes and producing random pref selection.
+    #
+    # Cap: if preference_fanout_cap > 0 and embeddings are available, score all candidate
+    # preference nodes by cosine similarity to the query and inject only the top-N.  This
+    # prevents the ~250-node full-inject from polluting multi-session retrieval where some
+    # preference nodes happen to have non-zero cosine scores.
+    if strats.get("preference_fanout"):
+        query_tokens = set(task_description.lower().split())
+        if query_tokens & _PREFERENCE_SIGNAL_VERBS:
+            collected_ids = {n["id"] for n in collected_nodes}
+            pref_nodes = store.get_nodes_by_type("preference")
+            new_pref = [
+                n for n in pref_nodes
+                if n["id"] not in collected_ids and n["id"] not in pinned_ids
+            ]
+            cap = strats.get("preference_fanout_cap", 20)
+            if cap > 0 and new_pref and query_blob is not None:
+                # Score each candidate pref node by cosine sim to query, keep top-cap
+                pref_ids = [n["id"] for n in new_pref]
+                placeholders = ",".join("?" * len(pref_ids))
+                pref_emb_rows = store.conn.execute(
+                    f"SELECT node_id, embedding FROM node_embeddings WHERE node_id IN ({placeholders})",
+                    pref_ids,
+                ).fetchall()
+                pref_emb_map = {r[0]: bytes(r[1]) for r in pref_emb_rows}
+                scored = []
+                for n in new_pref:
+                    emb = pref_emb_map.get(n["id"])
+                    sim = embedder.cosine_similarity(query_blob, emb) if emb is not None else 0.0
+                    scored.append((max(0.0, sim), n))
+                scored.sort(key=lambda x: x[0], reverse=True)
+                new_pref = [n for _, n in scored[:cap]]
+            if new_pref:
+                log.debug(
+                    "Preference fan-out: injected %d preference nodes (cap=%s, pre-scoring)",
+                    len(new_pref), cap if cap > 0 else "unlimited",
+                )
+            collected_nodes = collected_nodes + new_pref
+
+    # Semantic retrieval channel: independent linear scan over all node embeddings.
+    # Nodes with no BFS tag match and no graph connectivity are invisible to BFS
+    # regardless of how relevant their fact text is.  This channel surfaces them by
+    # scoring every stored embedding against the query and injecting the top-K into
+    # the candidate pool before semantic_rerank re-ranks the unified set.
+    if strats.get("semantic_retrieval") and query_blob is not None:
+        sem_k = strats.get("semantic_retrieval_k", 40)
+        all_emb_rows = store.conn.execute(
+            "SELECT node_id, embedding FROM node_embeddings"
+        ).fetchall()
+        if all_emb_rows:
+            scored_sem = sorted(
+                ((embedder.cosine_similarity(query_blob, bytes(row[1])), row[0]) for row in all_emb_rows),
+                reverse=True,
+            )
+            sem_ids = {nid for _, nid in scored_sem[:sem_k]}
+            existing_ids = {n["id"] for n in collected_nodes} | pinned_ids
+            new_sem_ids = sem_ids - existing_ids
+            if new_sem_ids:
+                placeholders = ",".join("?" * len(new_sem_ids))
+                new_rows = store.conn.execute(
+                    f"SELECT * FROM nodes WHERE id IN ({placeholders}) AND is_active = 1",
+                    list(new_sem_ids),
+                ).fetchall()
+                sem_injected = [store._row_to_node(r) for r in new_rows]
+                if sem_injected:
+                    log.debug(
+                        "Semantic retrieval: injected %d nodes (scanned %d, top-%d)",
+                        len(sem_injected), len(all_emb_rows), sem_k,
+                    )
+                    collected_nodes.extend(sem_injected)
+                    applied.append(f"semantic_retrieval(k={sem_k})")
+
     if strats.get("semantic_rerank") and query_blob is not None:
+        # Optionally cap the rerank candidate pool to avoid O(n_bfs) cost at large scale.
+        # Pre-sort by current _score descending and only rerank the top-N; nodes beyond
+        # the cap keep their existing score and will naturally sort below reranked nodes.
+        rerank_cap = strats.get("semantic_rerank_cap", 300)
+        if rerank_cap and rerank_cap > 0 and len(collected_nodes) > rerank_cap:
+            collected_nodes.sort(
+                key=lambda n: n.get("_score", n.get("confidence", 0.0)), reverse=True
+            )
+            rerank_candidates = collected_nodes[:rerank_cap]
+        else:
+            rerank_candidates = collected_nodes
+
         # Fetch stored embeddings for all collected nodes in one batch query
-        node_ids = [n["id"] for n in collected_nodes]
+        node_ids = [n["id"] for n in rerank_candidates]
         if node_ids:
             placeholders = ",".join("?" * len(node_ids))
             rows = store.conn.execute(
@@ -548,14 +644,15 @@ def retrieve_with_stats(
                 node_ids,
             ).fetchall()
             emb_map = {r[0]: bytes(r[1]) for r in rows}
-            for node in collected_nodes:
+            for node in rerank_candidates:
                 emb = emb_map.get(node["id"])
                 if emb is not None:
                     sim = embedder.cosine_similarity(query_blob, emb)
                     # Clamp to [0, 1]: cosine can be negative, treat negatives as 0
                     sim = max(0.0, sim)
                     node["_score"] = node.get("_score", node.get("confidence", 0.0)) * (0.5 + 0.5 * sim)
-            applied.append("semantic_rerank")
+            cap_note = f",cap={rerank_cap}" if rerank_cap and len(collected_nodes) > rerank_cap else ""
+            applied.append(f"semantic_rerank{cap_note}")
 
     if strats.get("cross_encoder_rerank") and collected_nodes:
         # Score each (query, fact) pair via cross-encoder — replaces _score entirely
@@ -646,25 +743,6 @@ def retrieve_with_stats(
         if person_hub_nodes:
             log.debug("Person hub fan-out: injected %d additional person-tagged nodes", len(person_hub_nodes))
         collected_nodes = collected_nodes + person_hub_nodes
-
-    # Preference fan-out: when query contains recommendation/preference-signal verbs,
-    # fetch ALL preference-type nodes and add them to the candidate pool.
-    # Preference questions ("Can you recommend some coffee shops?") use generic action verbs
-    # that never appear in preference node tags (which use specific product/activity names),
-    # so BFS never seeds them.  We inject all preference nodes here and let semantic_rerank
-    # + top_k filter down to the most relevant ones.
-    if strats.get("preference_fanout"):
-        query_tokens = set(task_description.lower().split())
-        if query_tokens & _PREFERENCE_SIGNAL_VERBS:
-            collected_ids = {n["id"] for n in collected_nodes}
-            pref_nodes = store.get_nodes_by_tags(["preference"])
-            new_pref = [
-                n for n in pref_nodes
-                if n["id"] not in collected_ids and n["id"] not in pinned_ids
-            ]
-            if new_pref:
-                log.debug("Preference fan-out: injected %d preference nodes", len(new_pref))
-            collected_nodes = collected_nodes + new_pref
 
     # Seed preservation: ensure directly query-matched seed nodes (depth=0) are not
     # completely displaced by recency-biased BFS-expanded nodes. Reserve up to 40% of
@@ -887,13 +965,20 @@ def prune_superseded(nodes: list[dict], store: GraphStore) -> list[dict]:
             continue  # already flagged
         for sid in node.get("supersedes", []):
             superseded_ids.add(sid)
-    for node in nodes:
-        if node["id"] in superseded_ids:
-            continue
-        for edge in store.get_edges_to(node["id"]):
-            if edge["relation"] == "supersedes" and edge["from_id"] in node_ids:
-                superseded_ids.add(node["id"])
-                break
+
+    # Batch edge check — one SQL query instead of N get_edges_to() calls.
+    # Find all to_ids that have an incoming supersedes edge from within this node set.
+    active_ids = list(node_ids - superseded_ids)
+    if active_ids:
+        chunk = 500  # keep well under SQLite expression-tree-depth limit (1000)
+        for i in range(0, len(active_ids), chunk):
+            batch = active_ids[i : i + chunk]
+            placeholders = ",".join("?" * len(batch))
+            rows = store.conn.execute(
+                f"SELECT to_id FROM edges WHERE relation = 'supersedes' AND to_id IN ({placeholders})",
+                batch,
+            ).fetchall()
+            superseded_ids.update(r[0] for r in rows)
 
     return [n for n in nodes if n["id"] not in superseded_ids]
 
