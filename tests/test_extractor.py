@@ -32,9 +32,10 @@ class TestParseLLMResponse:
         result = parse_llm_response(content)
         assert result["nodes"] == []
 
-    def test_missing_nodes_raises(self):
-        with pytest.raises(ValueError):
-            parse_llm_response('{"edges": []}')
+    def test_missing_nodes_defaults_empty(self):
+        # Missing "nodes" is handled gracefully — defaults to empty list
+        result = parse_llm_response('{"edges": []}')
+        assert result["nodes"] == []
 
     def test_missing_edges_defaults(self):
         result = parse_llm_response('{"nodes": []}')

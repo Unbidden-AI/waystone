@@ -112,7 +112,7 @@ class TestQuery:
             "created_at": "2026-03-07T00:00:00Z", "supersedes": [],
         })
         store.close()
-        result = r.invoke(cli, ["--config", config, "query", "test-project", "kubernetes"])
+        result = r.invoke(cli, ["--config", config, "query", "test-project", "kubernetes", "--disable", "semantic"])
         assert result.exit_code == 0
         assert "No relevant context" in result.output
 

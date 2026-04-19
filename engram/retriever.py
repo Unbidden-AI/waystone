@@ -122,6 +122,15 @@ STOP_WORDS = {
     "over", "under", "between", "through", "against", "within", "along",
     "chosen", "decided", "called", "based", "made", "used", "given",
     "via", "per", "vs", "versus",
+    # Counting / quantity / temporal words that become noise seeds when _tag_pairs
+    # splits compound tags — e.g. "past experiences" → "past" entry in node_tags,
+    # and query keyword "past" now seeds unrelated nodes.  These words carry no
+    # meaningful retrieval signal on their own; FTS/semantic channels handle them.
+    "many", "times", "currently", "total", "overall",
+    "ago", "past", "last", "next", "recent", "recently",
+    "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+    "weeks", "months", "days", "hours", "years",
+    "something", "anything", "everything", "nothing",
 }
 
 # Default strategy settings (all reductions off)
