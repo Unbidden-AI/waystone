@@ -465,6 +465,9 @@ def _retrieve_context(conv, question: str, store, config: AblationConfig) -> str
         "rrf_weights": config.rrf_weights,
         "sentence_index": config.sentence_index,
         "preference_fanout": config.preference_fanout,
+        "preference_fanout_cap": config.preference_fanout_cap,
+        "semantic_retrieval": config.semantic_retrieval,
+        "semantic_retrieval_k": config.semantic_retrieval_k,
     }
 
     try:

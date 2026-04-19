@@ -76,6 +76,9 @@ class AblationConfig:
     # Addresses the keyword-mismatch gap: preference nodes are tagged with specific
     # product/activity names, but preference questions use generic action verbs.
     preference_fanout: bool = False
+    # Max preference nodes to inject during fan-out (ranked by cosine sim; 0 = unlimited).
+    # Default 20 prevents polluting multi-session retrieval with low-relevance pref nodes.
+    preference_fanout_cap: int = 20
     # Absent-information handling: when True and retrieval returns no context, judge prompt
     # is flipped — empty context scores YES if the ground truth is "info not available".
     # Keep False for LOCOMO (no abstention category); set True for LongMemEval.
@@ -91,6 +94,11 @@ class AblationConfig:
     # When True, config.sentence_index.enabled is set before ingestion, and the retriever
     # uses raw_sentences as a fallback when BFS entry_nodes < sentence_fallback_threshold.
     sentence_index: bool = False
+    # Independent semantic retrieval channel: linear scan of all node embeddings, inject
+    # top-K by cosine similarity into the BFS candidate pool before semantic_rerank.
+    # Surfaces nodes with no tag match and no graph connectivity.
+    semantic_retrieval: bool = False
+    semantic_retrieval_k: int = 40
 
 
 # ---------------------------------------------------------------------------

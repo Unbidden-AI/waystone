@@ -370,6 +370,32 @@ LME_ABLATION_CONFIGS: dict[str, AblationConfig] = {
         checkpoint_source="engram_lme_gemini_s_user_patched",
     ),
 
+    # Preference v2: re-extracted preferences with improved bridging-tag prompt.
+    # The original user_patched preferences were tagged with specific brand/product names
+    # (e.g. "Zagg", "iPhone 13 Pro") but lacked generic category tags ("phone accessories",
+    # "phone") that preference questions use.  This config uses DBs where:
+    #   1. All old preference nodes were stripped from the 22 failing samples
+    #   2. preference_pass was re-run with the improved prompt requiring category bridging tags
+    # Tests whether normal BFS retrieval (no fanout) can find preference nodes via query
+    # vocab once the tags are enriched.
+    "engram_lme_s_pref_v2": AblationConfig(
+        name="engram_lme_s_pref_v2",
+        description=(
+            "S-split with re-extracted preferences using improved bridging-tag prompt. "
+            "22 failing single-session-preference samples re-extracted from scratch. "
+            "Normal BFS (no fanout) — tests vocabulary gap fix at extraction time."
+        ),
+        superseded_pruning=True,
+        recency_decay=True,
+        top_k=100,
+        semantic_rerank=True,
+        dedup_threshold=0.95,
+        domain="episodic_personal",
+        abstention_mode=True,
+        person_anchoring=True,
+        checkpoint_source="engram_lme_gemini_s_pref_v2",
+    ),
+
     # Sentence index: raw per-sentence vectors as semantic fallback for queries whose
     # keywords generate zero BFS entry nodes (the SS-user gap root cause).
     # Requires fresh extraction — does NOT reuse engram_lme_gemini_s checkpoints because
@@ -393,6 +419,32 @@ LME_ABLATION_CONFIGS: dict[str, AblationConfig] = {
         abstention_mode=True,
         person_anchoring=True,
         sentence_index=True,   # enables sentence_index.enabled at ingest + retrieval
+    ),
+
+    # Semantic retrieval channel: independent linear scan of all node embeddings.
+    # Nodes with no tag match and no BFS connectivity (e.g. preference nodes, obscure
+    # facts) are invisible to BFS regardless of cosine similarity. This channel surfaces
+    # them by scoring every stored embedding against the query and injecting the top-K
+    # into the candidate pool before semantic_rerank unifies and re-ranks.
+    # Reuses engram_lme_gemini_s_user_patched checkpoints (same as pref_fanout).
+    "engram_lme_s_semantic_retrieval": AblationConfig(
+        name="engram_lme_s_semantic_retrieval",
+        description=(
+            "S-split with independent semantic retrieval channel — linear scan of all "
+            "node embeddings, inject top-40 by cosine into BFS pool before semantic_rerank. "
+            "Reuses user_patched checkpoints."
+        ),
+        superseded_pruning=True,
+        recency_decay=True,
+        top_k=100,
+        semantic_rerank=True,
+        dedup_threshold=0.95,
+        domain="episodic_personal",
+        abstention_mode=True,
+        person_anchoring=True,
+        semantic_retrieval=True,
+        semantic_retrieval_k=40,
+        checkpoint_source="engram_lme_gemini_s_user_patched",
     ),
 }
 

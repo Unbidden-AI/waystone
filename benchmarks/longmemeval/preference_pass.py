@@ -73,8 +73,10 @@ def _turns_to_text(turns: list, datetime_str: str | None) -> str:
 # (e.g., a single greeting exchange) are unlikely to contain durable preferences.
 _MIN_TURNS = 3
 
-# Maximum bisection depth: 3 → sessions are split at most into 8 chunks (2^3).
-_BISECT_MAX_DEPTH = 3
+# Maximum bisection depth: 4 → sessions are split at most into 16 chunks (2^4).
+# Raised from 3 to handle large phone sessions (~20K chars, 14 turns) that
+# previously exhausted depth=3 and were silently skipped.
+_BISECT_MAX_DEPTH = 4
 
 
 def _extract_session_with_bisection(
