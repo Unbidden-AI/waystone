@@ -489,6 +489,9 @@ def _retrieve_context(
             "semantic_retrieval_k": config.semantic_retrieval_k,
             "temporal_auto_route": config.temporal_auto_route,
             "extend_stop_words": config.extend_stop_words,
+            "half_life_by_type": config.half_life_by_type,
+            "phase_rotation": config.phase_rotation,
+            "soft_supersede": config.soft_supersede,
         }
 
         try:

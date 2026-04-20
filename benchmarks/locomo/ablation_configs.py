@@ -113,6 +113,17 @@ class AblationConfig:
     # MUST be False for LongMemEval — these words are legitimate BFS seeds for multi-session
     # "how many X in the last Y" counting questions. Regression confirmed (a2e1077, Apr-19).
     extend_stop_words: bool = False
+    # RoMem (arxiv:2604.11544) temporal decay model.
+    # Per-type half-lives: assign different half_life_days per node type rather than one global value.
+    # Motivated by RoMem's per-relation volatility scores (αᵣ): e.g. transition facts go stale
+    # in days, while constraint/lesson facts remain valid for years.
+    half_life_by_type: dict | None = None
+    # Phase rotation: replace exponential decay (2^(-age/hl)) with cos(age/hl × π/2).
+    # At age=half_life the score reaches exactly 0, rotating the node fully out of phase.
+    phase_rotation: bool = False
+    # Soft supersede: keep superseded nodes but set _score=0 instead of hard-pruning.
+    # Preserves history for --at-time temporal queries; normal top_k cuts still exclude them.
+    soft_supersede: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -725,6 +736,87 @@ ABLATION_CONFIGS: dict[str, AblationConfig] = {
         temporal_sort=True,
         sentence_index=True,
         checkpoint_source="engram_sentence_index",
+    ),
+
+    # ---- RoMem temporal decay model (arxiv:2604.11544) ----
+    # Three ablation steps isolate the contribution of each RoMem component.
+    # All reuse the engram_dedup95 checkpoint — no re-extraction needed.
+    #
+    # Background: RoMem introduces per-relation volatility scores (αᵣ ∈ (0,1)) to assign
+    # node-type-specific temporal half-lives, and a geometric phase-rotation formula that
+    # rotates obsolete facts fully out of relevance (score → 0 at age = half_life) rather
+    # than the exponential model where facts asymptotically approach but never reach zero.
+    # Reported 2–3× MRR improvement on MultiTQ and 85.7% recall on LoCoMo dev split.
+    "engram_romem_typedecay": AblationConfig(
+        name="engram_romem_typedecay",
+        description=(
+            "RoMem Step 1: per-type half-lives (arxiv:2604.11544). Same exponential decay formula "
+            "as the baseline, but each node type gets its own half-life based on RoMem's volatility "
+            "analysis. Transition facts (14d) go stale fast; constraints/lessons (365d) stay valid "
+            "for years. Falls back to recency_half_life_days=3650 for unlisted types. "
+            "Reuses engram_dedup95 checkpoint — no re-extraction."
+        ),
+        superseded_pruning=True,
+        recency_decay=True,
+        top_k=50,
+        token_budget=None,
+        recency_half_life_days=3650,
+        half_life_by_type={
+            "transition": 14,
+            "implementation": 60,
+            "preference": 90,
+            "resolved": 90,
+            "decision": 180,
+            "question": 30,
+            "lesson_learned": 365,
+            "constraint": 365,
+        },
+        checkpoint_source="engram_dedup95",
+    ),
+    "engram_romem_phase": AblationConfig(
+        name="engram_romem_phase",
+        description=(
+            "RoMem Step 2: phase-rotation decay formula (arxiv:2604.11544). Replaces exponential "
+            "decay 2^(-age/hl) with cos(age/hl × π/2), clamped to [0,1]. At age=half_life the score "
+            "reaches exactly 0 — obsolete facts rotate fully out of phase rather than lingering near "
+            "zero. Uses the global half_life_days=3650 (no per-type split) to isolate the formula "
+            "change. Reuses engram_dedup95 checkpoint — no re-extraction."
+        ),
+        superseded_pruning=True,
+        recency_decay=True,
+        top_k=50,
+        token_budget=None,
+        recency_half_life_days=3650,
+        phase_rotation=True,
+        checkpoint_source="engram_dedup95",
+    ),
+    "engram_romem_full": AblationConfig(
+        name="engram_romem_full",
+        description=(
+            "RoMem full: per-type half-lives + phase rotation + soft supersede (arxiv:2604.11544). "
+            "All three components active: (1) per-node-type half-lives, (2) cos-based phase rotation "
+            "so facts fully rotate out at age=half_life, (3) soft supersede keeps superseded nodes "
+            "at score=0 instead of hard-pruning them (preserves historical context for --at-time). "
+            "Reuses engram_dedup95 checkpoint — no re-extraction."
+        ),
+        soft_supersede=True,
+        superseded_pruning=False,
+        recency_decay=True,
+        top_k=50,
+        token_budget=None,
+        recency_half_life_days=3650,
+        half_life_by_type={
+            "transition": 14,
+            "implementation": 60,
+            "preference": 90,
+            "resolved": 90,
+            "decision": 180,
+            "question": 30,
+            "lesson_learned": 365,
+            "constraint": 365,
+        },
+        phase_rotation=True,
+        checkpoint_source="engram_dedup95",
     ),
 }
 

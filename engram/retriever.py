@@ -157,6 +157,17 @@ DEFAULT_STRATEGIES = {
     "semantic_retrieval": False,  # Independent linear scan: all node embeddings → top-K by cosine, union with BFS pool
     "semantic_retrieval_k": 40,   # How many top-cosine nodes to inject from the linear scan
     "extend_stop_words": False,   # Add counting/temporal words to stop list (LOCOMO only; hurts LME multi-session)
+    # RoMem: per-node-type half-lives (dict[str, float], days). Falls back to recency_half_life_days if type missing.
+    # Based on per-relation volatility (αᵣ) from RoMem (arxiv:2604.11544).
+    # Motivated by the observation that transition facts go stale in days while constraints remain valid for years.
+    "half_life_by_type": None,
+    # RoMem: replace exponential decay 2^(-age/hl) with phase rotation cos(age/hl × π/2), clamped to [0,1].
+    # At age=0: score=1.0. At age=half_life: score=0.0. Obsolete facts fully rotate out rather than asymptotically
+    # approaching zero. Matches the geometric phase model in RoMem (arxiv:2604.11544).
+    "phase_rotation": False,
+    # RoMem: keep superseded nodes but apply maximum phase rotation (score → 0) rather than hard-pruning.
+    # Preserves historical context for --at-time temporal queries; invisible in normal results.
+    "soft_supersede": False,
 }
 
 # Verbs that indicate a preference/recommendation query — used by preference_fanout to
@@ -540,7 +551,12 @@ def retrieve_with_stats(
         collected_nodes = _filter_temporal(collected_nodes, valid_at)
         applied.append(f"temporal_valid_at({valid_at})")
 
-    if strats["superseded_pruning"]:
+    if strats.get("soft_supersede"):
+        # RoMem: keep superseded nodes but zero out their score rather than hard-dropping them.
+        # They become invisible in top_k/token_budget cuts but remain available for --at-time queries.
+        collected_nodes = apply_soft_supersede(collected_nodes, store)
+        applied.append("soft_supersede")
+    elif strats["superseded_pruning"]:
         collected_nodes = prune_superseded(collected_nodes, store)
         applied.append("superseded_pruning")
 
@@ -549,8 +565,14 @@ def retrieve_with_stats(
         applied.append(f"confidence_threshold({strats['confidence_threshold']})")
 
     if strats["recency_decay"]:
-        collected_nodes = apply_recency_decay(collected_nodes, strats["recency_half_life_days"])
-        applied.append(f"recency_decay(half_life={strats['recency_half_life_days']}d)")
+        collected_nodes = apply_recency_decay(
+            collected_nodes,
+            strats["recency_half_life_days"],
+            half_life_by_type=strats.get("half_life_by_type"),
+            phase_rotation=strats.get("phase_rotation", False),
+        )
+        mode = "phase" if strats.get("phase_rotation") else "exp"
+        applied.append(f"recency_decay({mode},half_life={strats['recency_half_life_days']}d)")
 
     if strats.get("temporal_proximity"):
         collected_nodes = apply_temporal_proximity(collected_nodes, task_description)
@@ -999,6 +1021,45 @@ def prune_superseded(nodes: list[dict], store: GraphStore) -> list[dict]:
     return [n for n in nodes if n["id"] not in superseded_ids]
 
 
+def apply_soft_supersede(nodes: list[dict], store: GraphStore) -> list[dict]:
+    """RoMem Step 3: keep superseded nodes but rotate them fully out of phase.
+
+    Instead of hard-pruning superseded nodes (prune_superseded), set their
+    _score to 0.0. They survive the collection but rank below everything else,
+    so top_k and token_budget cuts naturally exclude them from normal results
+    while preserving them for --at-time temporal queries.
+
+    Mirrors RoMem's (arxiv:2604.11544) treatment of obsolete facts: rotate
+    out of phase rather than delete.
+    """
+    # Reuse prune_superseded's ID detection logic, then zero scores instead of filtering.
+    superseded_ids: set[str] = {
+        n["id"] for n in nodes if n.get("is_active", 1) == 0
+    }
+    node_ids = {n["id"] for n in nodes}
+    for node in nodes:
+        if node["id"] in superseded_ids:
+            continue
+        for sid in node.get("supersedes", []):
+            superseded_ids.add(sid)
+    active_ids = list(node_ids - superseded_ids)
+    if active_ids:
+        chunk = 500
+        for i in range(0, len(active_ids), chunk):
+            batch = active_ids[i : i + chunk]
+            placeholders = ",".join("?" * len(batch))
+            rows = store.conn.execute(
+                f"SELECT to_id FROM edges WHERE relation = 'supersedes' AND to_id IN ({placeholders})",
+                batch,
+            ).fetchall()
+            superseded_ids.update(r[0] for r in rows)
+
+    for node in nodes:
+        if node["id"] in superseded_ids:
+            node["_score"] = 0.0
+    return nodes
+
+
 def _filter_temporal(nodes: list[dict], valid_at: str) -> list[dict]:
     """Keep only nodes whose valid window covers `valid_at` (ISO 8601).
 
@@ -1023,12 +1084,32 @@ def filter_by_confidence(nodes: list[dict], threshold: float) -> list[dict]:
     return [n for n in nodes if n.get("confidence", 0) >= threshold]
 
 
-def apply_recency_decay(nodes: list[dict], half_life_days: int) -> list[dict]:
-    """Apply exponential decay to node scores based on age.
+def apply_recency_decay(
+    nodes: list[dict],
+    half_life_days: int,
+    half_life_by_type: dict[str, float] | None = None,
+    phase_rotation: bool = False,
+) -> list[dict]:
+    """Apply time-based decay to node scores based on age.
 
-    Score = confidence * 2^(-age_days / half_life_days)
+    Two decay models (controlled by phase_rotation):
 
-    Stores the decayed score in node["_score"] for sorting.
+    Exponential (default, phase_rotation=False):
+        Score = confidence × 2^(-age / half_life)
+        Asymptotically approaches 0; nodes never fully drop out.
+
+    Phase rotation (phase_rotation=True, from RoMem arxiv:2604.11544):
+        Score = confidence × cos(age / half_life × π/2), clamped to [0, 1]
+        At age=0: score=1.0. At age=half_life: score=0.0. Obsolete facts
+        rotate fully out of phase rather than lingering near zero.
+
+    Per-type half-lives (half_life_by_type):
+        If provided, each node type gets its own half-life drawn from this dict.
+        Falls back to the global half_life_days if the type is not listed.
+        Motivated by RoMem's per-relation volatility scores (αᵣ): transition
+        facts go stale in days; constraints remain valid for years.
+
+    Stores the decayed score in node["_score"] for downstream sorting.
     """
     now = datetime.now(timezone.utc)
     for node in nodes:
@@ -1042,8 +1123,19 @@ def apply_recency_decay(nodes: list[dict], half_life_days: int) -> list[dict]:
         except (ValueError, TypeError):
             age_days = 0
 
+        # Per-type half-life lookup with global fallback
+        node_type = node.get("type", "")
+        if half_life_by_type and node_type in half_life_by_type:
+            hl = max(half_life_by_type[node_type], 1)
+        else:
+            hl = max(half_life_days, 1)
+
         confidence = node.get("confidence", 0.5)
-        decay = math.pow(2, -age_days / max(half_life_days, 1))
+        if phase_rotation:
+            # cos-based phase rotation: full decay at age=half_life
+            decay = max(0.0, math.cos(age_days / hl * math.pi / 2))
+        else:
+            decay = math.pow(2, -age_days / hl)
         node["_score"] = confidence * decay
     return nodes
 
