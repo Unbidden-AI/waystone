@@ -122,16 +122,22 @@ STOP_WORDS = {
     "over", "under", "between", "through", "against", "within", "along",
     "chosen", "decided", "called", "based", "made", "used", "given",
     "via", "per", "vs", "versus",
-    # Counting / quantity / temporal words that become noise seeds when _tag_pairs
-    # splits compound tags — e.g. "past experiences" → "past" entry in node_tags,
-    # and query keyword "past" now seeds unrelated nodes.  These words carry no
-    # meaningful retrieval signal on their own; FTS/semantic channels handle them.
+}
+
+# Counting / quantity / temporal words that become noise seeds when _tag_pairs
+# splits compound tags — e.g. "past experiences" → "past" entry in node_tags,
+# and query keyword "past" now seeds unrelated nodes.  These words carry no
+# meaningful retrieval signal on their own for LOCOMO-style queries.
+# NOTE: for LongMemEval multi-session "how many X in the last Y" questions,
+# these ARE valid BFS seeds — do NOT include them in the default stop set.
+# Enable via extend_stop_words=True strategy key (LOCOMO configs only).
+_EXTENDED_STOP_WORDS: frozenset[str] = frozenset([
     "many", "times", "currently", "total", "overall",
     "ago", "past", "last", "next", "recent", "recently",
     "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
     "weeks", "months", "days", "hours", "years",
     "something", "anything", "everything", "nothing",
-}
+])
 
 # Default strategy settings (all reductions off)
 DEFAULT_STRATEGIES = {
@@ -143,13 +149,14 @@ DEFAULT_STRATEGIES = {
     "token_budget": 0,
     "relevance_scoring": False,
     "semantic_rerank": False,  # Post-BFS re-ranking: multiply _score by cosine similarity to query
-    "semantic_rerank_cap": 300,  # Max nodes to rerank (pre-sorted by _score; 0 = no cap)
+    "semantic_rerank_cap": 2000,  # Max nodes to rerank (pre-sorted by _score; 0 = no cap/unlimited)
     "cross_encoder_rerank": False,  # Post-BFS re-ranking: score (query, fact) pairs via cross-encoder
     "process_slots": 5,  # Reserved slots for process nodes before top_k cut (0 = disabled)
     "preference_fanout": False,  # Inject all preference nodes when query contains preference-signal verbs
     "preference_fanout_cap": 20,  # Max preference nodes to inject (ranked by cosine sim to query; 0 = unlimited)
     "semantic_retrieval": False,  # Independent linear scan: all node embeddings → top-K by cosine, union with BFS pool
     "semantic_retrieval_k": 40,   # How many top-cosine nodes to inject from the linear scan
+    "extend_stop_words": False,   # Add counting/temporal words to stop list (LOCOMO only; hurts LME multi-session)
 }
 
 # Verbs that indicate a preference/recommendation query — used by preference_fanout to
@@ -268,7 +275,8 @@ def retrieve_with_stats(
     pinned_nodes = store.get_pinned_nodes()
     pinned_ids = {n["id"] for n in pinned_nodes}
 
-    keywords = extract_keywords(task_description)
+    _kw_stop = (STOP_WORDS | _EXTENDED_STOP_WORDS) if strats.get("extend_stop_words") else None
+    keywords = extract_keywords(task_description, stop_words=_kw_stop)
     if strats.get("query_expansion"):
         keywords = expand_keywords(task_description, keywords)
     if strats.get("query_coreference"):
@@ -315,18 +323,17 @@ def retrieve_with_stats(
     rrf_score_map = {nid: score for nid, score in rrf_results}
 
     # Fact-text LIKE fallback: catches nodes that FTS5 missed (e.g. partial compound
-    # matches).  Only fires when the combined RRF pool is sparse — FTS5 already covers
-    # this for most queries, so running an unindexed LIKE scan unconditionally wastes
-    # ~35ms on generic keywords ("work", "week") that match thousands of rows.
-    _fact_fallback_threshold = top_k * 3
-    if len(all_entry_ids_ordered) < _fact_fallback_threshold:
-        fact_nodes = store.get_nodes_by_fact_text(keywords)
-        fact_only_ids = [n["id"] for n in fact_nodes
-                         if n["id"] not in pinned_ids and n["id"] not in rrf_score_map]
-        if fact_only_ids:
-            # Append at end of RRF list (no RRF score contribution — treat as tail)
-            all_entry_ids_ordered.extend(fact_only_ids)
-            log.debug("Fact-text fallback added %d nodes not in RRF results", len(fact_only_ids))
+    # matches).  get_nodes_by_fact_text has LIMIT 150 per chunk, so this is bounded
+    # even on large graphs.  Previously gated on pool sparsity (< top_k*3) but that
+    # suppressed the fallback on dense post-preference-pass DBs, causing multi-session
+    # recall to drop ~10pp.  Always run it.
+    fact_nodes = store.get_nodes_by_fact_text(keywords)
+    fact_only_ids = [n["id"] for n in fact_nodes
+                     if n["id"] not in pinned_ids and n["id"] not in rrf_score_map]
+    if fact_only_ids:
+        # Append at end of RRF list (no RRF score contribution — treat as tail)
+        all_entry_ids_ordered.extend(fact_only_ids)
+        log.debug("Fact-text fallback added %d nodes not in RRF results", len(fact_only_ids))
 
     # Hydrate all entry node dicts in one pass
     node_by_id = {n["id"]: n for n in tag_nodes_raw}
@@ -1316,19 +1323,26 @@ def apply_temporal_proximity(nodes: list[dict], query: str, half_life_days: floa
     return nodes
 
 
-def extract_keywords(text: str) -> list[str]:
+def extract_keywords(text: str, stop_words: frozenset[str] | set[str] | None = None) -> list[str]:
     """Extract keywords from text by tokenizing and filtering stop words.
 
     Numeric compound tokens like "15-minute" or "1000/min" are preserved as-is
     in addition to their split parts, so they can match auto-tagged node entries.
     Non-numeric hyphenated tokens ("hot-path") are still split into parts.
+
+    Args:
+        text: Query text to extract keywords from.
+        stop_words: Stop word set to use. Defaults to STOP_WORDS. Pass
+            STOP_WORDS | _EXTENDED_STOP_WORDS to suppress counting/temporal
+            words (useful for LOCOMO; hurts LME multi-session counting queries).
     """
+    _sw = STOP_WORDS if stop_words is None else stop_words
     result: list[str] = []
     seen: set[str] = set()
 
     def _emit(w: str) -> None:
         w = w.strip(".,;:!?\"'()[]{}")
-        if w and w not in STOP_WORDS and len(w) > 1 and w not in seen:
+        if w and w not in _sw and len(w) > 1 and w not in seen:
             seen.add(w)
             result.append(w)
 
