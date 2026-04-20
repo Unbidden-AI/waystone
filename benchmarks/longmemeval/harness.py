@@ -459,6 +459,7 @@ def _retrieve_context(conv, question: str, store, config: AblationConfig) -> str
         "allowed_session_ids": None,
         "edge_weight_scoring": config.edge_weight_scoring,
         "semantic_rerank": config.semantic_rerank,
+        "semantic_rerank_cap": config.semantic_rerank_cap,
         "cross_encoder_rerank": config.cross_encoder_rerank,
         "cross_encoder_model": config.cross_encoder_model,
         "rrf_rerank": config.rrf_rerank,
@@ -468,6 +469,8 @@ def _retrieve_context(conv, question: str, store, config: AblationConfig) -> str
         "preference_fanout_cap": config.preference_fanout_cap,
         "semantic_retrieval": config.semantic_retrieval,
         "semantic_retrieval_k": config.semantic_retrieval_k,
+        "temporal_auto_route": config.temporal_auto_route,
+        "extend_stop_words": config.extend_stop_words,
     }
 
     try:

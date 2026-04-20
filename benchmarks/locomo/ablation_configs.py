@@ -66,6 +66,11 @@ class AblationConfig:
     edge_weight_scoring: bool = False    # multiply _score by _max_edge_weight after recency_decay
     # Post-BFS semantic re-ranking: multiply _score by cosine similarity to query embedding
     semantic_rerank: bool = False        # re-rank BFS-collected nodes by embedding similarity to query
+    # Cap on how many nodes (by pre-rerank score) enter semantic reranking. 0 = unlimited (rerank all).
+    # Default 0 preserves Apr-15 behavior: all BFS-collected nodes are cosine-scored.
+    # Set >0 only when O(n) embedding lookups are a bottleneck; risk: multi-session facts
+    # with low BFS score but high cosine sim fall outside the cap and miss reranking.
+    semantic_rerank_cap: int = 0
     # Post-BFS cross-encoder re-ranking: score (query, fact) pairs via cross-encoder
     cross_encoder_rerank: bool = False   # re-rank BFS-collected nodes via cross-encoder relevance scores
     cross_encoder_model: str | None = None  # override cross-encoder model (default: ms-marco-MiniLM-L-6-v2)
@@ -99,6 +104,15 @@ class AblationConfig:
     # Surfaces nodes with no tag match and no graph connectivity.
     semantic_retrieval: bool = False
     semantic_retrieval_k: int = 40
+    # Temporal auto-routing: classify query type and auto-enable temporal_sort + temporal_proximity
+    # for queries classified as "temporal". Default True preserves the current retriever default.
+    # Set False to match pre-b6d4f72 (Apr-15) behavior where this feature didn't exist.
+    temporal_auto_route: bool = True
+    # Extend stop word list with counting/quantity/temporal words ("many", "last", "month", etc.).
+    # Helps LOCOMO by suppressing noise seeds from _tag_pairs compound-tag splitting.
+    # MUST be False for LongMemEval — these words are legitimate BFS seeds for multi-session
+    # "how many X in the last Y" counting questions. Regression confirmed (a2e1077, Apr-19).
+    extend_stop_words: bool = False
 
 
 # ---------------------------------------------------------------------------

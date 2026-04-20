@@ -477,11 +477,18 @@ def _retrieve_context(
             "allowed_session_ids": relevant_session_ids if config.session_scoped else None,
             "edge_weight_scoring": config.edge_weight_scoring,
             "semantic_rerank": config.semantic_rerank,
+            "semantic_rerank_cap": config.semantic_rerank_cap,
             "cross_encoder_rerank": config.cross_encoder_rerank,
             "cross_encoder_model": config.cross_encoder_model,
             "rrf_rerank": config.rrf_rerank,
             "rrf_weights": config.rrf_weights,
             "sentence_index": config.sentence_index,
+            "preference_fanout": config.preference_fanout,
+            "preference_fanout_cap": config.preference_fanout_cap,
+            "semantic_retrieval": config.semantic_retrieval,
+            "semantic_retrieval_k": config.semantic_retrieval_k,
+            "temporal_auto_route": config.temporal_auto_route,
+            "extend_stop_words": config.extend_stop_words,
         }
 
         try:

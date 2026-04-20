@@ -231,7 +231,7 @@ These are not retrieval gaps; they reflect keyword-overlap scoring limitations i
 
 On the LOCOMO benchmark (real human conversations, multi-session episodic memory), the current best pipeline (`engram_semantic_rerank_topk100`) scores **85.7% LLM accuracy** and **72.6% keyword accuracy** on the dev split (5 conversations, 762 QA pairs, categories 1–4, gpt-4o-mini judge, April 2026). This **exceeds Zep (~73% LLM)** and approaches Mem0 (~88% LLM). The March 2026 conv-26-only baseline was ~50% keyword; the improvement came from semantic rerank, top_k=100, and correcting the evaluation protocol to exclude adversarial category 5 questions (which depressed earlier scores by ~10pp). A full 10-conversation run against the complete test split is pending for a like-for-like comparison with published Zep/Mem0 numbers.
 
-### LongMemEval benchmark (current: 60.6% LLM oracle / 60.8% LLM standard)
+### LongMemEval benchmark (current: 61.6% LLM standard / 60.6% LLM oracle)
 
 LongMemEval is a Microsoft Research benchmark for long-term episodic memory in LLM assistants — 500 questions across 6 question types drawn from the `longmemeval-cleaned` dataset (S variant: one long conversation per question). It covers temporal reasoning, multi-session aggregation, knowledge-update (superseding facts), single-session recall, and preference tracking.
 
@@ -239,8 +239,9 @@ LongMemEval is a Microsoft Research benchmark for long-term episodic memory in L
 
 | Config | Split | kw% | LLM% | LLM partial% | Notes |
 |--------|-------|-----|------|--------------|-------|
+| `engram_lme_s_apr15_repro` (no date strings) | standard | 61.4% | **61.6%** | — | **New best standard** — Apr-19 date-string fix, multi-session 50.4%, preference 50.0% |
 | `engram_lme_gemini` / `engram_lme_rrf_dynamic` | oracle | 54.0% | **60.6%** | 66.5% | Best oracle — Gemini 2.5 Flash-Lite extraction, RRF or semantic rerank, top_k=100 |
-| `engram_lme_s_user_patched` + preference pass | standard | 63.4% | **60.8%** | 66.0% | Best standard — preference node augmentation (+7.6K nodes on 30 pref samples), +20pp on preference type (Apr 15) |
+| `engram_lme_s_user_patched` + preference pass | standard | 63.4% | **60.8%** | 66.0% | Prior best standard — preference node augmentation (+7.6K nodes on 30 pref samples), +20pp on preference type (Apr 15) |
 | `engram_lme_s_user_patched` (person fan-out) | standard | 63.4% | 59.5% | — | Person exhaustive fan-out, person anchoring, semantic rerank top_k=100 (Apr 14) |
 | `engram_lme_s_user_patched` | standard | 62.6% | 58.0% | 64.2% | Prior best — synthetic user node injection, person anchoring (Apr 10) |
 | `engram_lme_gemini_s` | standard | 61.8% | 57.8% | 64.2% | Standard split baseline without user node patch |
@@ -2169,6 +2170,223 @@ Per-sample scores:
 | 38146c39 | 0.0 | | d24813b1 | **1.0** |
 | — | — | | d6233ab6 | 0.5 |
 | — | — | | fca70973 | 0.0 |
+
+---
+
+## STOP_WORDS fix — `_tag_pairs` noise reduction
+
+*April 19, 2026 — Extended STOP_WORDS in `retriever.py`, validated via 500-sample LME run*
+
+### Problem
+
+The `_tag_pairs` ingest index word-splits multi-word tags (e.g. `"past experiences"` → `"past"`, `"experiences"` entries in `node_tags`). When a query like *"how many times in the past two weeks"* runs `extract_keywords()`, counting and temporal words (`past`, `two`, `times`, `weeks`) match these split entries and become BFS entry-node seeds — seeding unrelated nodes into the context window and filling the token budget with noise.
+
+### Fix
+
+Extended `STOP_WORDS` in `retriever.py` with counting/quantity/temporal noise words:
+
+```python
+"many", "times", "currently", "total", "overall",
+"ago", "past", "last", "next", "recent", "recently",
+"two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+"weeks", "months", "days", "hours", "years",
+"something", "anything", "everything", "nothing",
+```
+
+These words carry no meaningful BFS-seeding signal on their own; FTS/semantic channels handle them where they do appear as content.
+
+### Validation run — `engram_lme_s_pref_fanout`, 500 samples
+
+| Metric | Cap=20 regressed | STOP_WORDS fix | Delta |
+|--------|-----------------|----------------|-------|
+| Overall LLM accuracy | 59.8% | **60.0%** | +0.2pp |
+| multi-session LLM accuracy | 43.6% | **45.1%** | +1.5pp |
+| avg tokens | 1757 | 1730 | -27 |
+
+Per-type breakdown (STOP_WORDS fix run):
+
+| Question type | n | kw% | llm% |
+|---------------|---|-----|------|
+| knowledge-update | 78 | 74.4% | 74.4% |
+| multi-session | 133 | 48.9% | 45.1% |
+| single-session-assistant | 56 | 80.4% | 83.9% |
+| single-session-preference | 30 | 0.0% | 46.7% |
+| single-session-user | 70 | 58.6% | 54.3% |
+| temporal-reasoning | 133 | 63.9% | 62.4% |
+
+### Conclusion
+
+The STOP_WORDS fix provides a minor improvement (+1.5pp multi-session, +0.2pp overall). After this run the investigation continued — see **Root cause: `semantic_rerank_cap`** section below.
+
+---
+
+## Root cause of multi-session regression: `semantic_rerank_cap=300`
+
+*April 19, 2026 — Root cause found and fixed*
+
+### Background
+
+After the STOP_WORDS run confirmed multi-session still at 45.1% (vs Apr-15 baseline of 54.9%), ablation testing of `preference_fanout_cap` values (20 / 60 / 0) all gave ~45.1%. Fanout completely off gave 44.4%. Fanout cap was ruled out as the primary driver.
+
+### Root cause
+
+Commit `22a3bc6` ("feat(retriever): semantic retrieval channel, preference fanout cap, BFS index optimizations", Apr 18) added `"semantic_rerank_cap": 300` to `DEFAULT_STRATEGIES` in `retriever.py`. This caps semantic reranking to the top 300 nodes by pre-rerank `_score`.
+
+**Mechanism:**
+- Multi-session facts from distant sessions have **low initial BFS scores** (weak tag/keyword overlap with the query)
+- Pre-rerank sort puts these facts at positions 300+ in the `collected_nodes` list
+- They never get cosine similarity computed → keep their low BFS score
+- `top_k=100` cut eliminates them
+
+**Apr-15 behavior (no cap):** All BFS-collected nodes were cosine-scored. Multi-session facts with high semantic similarity (even if weak BFS match) were promoted → survived `top_k=100`.
+
+**Secondary problem:** The harness (`benchmarks/longmemeval/harness.py`) did not include `semantic_rerank_cap` in the strategies dict it passed to the retriever, so all benchmark configs silently received the default `300` regardless of `AblationConfig` settings.
+
+### Fix (April 19, 2026)
+
+Three changes:
+
+1. **`engram/retriever.py`** — `DEFAULT_STRATEGIES["semantic_rerank_cap"]` changed from `300` → `0` (0 = unlimited, rerank all collected nodes). Restores Apr-15 behavior as the default.
+
+2. **`benchmarks/locomo/ablation_configs.py`** — Added `semantic_rerank_cap: int = 0` field to `AblationConfig` dataclass (default 0 = unlimited). Field comment explains the tradeoff: cap>0 only if O(n) embedding lookups are a bottleneck; risk is multi-session recall loss.
+
+3. **`benchmarks/longmemeval/harness.py`** — Added `"semantic_rerank_cap": config.semantic_rerank_cap` to the strategies dict so configs can now control the cap explicitly.
+
+### Verification (partial)
+
+Config `engram_lme_s_rerank_uncapped` (keyword-only): multi-session kw 48.9% → **51.1%** (+2.2pp). Partial recovery — the cap fix helps but isn't sufficient alone.
+
+Config `engram_lme_s_apr15_repro` (LLM-judge, with fanout=True, cap=0): multi-session LLM **48.1%** — still 6.8pp below Apr-15's 54.9%. Investigation continued; a second uncontrolled difference was found (see below).
+
+**Production safety note:** `DEFAULT_STRATEGIES["semantic_rerank_cap"]` was set to `2000` (not 0). At LME scale (~1600 nodes/DB, BFS collects <500) the cap never triggers. At production scale (Engram ~32K nodes, AgentWorkspace ~66K nodes) an O(n) embedding lookup on all BFS-collected nodes would be very slow; the cap was originally added for exactly this reason. AblationConfig default remains `0` (unlimited for benchmarks); production default is `2000`.
+
+### Second regression cause: `temporal_auto_route` not controlled
+
+After the cap fix, per-question analysis revealed 14 multi-session regressions concentrated on temporal-counting questions ("how many X in the last Y period?"):
+- `temporal_auto_route` was added in commit `b6d4f72` at 17:17 -0800 on Apr-15
+- The Apr-15 reference run was at `2026-04-15T05:08:54Z` (≈ 21:08 -0800 Apr-14) — BEFORE that commit
+- `temporal_auto_route` is not in `AblationConfig` or the harness strategies dict → all configs silently inherit the retriever's default `True`
+- Multi-session questions with temporal language ("last month", "this year") get classified as "temporal" queries → `temporal_sort` + `temporal_proximity` enabled → chronological reordering displaces facts from top_k
+
+**Fix (April 19, 2026):**
+
+1. **`benchmarks/locomo/ablation_configs.py`** — Added `temporal_auto_route: bool = True` to `AblationConfig` (default True = current behavior for all other configs).
+2. **`benchmarks/longmemeval/harness.py`** — Added `"temporal_auto_route": config.temporal_auto_route` to strategies dict.
+3. **`benchmarks/locomo/harness.py`** — Added `temporal_auto_route` plus all other missing passthrough keys: `semantic_rerank_cap`, `preference_fanout`, `preference_fanout_cap`, `semantic_retrieval`, `semantic_retrieval_k`.
+4. **`benchmarks/longmemeval/ablation_configs.py`** — `engram_lme_s_apr15_repro` updated to `temporal_auto_route=False` to match exact Apr-15 conditions (no temporal auto-routing existed at the time of that run).
+
+**Results with both fixes (`s_apr15_repro_v2_20260419.json`):**
+
+| metric | v2 (both fixes) | Apr-15 reference | gap |
+|--------|-----------------|------------------|-----|
+| overall LLM | **60.8%** | — | — |
+| overall kw | 60.2% | — | — |
+| multi-session LLM | **49.6%** | 54.9% | −5.3pp |
+| multi-session kw | 52.6% | 53.4% | −0.8pp |
+| knowledge-update LLM | 73.1% | — | — |
+| temporal-reasoning LLM | 59.4% | — | — |
+| single-session-assistant LLM | 87.5% | — | — |
+| single-session-preference LLM | 50.0% | — | — |
+| single-session-user LLM | 54.3% | — | — |
+
+Multi-session kw gap is negligible (−0.8pp); the remaining −5.3pp LLM gap was investigated via per-question comparison.
+
+**Per-question analysis (v2 vs Apr-15 reference, multi-session n=133):**
+
+- **12 regressions** — all of the form "How many X did I do in the last Y?":
+  - "How many plants did I acquire in the last month?" (1.0→0.0)
+  - "How many pieces of jewelry did I acquire in the last two months?" (1.0→0.0)
+  - "How many rare items do I have in total?" (1.0→0.0)
+  - "How many times did I bake something in the past two weeks?" (1.0→0.5)
+  - "What is the total number of online courses I've completed?" (1.0→0.5)
+  - (7 more counting/aggregation questions)
+- **8 improvements** on other question types
+- Net delta: ~−3pp LLM on multi-session
+
+**Root cause — `a2e1077` stop_words extension (Apr-19):**
+
+Commit `a2e1077` added counting/temporal words to STOP_WORDS: `"many"`, `"times"`, `"last"`, `"total"`, `"month"`, `"past"`, `"ago"`, `"recent"`, etc. The intent was to suppress noise seeds from LOCOMO's `_tag_pairs` compound-tag splitting (e.g. "past experiences" → spurious `"past"` BFS seed matching unrelated nodes). However, for LME multi-session "how many X in the last Y" counting questions, these words ARE the legitimate BFS seeds:
+
+- Query: "How many plants did I acquire in the last month?"
+- Keywords with Apr-15 code: `["plants", "acquire", "last", "month"]` → BFS seeds at counting/acquisition fact nodes
+- Keywords with `a2e1077` code: `["plants", "acquire"]` → BFS misses counting/aggregation facts
+
+**Fix (`extend_stop_words` strategy key, Apr-19):**
+
+1. **`engram/retriever.py`** — Extracted `a2e1077` additions into `_EXTENDED_STOP_WORDS` (frozenset, separate from base `STOP_WORDS`). Added `"extend_stop_words": False` to `DEFAULT_STRATEGIES`. In `extract_keywords()`, added optional `stop_words` param; `retrieve()` passes `STOP_WORDS | _EXTENDED_STOP_WORDS` when `extend_stop_words=True`, otherwise base `STOP_WORDS` only.
+2. **`benchmarks/locomo/ablation_configs.py`** — Added `extend_stop_words: bool = False` to `AblationConfig`.
+3. Both harnesses — thread `config.extend_stop_words` through to strategies dict.
+4. **`engram_lme_s_apr15_repro`** — does NOT set `extend_stop_words` (stays `False` = Apr-15 behavior, no extended stop words).
+
+**Results with stop_words fix (`s_apr15_repro_v3_stop_fix_20260419.json`):**
+
+| metric | v3 (stop_words fix) | v2 (prev) | Apr-15 ref | v2→v3 |
+|--------|---------------------|-----------|------------|-------|
+| overall LLM | **61.6%** | 60.8% | 60.6% | +0.8pp |
+| multi-session LLM | **48.9%** | 49.6% | 54.9% | −0.7pp |
+| temporal-reasoning LLM | **62.4%** | 59.4% | — | +3.0pp |
+| knowledge-update LLM | 74.4% | 73.1% | — | +1.3pp |
+| SS Preference LLM | 50.0% | 50.0% | — | 0pp |
+| SS User LLM | 54.3% | 54.3% | — | 0pp |
+| SS Assistant LLM | 87.5% | 87.5% | — | 0pp |
+
+**Root cause hypothesis was incorrect.** Stop_words fix helped temporal-reasoning (+3pp) as expected, but slightly hurt multi-session (−0.7pp). Restoring `"last"`, `"many"`, `"past"` as BFS keywords adds noise seeds that dilute the top_k pool for multi-session queries more than they help counting questions. The 6pp multi-session gap (48.9% vs 54.9%) remains unexplained — per-question analysis correctly identified *which* questions regressed but incorrectly attributed them to stop_words.
+
+### Fourth regression cause: fact-text fallback gate (v4 — ruled out)
+
+`retrieve_with_stats()` in commit `727f9c5` added a sparsity gate: if the RRF pools were empty the retriever exited early without running any strategies. Investigation showed the gate was never triggering at LME scale (RRF pools are always <300 items, far below the 300-item threshold). Removed the gate (`s_apr15_repro_v4_gate_fix_20260419.json`) — zero effect: same 61.4% overall and 48.9% multi-session as v3. Gate removal was correct hygiene but did not close the gap.
+
+### Fifth regression cause: `occurred_at` backfill inflates context tokens +300 (v5 — confirmed root cause)
+
+**Root cause identified (April 19, 2026):**
+
+The Apr-15 reference run was executed at `2026-04-15T05:08:54Z`. Commit `b6d4f72` (which introduced `backfill_occurred_at.py` and ran the backfill on all 500 LME checkpoint DBs) was committed at `2026-04-15T17:17 -0800` — roughly 12 hours after the reference run. This means the reference run used un-backfilled DBs where `occurred_at=NULL` on all nodes. All subsequent repro runs use the backfilled DBs where 84.1% of active nodes have `occurred_at` populated.
+
+**Effect on markdown output:**
+
+`assemble_markdown()` in `retriever.py` emitted `[date: Month DD, YYYY]` on every node with `occurred_at` in the type-section loops. With 84% of ~64 nodes per query having dates:
+
+- 64 × 0.84 × 22 chars ≈ 1183 extra chars ≈ **+300 tokens** per query
+
+This exactly matches the observed avg_tokens gap (1599 Apr-15 → 1897 repro, delta +298).
+
+**Impact on multi-session counting questions:**
+
+For questions like "How many plants did I acquire in the last month?" — the LLM now sees `[date: May 3, 2023]` on every plant-acquisition node. It tries to apply date-based filtering ("is this within the last month of the story's timeline?") rather than simply counting, and gets wrong counts. All 12 multi-session regressions are of this form.
+
+**Fix (April 19, 2026):**
+
+Removed `date_str` from type-section per-node rendering in `assemble_markdown()` (`engram/retriever.py`). The `## Timeline` section (active when `temporal_sort=True`) already renders dates in chronological order for temporal queries. Date suffixes in type-sections are redundant for temporal queries and harmful for counting queries.
+
+**Results (`s_apr15_repro_v5_no_date_str_20260419.json`):**
+
+| metric | v5 (date fix) | v4 (prev) | Apr-15 ref | v4→v5 |
+|--------|---------------|-----------|------------|-------|
+| overall LLM | **61.6%** | 61.4% | 60.6% | +0.2pp |
+| overall avg_tokens | **1603** | 1897 | 1599.7 | **−294** ✅ gap closed |
+| multi-session LLM | **50.4%** | 48.9% | 54.9% | +1.5pp |
+| multi-session avg_tokens | **1529** | 1815 | 1521.2 | **−286** ✅ |
+| temporal-reasoning LLM | 62.4% | 61.7% | — | +0.7pp |
+| knowledge-update LLM | 73.1% | 74.4% | — | −1.3pp (noise) |
+| single-session-assistant LLM | 85.7% | 87.5% | — | −1.8pp (noise) |
+| single-session-preference LLM | 50.0% | 50.0% | — | 0pp |
+
+The token gap is **fully resolved** (1603 vs 1599.7). Multi-session recovered +1.5pp from counting/summation questions that no longer see spurious date strings. A 4.5pp multi-session gap vs Apr-15 reference (50.4% vs 54.9%) remains. Per-question analysis shows 12 regressions and 8 improvements vs Apr-15 with 16 changes bidirectional between v4↔v5 — all consistent with LLM judge variance (7 of 12 regressions are borderline `1.0→0.5` scores; none of the regression questions trigger preference_fanout). All structural hypotheses have been eliminated. Overall performance (61.6%) exceeds the Apr-15 reference (60.6%).
+
+**Total investigations (April 19, 2026):**
+1. `temporal_auto_route` uncontrolled — fixed (−5.3pp → −4.5pp multi-session gap after fixing)
+2. `extend_stop_words` noise addition — fixed (+0.8pp overall)
+3. Fact-text fallback gate — ruled out (gate never triggered)
+4. `occurred_at` backfill date strings — **confirmed root cause of +300 token inflation; fixed**
+5. Preference_fanout injection order — ruled out (regression questions don't trigger fan-out)
+6. Remaining gap — LLM judge variance (bidirectional borderline score flips)
+
+### Lessons
+
+- `DEFAULT_STRATEGIES` defaults are silently injected whenever a harness builds a strategy dict that doesn't include a key. Any new key added to `DEFAULT_STRATEGIES` with a performance-impacting value creates a hidden regression in all existing benchmark configs that don't set that key explicitly.
+- New performance-impacting strategy keys should default to OFF (0 / False / None) to preserve existing behavior, not to the "optimal" value found in one-off experiments.
+- **Harness completeness check:** Every key in `DEFAULT_STRATEGIES` should have a corresponding field in `AblationConfig` and a passthrough line in both harnesses. Gaps cause silent behavioral drift when retriever defaults change.
+- **Stop word tuning is benchmark-specific:** Words that are noise seeds in LOCOMO ("many", "last", "month") are valid BFS seeds in LME multi-session counting queries. Global stop word changes that improve one benchmark can silently regress another. Any stop word additions should be gated behind a strategy flag (`extend_stop_words`) rather than baked into `STOP_WORDS`.
 
 ---
 

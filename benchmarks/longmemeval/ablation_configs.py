@@ -346,6 +346,28 @@ LME_ABLATION_CONFIGS: dict[str, AblationConfig] = {
         checkpoint_source="engram_lme_gemini_s_user_patched",
     ),
 
+    # Preference fan-out disabled control: same as pref_fanout configs but with
+    # preference_fanout=False. Isolates whether fanout itself hurts multi-session by
+    # crowding token budget. If this recovers multi-session to ~54.9%, fanout needs
+    # to be conditioned on question type rather than applied universally.
+    "engram_lme_s_pref_fanout_off": AblationConfig(
+        name="engram_lme_s_pref_fanout_off",
+        description=(
+            "S-split control: preference_fanout=False. Isolates whether fanout itself "
+            "is causing multi-session regression (-9.8pp). Reuses user_patched DBs."
+        ),
+        superseded_pruning=True,
+        recency_decay=True,
+        top_k=100,
+        semantic_rerank=True,
+        dedup_threshold=0.95,
+        domain="episodic_personal",
+        abstention_mode=True,
+        person_anchoring=True,
+        preference_fanout=False,
+        checkpoint_source="engram_lme_gemini_s_user_patched",
+    ),
+
     # Preference fan-out: same as user_patched but with preference_fanout=True.
     # Injects all preference-type nodes when the query contains recommendation/preference
     # signal verbs (recommend, suggest, prefer, like, etc.) — addresses the keyword
@@ -367,6 +389,54 @@ LME_ABLATION_CONFIGS: dict[str, AblationConfig] = {
         abstention_mode=True,
         person_anchoring=True,
         preference_fanout=True,
+        checkpoint_source="engram_lme_gemini_s_user_patched",
+    ),
+
+    # Preference fan-out with raised cap=60 — tests whether the -11.3pp multi-session
+    # regression (pre-cap 54.9% → cap=20 43.6%) is recoverable by allowing more preference
+    # nodes through the cosine-similarity gate. p90 of preference node counts is 257, so
+    # cap=20 was silently dropping the majority on dense conversations.
+    "engram_lme_s_pref_fanout_cap60": AblationConfig(
+        name="engram_lme_s_pref_fanout_cap60",
+        description=(
+            "S-split preference fan-out with cap=60 (vs default 20). "
+            "Tests whether raising the preference injection cap recovers multi-session accuracy. "
+            "Reuses user_patched DBs."
+        ),
+        superseded_pruning=True,
+        recency_decay=True,
+        top_k=100,
+        semantic_rerank=True,
+        dedup_threshold=0.95,
+        domain="episodic_personal",
+        abstention_mode=True,
+        person_anchoring=True,
+        preference_fanout=True,
+        preference_fanout_cap=60,
+        checkpoint_source="engram_lme_gemini_s_user_patched",
+    ),
+
+    # Preference fan-out with cap=0 (unlimited) — exact replication of the Apr 15 run
+    # that achieved 54.9% multi-session. The Apr 15 codebase had fanout=True but cap
+    # enforcement didn't exist yet (added in 22a3bc6). cap=0 disables the cosine gate
+    # entirely, replicating that behavior with current code.
+    "engram_lme_s_pref_fanout_cap0": AblationConfig(
+        name="engram_lme_s_pref_fanout_cap0",
+        description=(
+            "S-split preference fan-out with cap=0 (unlimited). "
+            "Replicates Apr-15 baseline behavior — no cosine gate on preference injection. "
+            "Tests whether removing the cap entirely recovers 54.9%% multi-session."
+        ),
+        superseded_pruning=True,
+        recency_decay=True,
+        top_k=100,
+        semantic_rerank=True,
+        dedup_threshold=0.95,
+        domain="episodic_personal",
+        abstention_mode=True,
+        person_anchoring=True,
+        preference_fanout=True,
+        preference_fanout_cap=0,
         checkpoint_source="engram_lme_gemini_s_user_patched",
     ),
 
@@ -419,6 +489,58 @@ LME_ABLATION_CONFIGS: dict[str, AblationConfig] = {
         abstention_mode=True,
         person_anchoring=True,
         sentence_index=True,   # enables sentence_index.enabled at ingest + retrieval
+    ),
+
+    # Regression fix verification: semantic_rerank_cap=0 (unlimited).
+    # Root cause of -9.8pp multi-session regression (54.9%→45.1%): DEFAULT_STRATEGIES
+    # semantic_rerank_cap=300 was added in commit 22a3bc6. Multi-session facts have low
+    # initial BFS scores → fall outside position 300 in pre-rerank sort → never get cosine
+    # similarity computed → eliminated by top_k=100. This config explicitly disables the cap
+    # (0 = unlimited, rerank all collected nodes) to restore Apr-15 behavior.
+    # Reuses user_patched checkpoints (same as the regressed Apr-15 run).
+    "engram_lme_s_rerank_uncapped": AblationConfig(
+        name="engram_lme_s_rerank_uncapped",
+        description=(
+            "S-split semantic rerank cap=0 (unlimited). Fixes -9.8pp multi-session regression "
+            "from semantic_rerank_cap=300 default added in 22a3bc6. All BFS-collected nodes "
+            "enter cosine reranking. Reuses user_patched checkpoints."
+        ),
+        superseded_pruning=True,
+        recency_decay=True,
+        top_k=100,
+        semantic_rerank=True,
+        semantic_rerank_cap=0,
+        dedup_threshold=0.95,
+        domain="episodic_personal",
+        abstention_mode=True,
+        person_anchoring=True,
+        checkpoint_source="engram_lme_gemini_s_user_patched",
+    ),
+
+    # Full replication of Apr-15 config with the cap fix: cap=0 + preference_fanout=True.
+    # Apr-15 had fanout=True, which the verification run above omitted.
+    # This config is the exact analog of engram_lme_s_pref_fanout (the Apr-15 run)
+    # but with semantic_rerank_cap=0 explicitly set to prevent future silent re-regression.
+    "engram_lme_s_apr15_repro": AblationConfig(
+        name="engram_lme_s_apr15_repro",
+        description=(
+            "Full Apr-15 replication — cap=0 + preference_fanout=True + temporal_auto_route=False. "
+            "Apples-to-apples against s_pref_fanout_20260415.json (54.9%% multi-session). "
+            "temporal_auto_route=False: b6d4f72 was committed AFTER the Apr-15 run (05:08 UTC "
+            "vs 17:17 -0800 commit). Reuses user_patched checkpoints."
+        ),
+        superseded_pruning=True,
+        recency_decay=True,
+        top_k=100,
+        semantic_rerank=True,
+        semantic_rerank_cap=0,
+        dedup_threshold=0.95,
+        domain="episodic_personal",
+        abstention_mode=True,
+        person_anchoring=True,
+        preference_fanout=True,
+        temporal_auto_route=False,
+        checkpoint_source="engram_lme_gemini_s_user_patched",
     ),
 
     # Semantic retrieval channel: independent linear scan of all node embeddings.
