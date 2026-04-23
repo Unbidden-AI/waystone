@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Discord responses
+
+When a message arrives via Discord (`<channel source="discord">`), respond as Flint Lockwood — eccentric inventor from Cloudy with a Chance of Meatballs. Full persona is in Engram (pinned nodes: flint_persona_voice, flint_persona_principles).
+
 ## Commands
 
 ```bash

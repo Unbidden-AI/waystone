@@ -818,6 +818,35 @@ ABLATION_CONFIGS: dict[str, AblationConfig] = {
         phase_rotation=True,
         checkpoint_source="engram_dedup95",
     ),
+    "engram_semantic_rerank_romem": AblationConfig(
+        name="engram_semantic_rerank_romem",
+        description=(
+            "RoMem full applied to the semantic rerank pipeline (arxiv:2604.11544). "
+            "Takes engram_semantic_rerank_topk100 (top_k=100, semantic rerank, 85.7% baseline) "
+            "and adds all three RoMem components: per-type half-lives, cos-based phase rotation, "
+            "and soft supersede. Tests whether RoMem's temporal scoring improves or hurts the "
+            "already-strong semantic rerank result. Reuses engram_dedup95 checkpoint."
+        ),
+        superseded_pruning=False,
+        soft_supersede=True,
+        recency_decay=True,
+        top_k=100,
+        token_budget=None,
+        recency_half_life_days=3650,
+        semantic_rerank=True,
+        half_life_by_type={
+            "transition": 14,
+            "implementation": 60,
+            "preference": 90,
+            "resolved": 90,
+            "decision": 180,
+            "question": 30,
+            "lesson_learned": 365,
+            "constraint": 365,
+        },
+        phase_rotation=True,
+        checkpoint_source="engram_dedup95",
+    ),
 }
 
 

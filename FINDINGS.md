@@ -227,9 +227,11 @@ Gemini 2.5 Flash + `--verify` with current prompt improvements (prior-state tagg
 
 These are not retrieval gaps; they reflect keyword-overlap scoring limitations in the eval harness rather than missing facts in the graph.
 
-### LOCOMO episodic memory benchmark (current: 85.7% LLM / 72.6% keyword)
+### LOCOMO episodic memory benchmark (current: 85.7% gpt-4o-mini / 73.4% gemini-flash-lite)
 
-On the LOCOMO benchmark (real human conversations, multi-session episodic memory), the current best pipeline (`engram_semantic_rerank_topk100`) scores **85.7% LLM accuracy** and **72.6% keyword accuracy** on the dev split (5 conversations, 762 QA pairs, categories 1–4, gpt-4o-mini judge, April 2026). This **exceeds Zep (~73% LLM)** and approaches Mem0 (~88% LLM). The March 2026 conv-26-only baseline was ~50% keyword; the improvement came from semantic rerank, top_k=100, and correcting the evaluation protocol to exclude adversarial category 5 questions (which depressed earlier scores by ~10pp). A full 10-conversation run against the complete test split is pending for a like-for-like comparison with published Zep/Mem0 numbers.
+On the LOCOMO benchmark (real human conversations, multi-session episodic memory), the current best pipeline (`engram_semantic_rerank_topk100`) scores **85.7% LLM accuracy** (gpt-4o-mini judge) and **72.6% keyword accuracy** on the dev split (5 conversations, 762 QA pairs, categories 1–4, April 2026). This **exceeds Zep (~73% LLM)** and approaches Mem0 (~88% LLM). The March 2026 conv-26-only baseline was ~50% keyword; the improvement came from semantic rerank, top_k=100, and correcting the evaluation protocol to exclude adversarial category 5 questions (which depressed earlier scores by ~10pp). A full 10-conversation run against the complete test split is pending for a like-for-like comparison with published Zep/Mem0 numbers.
+
+> **Judge model note (April 2026)**: The 85.7% result used gpt-4o-mini as judge. Re-running with gemini-2.5-flash-lite (stricter) yields **73.4%** on the same dev split — a 12.3pp delta that reflects judge leniency, not retrieval quality. The gemini-flash-lite baseline is ~74% (consistent across April 12 and April 19 runs). Zep/Mem0 published numbers used gpt-4o-mini, so 85.7% is the correct like-for-like comparison figure.
 
 ### LongMemEval benchmark (current: 61.6% LLM standard / 60.6% LLM oracle)
 
@@ -596,7 +598,7 @@ Compute vector embeddings for each node's fact text (e.g., using `all-MiniLM-L6-
 |--------|-------|-------|
 | Software dev benchmark recall (current best) | **95%** | Gemini 2.5 Flash + `--verify`, top_k=30, 21/23 ≥80% |
 | Software dev benchmark recall (no verify) | 92% | Gemini 2.5 Flash, default strategies, 19/23 ≥80% |
-| LOCOMO benchmark (LLM accuracy, dev split) | **85.7%** | `engram_semantic_rerank_topk100`, 5-conv dev split, cats 1–4, 762 QA, April 2026; Zep 73%, Mem0 88% |
+| LOCOMO benchmark (LLM accuracy, dev split) | **85.7%** | `engram_semantic_rerank_topk100`, 5-conv dev split, cats 1–4, 762 QA, April 2026, **gpt-4o-mini judge**; Zep 73%, Mem0 88% (same judge); gemini-flash-lite gives 73.4% |
 | LOCOMO benchmark (keyword accuracy, dev split) | 72.6% | same config; cross-encoder achieves 75.2% keyword but 84.1% LLM |
 | LongMemEval (LLM accuracy, oracle split) | **60.6%** | `engram_lme_rrf_dynamic`, 500 QA, April 2026; beats ReadAgent (~55–60%), gap to full-context oracle (~70%) |
 | LongMemEval (LLM accuracy, standard split) | **60.8%** | `engram_lme_s_user_patched` + preference pass, 500 QA, April 2026; knowledge-update 71.8% (strongest), preference 26.7% (+20pp from targeted pass) |
@@ -1645,7 +1647,7 @@ Full ablation of 6 retrieval-layer improvements on conv-26 (19 sessions, 199 QA 
 
 **Split**: dev (5 conversations: conv-26, 30, 41, 42, 43)  
 **QA pairs**: 762 (categories 1–4 only; category 5 adversarial excluded per official LOCOMO protocol)  
-**Judge**: gpt-4o-mini (sync)  
+**Judge**: gpt-4o-mini (sync) — **note: all subsequent runs use gemini-2.5-flash-lite; 12.3pp stricter than gpt-4o-mini on this dataset**  
 **Extraction model**: gemini-2.5-flash-lite, `max_tokens=4096`, domain=`episodic_personal`, semantic dedup threshold=0.95
 
 > **Critical note**: All prior LOCOMO runs before 2026-04-07 included category 5 (adversarial) questions, which inflated the denominator and depressed scores by ~10pp. Category 5 uses `adversarial_answer` (not `answer`) and scores ~41% binary LLM — including it conflates the adversarial-robustness task with the memory-retrieval task. The `--categories` default is now `[1, 2, 3, 4]` in harness.py.
@@ -1679,6 +1681,31 @@ Engram's 85.7% exceeds Zep (73%) and approaches Mem0 (88%) on the dev split with
 3. Report combined score as the paper number
 
 See "Full LOCOMO Run Plan" below.
+
+---
+
+## Post-April-7 Regression Check — gpt-4o-mini (2026-04-20)
+
+**Question**: Do the improvements made between April 7 and April 20 maintain or improve on the 85.7% baseline?
+
+**Changes active since April 7**:
+1. `temporal_auto_route` (April 10, commit `8b78344`) — routes ~31.8% of LOCOMO questions (temporal category) to a compact `## Timeline` section. Showed +4.5pp on LongMemEval.
+2. Sparsity gate fix (April 19, commit `727f9c5`) — removed a recall-hurting gate on multi-session conversations.
+3. `[date:]` suffix restoration (April 19, this session) — suffix was accidentally removed in `1fac40e`; restored. avg_tokens: 1439→1138→1342.
+
+**Result** (dev split, gpt-4o-mini judge, n=762):
+
+| Category | Apr 7 | Apr 20 | Delta |
+|---|---|---|---|
+| multi_hop | 90.7% | 90.7% | 0.0pp |
+| single_hop | 79.6% | 80.3% | **+0.7pp** |
+| temporal | 80.8% | 82.7% | **+1.9pp** |
+| open_domain | 76.1% | 69.6% | −6.5pp |
+| **Overall** | **85.7%** | **85.8%** | **+0.1pp** |
+
+**No regression.** `temporal_auto_route` is driving the +1.9pp on temporal questions. `open_domain` −6.5pp is noise: only 4 questions flipped (all speculative/inference — "Would Melanie be considered LGBTQ?", "What job might Maria pursue?", etc.) with 1 improvement, net −3 on a 46-question bin. Not a retrieval gap.
+
+Results written to `benchmarks/locomo/results/gpt4omini_postfix_20260420.json`.
 
 ---
 

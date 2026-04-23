@@ -1674,11 +1674,18 @@ def assemble_markdown(
                 source = f" [source: {node['source_transcript']}:{node['source_message_index']}]"
             elif node.get("source_message_index") is not None:
                 source = f" [source: msg {node['source_message_index']}]"
+            date_str = ""
+            if node.get("occurred_at"):
+                try:
+                    dt = datetime.fromisoformat(node["occurred_at"])
+                    date_str = f" [date: {dt.strftime('%B %-d, %Y')}]"
+                except (ValueError, TypeError):
+                    pass
             resolved_fact = (
                 _resolve_relative_dates(node["fact"], node.get("occurred_at"))
                 if resolve_dates else node["fact"]
             )
-            lines.append(f"- {resolved_fact}{confidence_str}{source}")
+            lines.append(f"- {resolved_fact}{confidence_str}{date_str}{source}")
         lines.append("")
 
     return "\n".join(lines)
