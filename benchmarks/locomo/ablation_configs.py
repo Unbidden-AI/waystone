@@ -124,6 +124,16 @@ class AblationConfig:
     # Soft supersede: keep superseded nodes but set _score=0 instead of hard-pruning.
     # Preserves history for --at-time temporal queries; normal top_k cuts still exclude them.
     soft_supersede: bool = False
+    # SmartVector (arxiv:2504.XXXXX) graph-relational scoring signal.
+    # Blends each node's own _score with the avg cosine sim of its in-pool neighbors to the query.
+    # Formula: _score = (1-α)*own_score + α*avg_neighbor_sim_to_query
+    smart_vector_scoring: bool = False
+    smart_vector_alpha: float = 0.3      # Blend weight: 0=pure own score, 1=pure neighbor score
+    # SmartVector contradiction detection: flag near-duplicate node pairs (high cosine sim,
+    # no supersedes edge) with _contradiction_candidate metadata for vacuum/reconcile.
+    contradiction_detection: bool = False
+    contradiction_threshold: float = 0.87
+    contradiction_max_pairs: int = 200
 
 
 # ---------------------------------------------------------------------------
@@ -845,6 +855,29 @@ ABLATION_CONFIGS: dict[str, AblationConfig] = {
             "constraint": 365,
         },
         phase_rotation=True,
+        checkpoint_source="engram_dedup95",
+    ),
+    "engram_smart_vector": AblationConfig(
+        name="engram_smart_vector",
+        description=(
+            "SmartVector graph-relational scoring on top of engram_semantic_rerank_topk100 "
+            "(arxiv:2504.XXXXX). After BFS collects up to 100 nodes and semantic_rerank "
+            "applies cosine re-ranking, smart_vector_scoring adds a 4th signal: each node's "
+            "_score is blended with the avg cosine similarity of its in-pool graph neighbors "
+            "to the query (α=0.3). Rewards nodes embedded in query-relevant subgraph "
+            "neighborhoods. Also enables contradiction_detection to surface stale/unresolved "
+            "node pairs as metadata for vacuum passes."
+        ),
+        superseded_pruning=False,
+        recency_decay=False,
+        top_k=100,
+        token_budget=None,
+        semantic_rerank=True,
+        semantic_rerank_cap=0,
+        smart_vector_scoring=True,
+        smart_vector_alpha=0.3,
+        contradiction_detection=True,
+        contradiction_threshold=0.87,
         checkpoint_source="engram_dedup95",
     ),
 }

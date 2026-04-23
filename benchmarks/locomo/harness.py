@@ -492,6 +492,11 @@ def _retrieve_context(
             "half_life_by_type": config.half_life_by_type,
             "phase_rotation": config.phase_rotation,
             "soft_supersede": config.soft_supersede,
+            "smart_vector_scoring": config.smart_vector_scoring,
+            "smart_vector_alpha": config.smart_vector_alpha,
+            "contradiction_detection": config.contradiction_detection,
+            "contradiction_threshold": config.contradiction_threshold,
+            "contradiction_max_pairs": config.contradiction_max_pairs,
         }
 
         try:

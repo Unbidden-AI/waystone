@@ -168,6 +168,20 @@ DEFAULT_STRATEGIES = {
     # RoMem: keep superseded nodes but apply maximum phase rotation (score → 0) rather than hard-pruning.
     # Preserves historical context for --at-time temporal queries; invisible in normal results.
     "soft_supersede": False,
+    # SmartVector (arxiv:2504.XXXXX): graph-relational scoring signal.
+    # For each collected node, boosts _score by the average cosine similarity of its in-pool
+    # neighbors to the query. Rewards nodes embedded in relevant subgraph neighborhoods —
+    # improves multi-hop QA where the answer node has lower direct semantic sim but is
+    # adjacent to many query-relevant nodes.
+    # Formula: _score = (1-α)*current_score + α*avg_neighbor_sim_to_query
+    "smart_vector_scoring": False,
+    "smart_vector_alpha": 0.3,       # Blend weight: 0=pure own score, 1=pure neighbor score
+    # SmartVector contradiction detection: flag in-pool node pairs with high cosine similarity
+    # (threshold) that have no supersedes edge. Potential stale/duplicate nodes surface as
+    # _contradiction_candidate metadata for vacuum/reconcile passes. Does not affect _score.
+    "contradiction_detection": False,
+    "contradiction_threshold": 0.87,  # Cosine sim above which a pair is a contradiction candidate
+    "contradiction_max_pairs": 200,   # O(n²) cap: only check first N pairs after sorting by sim
 }
 
 # Verbs that indicate a preference/recommendation query — used by preference_fanout to
@@ -752,6 +766,33 @@ def retrieve_with_stats(
             node["_score"] = alpha_sem / (rrf_k + sem_rank[i]) + alpha_ce / (rrf_k + ce_rank[i])
         applied.append("rrf_rerank")
 
+    if strats.get("smart_vector_scoring") and query_blob is not None and collected_nodes:
+        # SmartVector graph-relational signal: blend own score with avg neighbor sim to query.
+        # Runs after all other scoring passes so it incorporates the best available _score.
+        alpha = float(strats.get("smart_vector_alpha", 0.3))
+        collected_nodes = apply_graph_relational_scoring(
+            collected_nodes, store, query_blob, embedder, alpha=alpha
+        )
+        applied.append(f"smart_vector(α={alpha})")
+
+    if strats.get("contradiction_detection") and collected_nodes:
+        # SmartVector contradiction detection: flag near-duplicate node pairs with no supersedes edge.
+        # Does not affect _score — metadata only. Surfaces stale/unresolved nodes for vacuum.
+        ct_threshold = float(strats.get("contradiction_threshold", 0.87))
+        ct_max_pairs = int(strats.get("contradiction_max_pairs", 200))
+        n_contradictions = detect_potential_contradictions(
+            collected_nodes, store, embedder,
+            threshold=ct_threshold,
+            max_pairs=ct_max_pairs,
+        )
+        if n_contradictions > 0:
+            log.warning(
+                "Contradiction detection: %d candidate pair(s) found (threshold=%.2f). "
+                "Nodes marked with _contradiction_candidate=True.",
+                n_contradictions, ct_threshold,
+            )
+        applied.append(f"contradiction_detection({n_contradictions}pairs)")
+
     # Sort by confidence (possibly decayed) descending, then BFS depth ascending
     # as a tiebreaker so nodes closer to entry points rank higher when scores are equal.
     collected_nodes.sort(
@@ -1138,6 +1179,151 @@ def apply_recency_decay(
             decay = math.pow(2, -age_days / hl)
         node["_score"] = confidence * decay
     return nodes
+
+
+def apply_graph_relational_scoring(
+    nodes: list[dict],
+    store: "GraphStore",
+    query_blob: bytes,
+    embedder: "Embedder",
+    alpha: float = 0.3,
+) -> list[dict]:
+    """SmartVector graph-relational signal: boost scores by neighborhood query-relevance.
+
+    For each node in the candidate pool, computes the average cosine similarity of its
+    in-pool neighbors to the query. Final score blends the node's own score with this
+    neighborhood score:
+
+        _score = (1 - alpha) * own_score + alpha * avg_neighbor_sim
+
+    Nodes with no in-pool neighbors are unaffected (alpha contribution is 0).
+
+    Inspired by SmartVector's graph-relational embedding signal, which rewards nodes
+    embedded in query-relevant subgraph neighborhoods. Particularly effective for
+    multi-hop QA where the answer node has low direct semantic similarity but sits
+    adjacent to strongly-matching context nodes.
+    """
+    if not nodes or query_blob is None or not embedder.is_available():
+        return nodes
+
+    # Fetch all edges between nodes in the candidate pool
+    node_ids = [n["id"] for n in nodes]
+    all_edges = store.get_edges_for_nodes(node_ids)
+
+    # Build adjacency within the pool (both directions)
+    pool_id_set = set(node_ids)
+    adjacency: dict[str, list[str]] = {nid: [] for nid in node_ids}
+    for edge in all_edges:
+        fid, tid = edge["from_id"], edge["to_id"]
+        if fid in pool_id_set and tid in pool_id_set:
+            adjacency[fid].append(tid)
+            adjacency[tid].append(fid)
+
+    # Fetch embeddings for all pool nodes in one batch
+    placeholders = ",".join("?" * len(node_ids))
+    rows = store.conn.execute(
+        f"SELECT node_id, embedding FROM node_embeddings WHERE node_id IN ({placeholders})",
+        node_ids,
+    ).fetchall()
+    emb_map = {r[0]: bytes(r[1]) for r in rows}
+
+    # Apply neighborhood scoring
+    for node in nodes:
+        nid = node["id"]
+        neighbors = adjacency.get(nid, [])
+        if not neighbors:
+            continue
+        neighbor_sims = []
+        for nbr_id in neighbors:
+            nbr_emb = emb_map.get(nbr_id)
+            if nbr_emb is not None:
+                sim = embedder.cosine_similarity(query_blob, nbr_emb)
+                neighbor_sims.append(max(0.0, sim))
+        if not neighbor_sims:
+            continue
+        avg_neighbor_sim = sum(neighbor_sims) / len(neighbor_sims)
+        own_score = node.get("_score", node.get("confidence", 0.5))
+        node["_score"] = (1.0 - alpha) * own_score + alpha * avg_neighbor_sim
+        node["_graph_relational_sim"] = avg_neighbor_sim  # expose for debugging
+
+    return nodes
+
+
+def detect_potential_contradictions(
+    nodes: list[dict],
+    store: "GraphStore",
+    embedder: "Embedder",
+    threshold: float = 0.87,
+    max_pairs: int = 200,
+) -> int:
+    """Flag in-pool node pairs that are semantically near-identical but lack a supersedes edge.
+
+    High cosine similarity (>threshold) between two nodes that have no supersedes relationship
+    suggests one may be a stale duplicate or an unresolved contradiction. Both nodes are marked
+    with _contradiction_candidate=True for downstream inspection (vacuum, reconcile, or UI flagging).
+
+    Returns the number of contradiction-candidate pairs found.
+
+    O(n²) cost is capped via max_pairs: after computing per-node sims against the pool mean,
+    only the top-max_pairs highest-similarity pairs are checked. At n=100 this is a no-op;
+    at n=1000 it bounds the comparison budget.
+    """
+    if not nodes or not embedder.is_available():
+        return 0
+
+    node_ids = [n["id"] for n in nodes]
+    placeholders = ",".join("?" * len(node_ids))
+    rows = store.conn.execute(
+        f"SELECT node_id, embedding FROM node_embeddings WHERE node_id IN ({placeholders})",
+        node_ids,
+    ).fetchall()
+    emb_map = {r[0]: bytes(r[1]) for r in rows}
+
+    # Collect which node pairs have a supersedes edge between them
+    all_edges = store.get_edges_for_nodes(node_ids)
+    supersedes_pairs: set[tuple[str, str]] = set()
+    for edge in all_edges:
+        if edge.get("relation") == "supersedes":
+            fid, tid = edge["from_id"], edge["to_id"]
+            supersedes_pairs.add((fid, tid))
+            supersedes_pairs.add((tid, fid))
+
+    # Generate candidate pairs (bounded by max_pairs)
+    node_embs = [(n["id"], emb_map.get(n["id"])) for n in nodes]
+    node_embs = [(nid, emb) for nid, emb in node_embs if emb is not None]
+
+    contradiction_count = 0
+    pairs_checked = 0
+    flagged_ids: set[str] = set()
+
+    for i in range(len(node_embs)):
+        if pairs_checked >= max_pairs:
+            break
+        for j in range(i + 1, len(node_embs)):
+            if pairs_checked >= max_pairs:
+                break
+            nid_a, emb_a = node_embs[i]
+            nid_b, emb_b = node_embs[j]
+            sim = embedder.cosine_similarity(emb_a, emb_b)
+            pairs_checked += 1
+            if sim >= threshold:
+                pair = (nid_a, nid_b)
+                if pair not in supersedes_pairs:
+                    flagged_ids.add(nid_a)
+                    flagged_ids.add(nid_b)
+                    contradiction_count += 1
+                    log.debug(
+                        "Contradiction candidate: %s / %s (sim=%.3f, no supersedes edge)",
+                        nid_a, nid_b, sim,
+                    )
+
+    # Mark flagged nodes
+    id_to_node = {n["id"]: n for n in nodes}
+    for nid in flagged_ids:
+        if nid in id_to_node:
+            id_to_node[nid]["_contradiction_candidate"] = True
+
+    return contradiction_count
 
 
 def apply_token_budget(nodes: list[dict], budget: int) -> list[dict]:
