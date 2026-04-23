@@ -941,6 +941,29 @@ ABLATION_CONFIGS: dict[str, AblationConfig] = {
         autosearch_threshold=0.15,
         checkpoint_source="engram_dedup95",
     ),
+    "engram_autosearch_40": AblationConfig(
+        name="engram_autosearch_40",
+        description=(
+            "AutoSearch at threshold=0.40 — diagnostic sweep to find the recall/efficiency "
+            "crossover. Diagnostic showed 0% halt rate at ≤0.30 on LOCOMO (graph stays "
+            "coherent to depth 3) but 48% halt rate at 0.40 with −24% avg node count "
+            "(331→253). This config tests whether that pruning hurts recall or is pure noise "
+            "reduction. Builds on SmartVector (87.3% baseline)."
+        ),
+        superseded_pruning=False,
+        recency_decay=False,
+        top_k=100,
+        token_budget=None,
+        semantic_rerank=True,
+        semantic_rerank_cap=0,
+        smart_vector_scoring=True,
+        smart_vector_alpha=0.3,
+        contradiction_detection=True,
+        contradiction_threshold=0.87,
+        autosearch=True,
+        autosearch_threshold=0.40,
+        checkpoint_source="engram_dedup95",
+    ),
 }
 
 

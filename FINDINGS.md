@@ -2476,3 +2476,91 @@ Our implementation matches Memento's core temporal schema. Remaining gaps vs. Me
 - No automatic contradiction detection (planned)
 - No entity resolution pipeline (partial — fact-hash + semantic dedup exists)
 - No verbatim fallback (raw_sentences table exists but is decoupled from retrieval)
+
+---
+
+## EHRAG — Semantic Hyperedge-Augmented Retrieval
+
+*April 2026*
+
+### Background
+
+Standard BFS retrieval traverses explicit graph edges. EHRAG adds a second injection path: nodes that are semantically clustered together (high cosine similarity) but not explicitly connected are injected as siblings when any cluster member appears in BFS results.
+
+### Implementation
+
+**Offline (build time):** Greedy agglomerative clustering over all node embeddings in the store. Any pair with cosine similarity ≥ 0.80 is merged into a shared hyperedge cluster. Stored in `hyperedge_members(cluster_id, node_id)` table.
+
+**Online (retrieval time):** After BFS collection, look up cluster membership for all collected nodes. Inject sibling nodes (other cluster members) that were not already collected. Injected nodes are tagged with relation `hyperedge_sibling` for transparency.
+
+### LOCOMO Benchmark Results
+
+Tested on LOCOMO dev split (conv-42 smoke + first 5 dev questions), gpt-4o-mini judge:
+
+| Config | Score | vs. SmartVector baseline |
+|--------|-------|--------------------------|
+| `engram_smartvector` | ~61% | baseline |
+| `engram_ehrag` | ~61% | ≈0 |
+
+EHRAG showed negligible impact on LOCOMO scores. Root cause: LOCOMO conversations have high semantic clustering naturally (many facts about the same people/events), so EHRAG injects large numbers of siblings that are topically adjacent but not relevant to the specific question. The top_k=100 ceiling means additional injected nodes displace higher-BFS-rank nodes.
+
+### When EHRAG Would Help
+
+EHRAG is better suited to sparse graphs where related facts are stored with different terminology (e.g., "database" vs "DB" vs "Postgres") but were not connected with explicit edges. In LOCOMO's dense conversational graph, explicit edges already provide that connectivity.
+
+---
+
+## AutoSearch — Adaptive BFS Early Stopping
+
+*April 2026*
+
+### Design
+
+After each BFS hop, compute the average cosine similarity between newly-discovered frontier nodes and the query embedding. If the average falls below a threshold, halt BFS — further hops are unlikely to yield relevant nodes. This reduces BFS work (SQLite edge queries, embedding lookups for scoring passes) without modifying the retrieval strategy pipeline.
+
+The halt check fires *after* adding a layer to `collected`, so the current layer is always kept — only future hops are suppressed.
+
+### Threshold Sweep (LOCOMO dev split, `engram_autosearch` baseline)
+
+| Threshold | Halt Rate | Avg BFS Candidates | Avg Score |
+|-----------|-----------|--------------------|-----------|
+| 0.15 | 0% | ~331 | — |
+| 0.30 | ~0% | ~331 | — |
+| 0.40 | ~48% | ~254 | ≈ SmartVector |
+
+LOCOMO graphs are dense and deeply interconnected. BFS hop similarity stays above 0.30 for nearly all queries; the threshold must reach 0.40 to produce meaningful halt rates.
+
+### Benchmark Results
+
+`engram_autosearch_40` vs `engram_smartvector` on LOCOMO dev split (gpt-4o-mini judge):
+
+- Score: approximately neutral (±1pp, within judge variance)
+- Avg BFS candidates before strategy pipeline: 254 vs 331 (−23%)
+- Output token count: unchanged (top_k=100 ceiling applies to both)
+
+**AutoSearch does not reduce output context size.** With `top_k=100`, both 331-node and 254-node BFS pools get trimmed to ~100 nodes by the strategy pipeline — same output tokens either way. AutoSearch's savings are in BFS traversal work only.
+
+### Latency Measurement
+
+Microbenchmark: 80 LOCOMO questions, 5-query warmup, `hops=3`, `top_k=100`, full strategy pipeline.
+
+| Config | Avg | p50 | p95 | Avg nodes (before strats) |
+|--------|-----|-----|-----|---------------------------|
+| SmartVector (no AutoSearch) | 105ms | 104ms | 134ms | 326 |
+| AutoSearch@0.40 | 101ms | 102ms | 149ms | 254 |
+
+AutoSearch saves ~4ms average (4%). The p95 is *noisier* (134ms → 149ms): queries that don't halt still pay the per-hop similarity check overhead, which occasionally exceeds the savings.
+
+### Why the Savings Are Modest
+
+The dominant cost in the pipeline is the embedding-based scoring passes (semantic_rerank, SmartVector). These run over the full BFS candidate pool. AutoSearch reduces the pool by 23% (326 → 254 nodes), but per-embedding ops are fast (~0.3ms each), so 72 fewer nodes theoretically saves ~20ms — in practice, Python overhead and SQLite connection latency compress this significantly.
+
+### When AutoSearch Would Help More
+
+- **Production-scale stores (30K+ nodes):** BFS can balloon to thousands of candidates. At 3K candidates, a 23% reduction saves ~690 embedding lookups — meaningful wall time.
+- **Deeper hop queries (hops=5+):** AutoSearch fires earlier and saves more layers.
+- **Without semantic_rerank:** If embedding-heavy passes are stripped, BFS edge traversal becomes the bottleneck and early stopping has proportionally larger impact.
+
+### Recommendation
+
+Keep AutoSearch as a latency knob for production-scale deployments (`autosearch: true`, `autosearch_threshold: 0.40`). Do not enable by default in benchmark configs — recall neutrality is good, but the latency benefit requires larger graphs to be significant. The p95 regression on small graphs makes it mildly harmful as a default.
