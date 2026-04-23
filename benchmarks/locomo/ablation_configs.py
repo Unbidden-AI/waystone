@@ -134,6 +134,12 @@ class AblationConfig:
     contradiction_detection: bool = False
     contradiction_threshold: float = 0.87
     contradiction_max_pairs: int = 200
+    # EHRAG: semantic hyperedge-augmented retrieval injection.
+    # Offline clusters (threshold) are built once per DB; online injects up to ehrag_max_inject
+    # sibling nodes that BFS hop limits missed.
+    ehrag: bool = False
+    ehrag_threshold: float = 0.80
+    ehrag_max_inject: int = 50
 
 
 # ---------------------------------------------------------------------------
@@ -878,6 +884,30 @@ ABLATION_CONFIGS: dict[str, AblationConfig] = {
         smart_vector_alpha=0.3,
         contradiction_detection=True,
         contradiction_threshold=0.87,
+        checkpoint_source="engram_dedup95",
+    ),
+    "engram_ehrag": AblationConfig(
+        name="engram_ehrag",
+        description=(
+            "EHRAG: semantic hyperedge-augmented retrieval on top of SmartVector. "
+            "After BFS+semantic_rerank+smart_vector_scoring, injects sibling nodes "
+            "from pre-built embedding-similarity clusters (threshold=0.80). Tests whether "
+            "cluster-based recall expansion recovers multi-hop facts that BFS hop limits miss. "
+            "Builds on engram_smart_vector (87.3% dev-split baseline)."
+        ),
+        superseded_pruning=False,
+        recency_decay=False,
+        top_k=100,
+        token_budget=None,
+        semantic_rerank=True,
+        semantic_rerank_cap=0,
+        smart_vector_scoring=True,
+        smart_vector_alpha=0.3,
+        contradiction_detection=True,
+        contradiction_threshold=0.87,
+        ehrag=True,
+        ehrag_threshold=0.80,
+        ehrag_max_inject=50,
         checkpoint_source="engram_dedup95",
     ),
 }

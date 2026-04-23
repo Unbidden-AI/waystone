@@ -497,6 +497,9 @@ def _retrieve_context(
             "contradiction_detection": config.contradiction_detection,
             "contradiction_threshold": config.contradiction_threshold,
             "contradiction_max_pairs": config.contradiction_max_pairs,
+            "ehrag": config.ehrag,
+            "ehrag_threshold": config.ehrag_threshold,
+            "ehrag_max_inject": config.ehrag_max_inject,
         }
 
         try:

@@ -182,6 +182,15 @@ DEFAULT_STRATEGIES = {
     "contradiction_detection": False,
     "contradiction_threshold": 0.87,  # Cosine sim above which a pair is a contradiction candidate
     "contradiction_max_pairs": 200,   # O(n²) cap: only check first N pairs after sorting by sim
+    # EHRAG: semantic hyperedge-augmented retrieval injection.
+    # Offline: rebuild_hyperedges() clusters active nodes by pairwise cosine sim (threshold=0.80)
+    # and stores clusters in hyperedge_members. Online: after BFS, sibling nodes from those
+    # clusters that BFS missed are injected (up to ehrag_max_inject, ranked by confidence).
+    # Targets multi-hop recall gaps where the answer node is semantically near a BFS-collected
+    # node but not reachable within the hop limit.
+    "ehrag": False,
+    "ehrag_threshold": 0.80,   # informational — used during rebuild_hyperedges(), not at query time
+    "ehrag_max_inject": 50,    # cap on injected sibling nodes per query
 }
 
 # Verbs that indicate a preference/recommendation query — used by preference_fanout to
@@ -552,6 +561,29 @@ def retrieve_with_stats(
                 len(proc_nodes_to_inject),
             )
             collected_nodes.extend(proc_nodes_to_inject)
+
+    # EHRAG: inject sibling nodes from pre-built semantic clusters that BFS missed.
+    # Auto-builds the hyperedge index on first call if ehrag=True but no index exists yet.
+    if strats.get("ehrag"):
+        if not store.has_hyperedges():
+            from engram.hyperedges import rebuild_hyperedges
+            log.info("EHRAG: no hyperedge index found — building now (threshold=%.2f)", strats.get("ehrag_threshold", 0.80))
+            rebuild_hyperedges(store, threshold=strats.get("ehrag_threshold", 0.80))
+        if store.has_hyperedges():
+            _bfs_ids = {n["id"] for n in collected_nodes} | pinned_ids
+            _he_max = int(strats.get("ehrag_max_inject", 50))
+            _sibling_ids = store.get_hyperedge_siblings([n["id"] for n in collected_nodes])
+            _new_sibling_ids = [sid for sid in _sibling_ids if sid not in _bfs_ids]
+            if _new_sibling_ids:
+                _sibling_nodes = store.get_nodes_by_ids(_new_sibling_ids[:_he_max * 2])
+                _sibling_nodes.sort(key=lambda n: n.get("confidence", 0.0), reverse=True)
+                _sibling_nodes = _sibling_nodes[:_he_max]
+                for sn in _sibling_nodes:
+                    sn["_bfs_depth"] = hops + 1
+                    sn["_ehrag_injected"] = True
+                if _sibling_nodes:
+                    log.debug("EHRAG: injected %d sibling nodes (%d candidates)", len(_sibling_nodes), len(_new_sibling_ids))
+                    collected_nodes.extend(_sibling_nodes)
 
     nodes_before = len(collected_nodes)
 

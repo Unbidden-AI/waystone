@@ -277,6 +277,18 @@ class GraphStore:
         """)
         self.conn.commit()
 
+        # EHRAG hyperedge index — pre-computed semantic clusters for sibling injection.
+        # Created here (migration-safe) so existing DBs upgrade on first open.
+        self.conn.executescript("""
+            CREATE TABLE IF NOT EXISTS hyperedge_members (
+                hyperedge_id TEXT NOT NULL,
+                node_id      TEXT NOT NULL,
+                PRIMARY KEY (hyperedge_id, node_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_hm_node ON hyperedge_members(node_id);
+        """)
+        self.conn.commit()
+
         # Create FTS5 virtual table for BM25 full-text search on fact text.
         # Self-contained (no content= link) so rowid alignment isn't required.
         # Triggers keep the FTS index in sync with the nodes table.
@@ -902,6 +914,38 @@ class GraphStore:
                     seen_ids.add(row[0])
                     result_rows.append(row)
         return [self._row_to_node(r) for r in result_rows]
+
+    def has_hyperedges(self) -> bool:
+        """Return True if the hyperedge_members table has at least one row."""
+        row = self.conn.execute("SELECT 1 FROM hyperedge_members LIMIT 1").fetchone()
+        return row is not None
+
+    def get_hyperedge_siblings(self, node_ids: list[str]) -> list[str]:
+        """Return node IDs that share a hyperedge with any of the given nodes (excluding inputs)."""
+        if not node_ids:
+            return []
+        # Step 1: find all hyperedge IDs containing these nodes
+        he_ids: list[str] = []
+        for chunk in _chunk(node_ids, 900):
+            placeholders = ",".join("?" * len(chunk))
+            rows = self.conn.execute(
+                f"SELECT DISTINCT hyperedge_id FROM hyperedge_members WHERE node_id IN ({placeholders})",
+                chunk,
+            ).fetchall()
+            he_ids.extend(r[0] for r in rows)
+        if not he_ids:
+            return []
+        # Step 2: fetch all members of those hyperedges, excluding the input nodes
+        input_set = set(node_ids)
+        siblings: list[str] = []
+        for chunk in _chunk(he_ids, 900):
+            placeholders = ",".join("?" * len(chunk))
+            rows = self.conn.execute(
+                f"SELECT DISTINCT node_id FROM hyperedge_members WHERE hyperedge_id IN ({placeholders})",
+                chunk,
+            ).fetchall()
+            siblings.extend(r[0] for r in rows if r[0] not in input_set)
+        return list(dict.fromkeys(siblings))  # dedupe, preserve first-seen order
 
     def get_nodes_by_ids(self, node_ids: list[str]) -> list[dict]:
         """Fetch multiple nodes by ID, chunked to stay within SQLite variable limits."""
