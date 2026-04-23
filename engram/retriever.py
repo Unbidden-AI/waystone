@@ -191,6 +191,14 @@ DEFAULT_STRATEGIES = {
     "ehrag": False,
     "ehrag_threshold": 0.80,   # informational — used during rebuild_hyperedges(), not at query time
     "ehrag_max_inject": 50,    # cap on injected sibling nodes per query
+    # AutoSearch: adaptive BFS early stopping.
+    # After each hop, compute the avg cosine similarity of new frontier nodes to the query.
+    # If avg_sim < autosearch_threshold, stop expanding — the graph neighbourhood is diverging
+    # from the query and further hops add noise more than signal.
+    # Efficiency pass: targets latency reduction on simple 1-2 hop queries without sacrificing
+    # recall (deep-hop expansion only halts when the new layer is clearly irrelevant).
+    "autosearch": False,
+    "autosearch_threshold": 0.15,  # avg cosine sim floor below which BFS halts early
 }
 
 # Verbs that indicate a preference/recommendation query — used by preference_fanout to
@@ -344,7 +352,7 @@ def retrieve_with_stats(
     sem_ranked: list[str] = []
     query_blob: bytes | None = None
     from engram import embedder
-    if (strats["semantic"] or strats.get("semantic_rerank") or strats.get("semantic_retrieval")) and embedder.is_available() and store._vec_available:
+    if (strats["semantic"] or strats.get("semantic_rerank") or strats.get("semantic_retrieval") or strats.get("autosearch")) and embedder.is_available() and store._vec_available:
         query_blob = embedder.embed_text(task_description)
     if strats["semantic"] and query_blob is not None:
         sem_ranked = [nid for nid in store.search_by_embedding(query_blob, top_k=top_k)
@@ -534,7 +542,13 @@ def retrieve_with_stats(
             )
 
     # BFS from entry nodes
-    collected_nodes = bfs_collect(store, entry_nodes, hops)
+    _autosearch_query = query_blob if strats.get("autosearch") else None
+    _autosearch_threshold = float(strats.get("autosearch_threshold", 0.15))
+    collected_nodes = bfs_collect(
+        store, entry_nodes, hops,
+        autosearch_query=_autosearch_query,
+        autosearch_threshold=_autosearch_threshold,
+    )
 
     # Process/episode-node direct injection: bypass BFS depth limits for 'process' and 'episode' nodes.
     # These reflect-type nodes form semi-separate connected components and are rarely reachable
@@ -1381,7 +1395,14 @@ def apply_token_budget(nodes: list[dict], budget: int) -> list[dict]:
 # Core retrieval helpers
 # ---------------------------------------------------------------------------
 
-def bfs_collect(store: GraphStore, entry_nodes: list[dict], hops: int) -> list[dict]:
+def bfs_collect(
+    store: GraphStore,
+    entry_nodes: list[dict],
+    hops: int,
+    *,
+    autosearch_query: bytes | None = None,
+    autosearch_threshold: float = 0.0,
+) -> list[dict]:
     """BFS from entry nodes up to `hops` depth, collecting all reachable nodes.
 
     Uses batch queries per hop (2 queries per layer instead of 2+N per node),
@@ -1389,6 +1410,13 @@ def bfs_collect(store: GraphStore, entry_nodes: list[dict], hops: int) -> list[d
 
     Sets `_bfs_depth` on each node (0 = entry node, 1 = one hop away, etc.)
     so callers can use depth as a ranking signal.
+
+    If `autosearch_query` is provided and `autosearch_threshold` > 0, AutoSearch
+    adaptive stopping is active: after collecting each hop layer, the avg cosine
+    similarity of the new nodes to the query embedding is computed. If it falls
+    below the threshold, BFS halts — the neighbourhood is diverging from the
+    query and further hops add noise rather than signal. The current layer is
+    kept (it was already collected); only future hops are suppressed.
     """
     visited_ids: set[str] = set()
     collected: list[dict] = []
@@ -1401,6 +1429,8 @@ def bfs_collect(store: GraphStore, entry_nodes: list[dict], hops: int) -> list[d
             node = {**node, "_bfs_depth": 0, "_max_edge_weight": 1.0}
             collected.append(node)
             current_layer_ids.append(node["id"])
+
+    _autosearch_active = autosearch_query is not None and autosearch_threshold > 0
 
     for depth in range(hops):
         if not current_layer_ids:
@@ -1432,6 +1462,31 @@ def bfs_collect(store: GraphStore, entry_nodes: list[dict], hops: int) -> list[d
                 node = {**node, "_bfs_depth": depth + 1, "_max_edge_weight": w}
                 collected.append(node)
                 next_layer_ids.append(nid)
+
+        # AutoSearch: check marginal relevance of this hop before continuing
+        if _autosearch_active and next_layer_ids:
+            from engram import embedder
+            placeholders = ",".join("?" * len(next_layer_ids))
+            emb_rows = store.conn.execute(
+                f"SELECT node_id, embedding FROM node_embeddings WHERE node_id IN ({placeholders})",
+                next_layer_ids,
+            ).fetchall()
+            if emb_rows:
+                sims = [
+                    embedder.cosine_similarity(autosearch_query, bytes(r[1]))
+                    for r in emb_rows
+                ]
+                avg_sim = sum(sims) / len(sims)
+                log.debug(
+                    "AutoSearch hop %d: avg_sim=%.3f threshold=%.3f (%d/%d nodes have embeddings)",
+                    depth + 1, avg_sim, autosearch_threshold, len(emb_rows), len(next_layer_ids),
+                )
+                if avg_sim < autosearch_threshold:
+                    log.debug(
+                        "AutoSearch: halting BFS after hop %d (avg_sim %.3f < %.3f) — %d nodes collected",
+                        depth + 1, avg_sim, autosearch_threshold, len(collected),
+                    )
+                    break
 
         current_layer_ids = next_layer_ids
 

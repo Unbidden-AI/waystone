@@ -500,6 +500,8 @@ def _retrieve_context(
             "ehrag": config.ehrag,
             "ehrag_threshold": config.ehrag_threshold,
             "ehrag_max_inject": config.ehrag_max_inject,
+            "autosearch": config.autosearch,
+            "autosearch_threshold": config.autosearch_threshold,
         }
 
         try:

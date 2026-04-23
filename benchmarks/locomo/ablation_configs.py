@@ -140,6 +140,12 @@ class AblationConfig:
     ehrag: bool = False
     ehrag_threshold: float = 0.80
     ehrag_max_inject: int = 50
+    # AutoSearch: adaptive BFS early stopping.
+    # After each hop, compute avg cosine sim of new frontier nodes to the query. Stop if below
+    # threshold — further hops add noise more than signal. Efficiency pass; does not affect recall
+    # when the threshold is correctly calibrated below the signal floor.
+    autosearch: bool = False
+    autosearch_threshold: float = 0.15
 
 
 # ---------------------------------------------------------------------------
@@ -908,6 +914,31 @@ ABLATION_CONFIGS: dict[str, AblationConfig] = {
         ehrag=True,
         ehrag_threshold=0.80,
         ehrag_max_inject=50,
+        checkpoint_source="engram_dedup95",
+    ),
+    "engram_autosearch": AblationConfig(
+        name="engram_autosearch",
+        description=(
+            "AutoSearch: adaptive BFS early stopping on top of SmartVector. "
+            "After each BFS hop, computes avg cosine similarity of new frontier nodes to the "
+            "query embedding. Halts BFS expansion when avg_sim < 0.15 — the neighbourhood is "
+            "diverging from the query. Efficiency pass: reduces latency on simple 1-2 hop "
+            "queries without sacrificing recall on multi-hop ones. Builds on "
+            "engram_smart_vector (87.3% dev-split baseline); target is 0pp recall regression "
+            "with measurable reduction in avg BFS depth and context tokens."
+        ),
+        superseded_pruning=False,
+        recency_decay=False,
+        top_k=100,
+        token_budget=None,
+        semantic_rerank=True,
+        semantic_rerank_cap=0,
+        smart_vector_scoring=True,
+        smart_vector_alpha=0.3,
+        contradiction_detection=True,
+        contradiction_threshold=0.87,
+        autosearch=True,
+        autosearch_threshold=0.15,
         checkpoint_source="engram_dedup95",
     ),
 }
