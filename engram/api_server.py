@@ -16,20 +16,25 @@ Auth:
 
 from __future__ import annotations
 
+import logging
 import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, Request, Response, Security, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response, Security, status
+from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
+
+log = logging.getLogger(__name__)
 
 from .billing import (
     check_node_limit,
     check_project_limit,
     create_key,
     open_admin_db,
+    retry_dead_letter_emails,
     revoke_key_by_email,
     send_key_email,
     tier_from_variant,
@@ -37,15 +42,37 @@ from .billing import (
     verify_ls_signature,
     RateLimiter,
 )
-from .config import get_db_path, load_config
+from .config import load_config
 from .extractor import extract as _extract, extract_chunked as _extract_chunked, score_extraction_quality, verify_extraction
 from .retriever import retrieve_with_stats
 from .store import GraphStore
+
+from contextlib import asynccontextmanager
+
+from .monitoring import init_sentry
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """FastAPI lifespan handler for startup checks."""
+    # Startup: initialize Sentry
+    init_sentry()
+
+    # Startup: check for missing LS_WEBHOOK_SECRET in production mode
+    if _USE_ADMIN_DB and not os.environ.get("LS_WEBHOOK_SECRET", ""):
+        log.warning(
+            "WARNING: LS_WEBHOOK_SECRET is not set. LemonSqueezy webhooks will be rejected — "
+            "customers who pay will not receive API keys."
+        )
+    yield
+    # Shutdown: cleanup if needed
+
 
 app = FastAPI(
     title="Engram API",
     version="0.1.0",
     description="DAG-based context intelligence layer for LLM workflows",
+    lifespan=lifespan,
 )
 
 _bearer = HTTPBearer(auto_error=False)
@@ -121,6 +148,19 @@ def _cfg() -> dict:
     return load_config(None)
 
 
+def _get_project_dir(config: dict, key_info: dict, project: str) -> Path:
+    """Return the project directory, scoped by API key in multi-tenant mode."""
+    base = Path(config.get("projects_dir", "~/.engram/projects")).expanduser()
+    if _USE_ADMIN_DB and key_info.get("key_hash"):
+        key_prefix = key_info["key_hash"][:12]
+        return base / key_prefix / project
+    return base / project
+
+
+def _get_db_path(config: dict, key_info: dict, project: str) -> Path:
+    return _get_project_dir(config, key_info, project) / "context.db"
+
+
 def _add_rate_limit_headers(key_info: dict, response: Response) -> None:
     """Add rate limit headers to response if key_info contains rate limit info."""
     from engram.billing import RATE_LIMITS
@@ -140,8 +180,8 @@ def _add_rate_limit_headers(key_info: dict, response: Response) -> None:
         )
 
 
-def _open_store(config: dict, project: str, must_exist: bool = True) -> GraphStore:
-    db_path = get_db_path(config, project)
+def _open_store(config: dict, key_info: dict, project: str, must_exist: bool = True) -> GraphStore:
+    db_path = _get_db_path(config, key_info, project)
     if must_exist and not db_path.exists():
         raise HTTPException(status_code=404, detail=f"Project '{project}' not found")
     return GraphStore(db_path)
@@ -196,6 +236,14 @@ class ProjectInfo(BaseModel):
     edge_count: int
 
 
+class AccountResponse(BaseModel):
+    tier: str
+    email: str | None = None
+    node_count: int
+    project_count: int
+    rate_limits: dict[str, int]
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -205,12 +253,68 @@ def health() -> dict:
     return {"status": "ok", "version": "0.1.0"}
 
 
+@app.get("/v1/account")
+def get_account(key_info: AuthDep, response: Response) -> AccountResponse:
+    """Get account information including tier, project count, and rate limits."""
+    _add_rate_limit_headers(key_info, response)
+
+    tier = key_info.get("tier", "local")
+    email = key_info.get("email")
+
+    # Count nodes and projects across user's scoped projects
+    config = _cfg()
+    projects_base = Path(config.get("projects_dir", "~/.engram/projects")).expanduser()
+
+    if _USE_ADMIN_DB and key_info.get("key_hash"):
+        key_prefix = key_info["key_hash"][:12]
+        projects_dir = projects_base / key_prefix
+    else:
+        projects_dir = projects_base
+
+    total_nodes = 0
+    project_count = 0
+
+    if projects_dir.exists():
+        for d in projects_dir.iterdir():
+            if d.is_dir() and (d / "context.db").exists():
+                project_count += 1
+                try:
+                    store = GraphStore(d / "context.db")
+                    stats = store.get_stats()
+                    total_nodes += stats.get("node_count", 0)
+                    store.close()
+                except Exception:
+                    # Skip projects that can't be opened
+                    pass
+
+    from engram.billing import RATE_LIMITS
+    limits = RATE_LIMITS.get(tier, RATE_LIMITS.get("free", {}))
+
+    return AccountResponse(
+        tier=tier,
+        email=email,
+        node_count=total_nodes,
+        project_count=project_count,
+        rate_limits={
+            "requests_per_minute": limits.get("requests_per_minute", 10),
+            "requests_per_day": limits.get("requests_per_day", 100),
+        },
+    )
+
+
 @app.get("/v1/projects")
 def list_projects(key_info: AuthDep, response: Response) -> list[ProjectInfo]:
     _add_rate_limit_headers(key_info, response)
 
     config = _cfg()
-    projects_dir = Path(config.get("projects_dir", "~/.context-broker/projects")).expanduser()
+    projects_base = Path(config.get("projects_dir", "~/.engram/projects")).expanduser()
+
+    if _USE_ADMIN_DB and key_info.get("key_hash"):
+        key_prefix = key_info["key_hash"][:12]
+        projects_dir = projects_base / key_prefix
+    else:
+        projects_dir = projects_base
+
     if not projects_dir.exists():
         return []
     result = []
@@ -233,17 +337,19 @@ def init_project(project: str, key_info: AuthDep, response: Response) -> dict:
     _add_rate_limit_headers(key_info, response)
 
     config = _cfg()
-    db_path = get_db_path(config, project)
+    db_path = _get_db_path(config, key_info, project)
     if db_path.exists():
         return {"project": project, "created": False}
 
     # Enforce project limit for admin-DB-managed keys
     if _USE_ADMIN_DB and key_info.get("key_hash"):
-        projects_dir = Path(config.get("projects_dir", "~/.context-broker/projects")).expanduser()
+        key_prefix = key_info["key_hash"][:12]
+        projects_base = Path(config.get("projects_dir", "~/.engram/projects")).expanduser()
+        user_projects_dir = projects_base / key_prefix
         current_count = sum(
-            1 for d in projects_dir.iterdir()
+            1 for d in user_projects_dir.iterdir()
             if d.is_dir() and (d / "context.db").exists()
-        ) if projects_dir.exists() else 0
+        ) if user_projects_dir.exists() else 0
         try:
             check_project_limit(None, key_info["key_hash"], key_info.get("tier", "free"), current_count)  # type: ignore[arg-type]
         except ValueError as exc:
@@ -260,7 +366,7 @@ def get_stats(project: str, key_info: AuthDep, response: Response) -> StatsRespo
     _add_rate_limit_headers(key_info, response)
 
     config = _cfg()
-    store = _open_store(config, project)
+    store = _open_store(config, key_info, project)
     stats = store.get_stats()
     store.close()
     return StatsResponse(
@@ -276,7 +382,7 @@ def query_project(project: str, req: QueryRequest, key_info: AuthDep, response: 
     _add_rate_limit_headers(key_info, response)
 
     config = _cfg()
-    store = _open_store(config, project)
+    store = _open_store(config, key_info, project)
     stats = store.get_stats()
     if stats["node_count"] == 0:
         store.close()
@@ -310,7 +416,7 @@ async def extract_project(project: str, req: ExtractRequest, key_info: AuthDep, 
         )
 
     config = _cfg()
-    db_path = get_db_path(config, project)
+    db_path = _get_db_path(config, key_info, project)
     if not db_path.parent.exists():
         raise HTTPException(
             status_code=404,
@@ -347,19 +453,24 @@ async def extract_project(project: str, req: ExtractRequest, key_info: AuthDep, 
         node["source_transcript"] = req.source_name
         node.setdefault("created_at", now)
 
-    store = _open_store(config, project, must_exist=False)
+    store = _open_store(config, key_info, project, must_exist=False)
 
-    # Enforce node limit before writing
-    if _USE_ADMIN_DB and key_info.get("tier") not in (None, "local"):
-        current_stats = store.get_stats()
-        try:
-            check_node_limit(key_info.get("tier", "free"), current_stats["node_count"])
-        except ValueError as exc:
-            store.close()
-            raise HTTPException(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail=str(exc))
+    # Wrap merge in a transaction to ensure atomicity
+    # Node limit check and merge must happen together to prevent TOCTOU race
+    try:
+        with store.conn:  # SQLite context manager for transaction
+            # Enforce node limit before writing
+            if _USE_ADMIN_DB and key_info.get("tier") not in (None, "local"):
+                current_stats = store.get_stats()
+                try:
+                    check_node_limit(key_info.get("tier", "free"), current_stats["node_count"])
+                except ValueError as exc:
+                    # Transaction will auto-rollback when exiting the context
+                    raise HTTPException(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail=str(exc))
 
-    store.merge_extraction(nodes, edges)
-    store.close()
+            store.merge_extraction(nodes, edges)
+    finally:
+        store.close()
 
     quality = score_extraction_quality(nodes, edges, req.text)
     return ExtractResponse(
@@ -377,7 +488,7 @@ def export_project(project: str, key_info: AuthDep, response: Response) -> dict:
     _add_rate_limit_headers(key_info, response)
 
     config = _cfg()
-    store = _open_store(config, project)
+    store = _open_store(config, key_info, project)
     all_nodes = store.get_all_nodes()
     store.close()
 
@@ -399,6 +510,144 @@ def export_project(project: str, key_info: AuthDep, response: Response) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# OpenAI-compatible proxy endpoint
+# ---------------------------------------------------------------------------
+#
+# Usage (drop-in replacement for any OpenAI SDK call):
+#
+#   client = openai.OpenAI(
+#       base_url="http://localhost:8000/v1",
+#       api_key="any",          # Engram auth uses CB_API_KEY header, not this
+#   )
+#   client.chat.completions.create(
+#       model="gemini-2.5-flash",
+#       messages=[{"role": "user", "content": "..."}],
+#       extra_headers={"X-Engram-Project": "MyProject"},
+#   )
+#
+# Engram injects retrieved graph context as a system message, then forwards
+# the augmented request to the configured LLM endpoint (llm.base_url in
+# config.yaml).  The response is passed through unchanged so it is fully
+# compatible with any downstream OpenAI SDK parser.
+
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+
+class ChatCompletionRequest(BaseModel):
+    model: str = ""
+    messages: list[ChatMessage]
+    stream: bool = False
+    temperature: float | None = None
+    max_tokens: int | None = None
+
+
+@app.post("/v1/chat/completions")
+async def chat_completions(
+    req: ChatCompletionRequest,
+    key_info: AuthDep,
+    raw_response: Response,
+    x_engram_project: str | None = Header(default=None, alias="X-Engram-Project"),
+) -> Response:
+    """OpenAI-compatible chat completions proxy with Engram context injection.
+
+    Pass ``X-Engram-Project: <name>`` to inject graph context for that project.
+    The last user message is used as the retrieval query.  Context is prepended
+    as a system message (or merged into an existing system message).
+
+    Supports both streaming (``stream: true``) and non-streaming responses.
+    """
+    _add_rate_limit_headers(key_info, raw_response)
+
+    config = _cfg()
+    llm_cfg = config.get("llm", {})
+
+    # Build mutable message list
+    messages: list[dict] = [{"role": m.role, "content": m.content} for m in req.messages]
+
+    # --- context injection ---------------------------------------------------
+    if x_engram_project:
+        db_path = _get_db_path(config, key_info, x_engram_project)
+        if db_path.exists():
+            query = next(
+                (m.content for m in reversed(req.messages) if m.role == "user"),
+                None,
+            )
+            if query:
+                store = GraphStore(db_path)
+                try:
+                    result = retrieve_with_stats(
+                        store,
+                        query,
+                        hops=config.get("defaults", {}).get("hops", 3),
+                        top_k=config.get("defaults", {}).get("top_k", 25),
+                        strategies=dict(config.get("strategies", {})),
+                    )
+                    if result.markdown:
+                        context_block = (
+                            f"## Engram Project Knowledge ({x_engram_project})\n\n"
+                            f"{result.markdown}"
+                        )
+                        if messages and messages[0]["role"] == "system":
+                            messages[0]["content"] = (
+                                context_block + "\n\n---\n\n" + messages[0]["content"]
+                            )
+                        else:
+                            messages.insert(0, {"role": "system", "content": context_block})
+                finally:
+                    store.close()
+
+    # --- build forwarded payload ---------------------------------------------
+    base_url = llm_cfg.get("base_url", "http://localhost:1234/v1").rstrip("/")
+    model = req.model or llm_cfg.get("model", "")
+
+    payload: dict = {"model": model, "messages": messages, "stream": req.stream}
+    if req.temperature is not None:
+        payload["temperature"] = req.temperature
+    if req.max_tokens is not None:
+        payload["max_tokens"] = req.max_tokens
+
+    forward_headers: dict[str, str] = {"Content-Type": "application/json"}
+    api_key_env = llm_cfg.get("api_key_env")
+    api_key: str | None = None
+    if api_key_env:
+        api_key = os.environ.get(api_key_env)
+    elif llm_cfg.get("api_key"):
+        api_key = llm_cfg["api_key"]
+    if api_key:
+        forward_headers["Authorization"] = f"Bearer {api_key}"
+
+    import httpx
+
+    upstream_url = f"{base_url}/chat/completions"
+    timeout = llm_cfg.get("timeout", 300.0)
+
+    # --- streaming path ------------------------------------------------------
+    if req.stream:
+        async def _stream() -> bytes:  # type: ignore[return]
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                async with client.stream(
+                    "POST", upstream_url, json=payload, headers=forward_headers
+                ) as resp:
+                    async for chunk in resp.aiter_bytes():
+                        yield chunk
+
+        return StreamingResponse(_stream(), media_type="text/event-stream")
+
+    # --- non-streaming path --------------------------------------------------
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        upstream = await client.post(upstream_url, json=payload, headers=forward_headers)
+
+    return Response(
+        content=upstream.content,
+        media_type="application/json",
+        status_code=upstream.status_code,
+    )
+
+
+# ---------------------------------------------------------------------------
 # LemonSqueezy webhook
 # ---------------------------------------------------------------------------
 
@@ -414,6 +663,13 @@ async def lemonsqueezy_webhook(request: Request) -> dict:
     Signature verification requires LS_WEBHOOK_SECRET env var.
     If unset, the endpoint rejects all requests (fail-safe).
     """
+    # Check if webhook secret is configured before processing
+    if not os.environ.get("LS_WEBHOOK_SECRET", ""):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Webhook secret not configured — contact support",
+        )
+
     body = await request.body()
     signature = request.headers.get("X-Signature", "")
 
@@ -439,9 +695,11 @@ async def lemonsqueezy_webhook(request: Request) -> dict:
 
         conn = open_admin_db()
         raw_key = create_key(conn, email=email, tier=tier)
+
+        # Try to send the key; on failure, queue for retry
+        send_key_email(email, raw_key, tier, admin_conn=conn)
         conn.close()
 
-        send_key_email(email, raw_key, tier)
         return {"ok": True, "event": event, "tier": tier}
 
     elif event == "subscription_cancelled":

@@ -1,57 +1,28 @@
-# Engram API Server
-#
-# Build:
-#   docker build -t engram .
-#
-# Run (local, no auth):
-#   docker run -p 8000:8000 -v /host/projects:/data/projects engram
-#
-# Run (production, with auth):
-#   docker run -p 8000:8000 \
-#     -v /host/projects:/data/projects \
-#     -e CB_API_KEY=secret \
-#     -e LLM_BASE_URL=https://api.openai.com/v1 \
-#     -e LLM_MODEL=gpt-4o-mini \
-#     -e LLM_API_KEY=sk-... \
-#     engram
-
-FROM python:3.12-slim
+FROM python:3.13-slim
 
 WORKDIR /app
 
-# System deps for tiktoken / native tokeniser compilation
+# Install build tools for any native extensions
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy dependency manifest first for layer caching
+# Copy project files
 COPY pyproject.toml ./
-COPY engram/__init__.py ./engram/__init__.py
-
-# Install package with API extras (fastapi + uvicorn)
-RUN pip install --no-cache-dir -e ".[api]"
-
-# Copy source after deps to keep the expensive install layer cached
 COPY engram/ ./engram/
 
-# Persistent project storage — mount a volume here
-RUN mkdir -p /data/projects
+# Install with api + monitoring extras (no dev or semantic extras)
+RUN pip install --no-cache-dir -e ".[api,monitoring]"
 
-# Entrypoint writes a minimal config.yaml from env vars so the server
-# sees the right projects_dir and LLM settings without needing a mounted file.
-COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+# Persistent data volume
+VOLUME ["/data"]
 
-# Optional API key — unset = open access (local dev)
-ENV CB_API_KEY=""
-ENV CB_PROJECTS_DIR="/data/projects"
-ENV LLM_BASE_URL="http://localhost:1234/v1"
-ENV LLM_MODEL="gpt-4o-mini"
-# Set LLM_API_KEY at runtime; leave blank for local endpoints
+# Runtime env defaults (all overridable at deploy time)
+ENV PROJECTS_DIR=/data/projects \
+    CB_USE_ADMIN_DB=1 \
+    PORT=8000
 
 EXPOSE 8000
 
-ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
-CMD ["uvicorn", "engram.api_server:app", \
-     "--host", "0.0.0.0", "--port", "8000", \
-     "--workers", "1"]
+# Entrypoint: start uvicorn using PORT env var so Fly.io/Railway can override
+CMD ["sh", "-c", "uvicorn engram.api_server:app --host 0.0.0.0 --port ${PORT}"]

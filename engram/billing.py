@@ -6,9 +6,11 @@ Admin DB schema (separate from per-project graph DBs):
 
 Environment variables:
   CB_ADMIN_DB       — path to admin.db (default: ~/.context-broker/admin.db)
-  LS_WEBHOOK_SECRET — LemonSqueezy webhook signing secret
-  LS_PRO_VARIANT_ID — LemonSqueezy variant ID for Pro plan
-  LS_TEAM_VARIANT_ID — LemonSqueezy variant ID for Team plan
+  LS_WEBHOOK_SECRET         — LemonSqueezy webhook signing secret
+  LS_PRO_VARIANT_ID         — LemonSqueezy variant ID for Pro monthly
+  LS_PRO_ANNUAL_VARIANT_ID  — LemonSqueezy variant ID for Pro annual
+  LS_TEAM_VARIANT_ID        — LemonSqueezy variant ID for Team monthly
+  LS_TEAM_ANNUAL_VARIANT_ID — LemonSqueezy variant ID for Team annual
   RESEND_API_KEY    — Resend email API key (omit for dev/stdout mode)
 """
 
@@ -82,7 +84,7 @@ def get_admin_db_path() -> Path:
 def open_admin_db(db_path: Path | None = None) -> sqlite3.Connection:
     path = db_path or get_admin_db_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(path))
+    conn = sqlite3.connect(str(path), timeout=30.0)
     conn.row_factory = sqlite3.Row
     init_admin_db(conn)
     return conn
@@ -110,6 +112,17 @@ def init_admin_db(conn: sqlite3.Connection) -> None:
             timestamp   TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_usage_key ON usage_log(key_hash);
+
+        CREATE TABLE IF NOT EXISTS dead_letter_emails (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            email       TEXT NOT NULL,
+            api_key     TEXT NOT NULL,
+            tier        TEXT NOT NULL,
+            created_at  REAL NOT NULL,
+            retry_count INTEGER NOT NULL DEFAULT 0,
+            last_attempt REAL
+        );
+        CREATE INDEX IF NOT EXISTS idx_dead_letter_email ON dead_letter_emails(email);
     """)
     conn.commit()
 
@@ -225,8 +238,18 @@ def log_usage(
 # Email delivery (Resend)
 # ---------------------------------------------------------------------------
 
-def send_key_email(email: str, raw_key: str, tier: str) -> None:
-    """Send API key to customer via Resend. Falls back to stdout in dev mode."""
+def send_key_email(email: str, raw_key: str, tier: str, admin_conn: sqlite3.Connection | None = None) -> None:
+    """Send API key to customer via Resend. Falls back to stdout in dev mode.
+
+    On delivery failure, inserts a row into the dead_letter_emails table for retry.
+
+    Args:
+        email: Customer email address
+        raw_key: The raw API key to send
+        tier: Tier name (free, pro, team)
+        admin_conn: Optional AdminDB connection for dead-letter queueing. If not provided
+                   and delivery fails, the key is lost (dev mode).
+    """
     resend_key = os.environ.get("RESEND_API_KEY", "")
     tier_label = TIERS.get(tier, {}).get("label", tier.title())
 
@@ -256,7 +279,7 @@ def send_key_email(email: str, raw_key: str, tier: str) -> None:
             "https://api.resend.com/emails",
             headers={"Authorization": f"Bearer {resend_key}"},
             json={
-                "from": "Engram <noreply@contextbroker.ai>",
+                "from": "Engram <noreply@engram.unbidden.ai>",
                 "to": [email],
                 "subject": subject,
                 "text": body,
@@ -265,8 +288,104 @@ def send_key_email(email: str, raw_key: str, tier: str) -> None:
         )
         resp.raise_for_status()
     except Exception as exc:
-        # Non-fatal: key was already created; log and continue
-        print(f"[billing] Email delivery failed for {email!r}: {exc}")
+        # Non-fatal: key was already created; queue for retry if we have a connection
+        error_msg = str(exc)
+        print(f"[billing] Email delivery failed for {email!r}: {error_msg}")
+
+        if admin_conn:
+            now = time.time()
+            try:
+                admin_conn.execute(
+                    """INSERT INTO dead_letter_emails (email, api_key, tier, created_at, retry_count, last_attempt)
+                       VALUES (?, ?, ?, ?, 0, ?)""",
+                    (email, raw_key, tier, now, now),
+                )
+                admin_conn.commit()
+                print(f"[billing] Queued email for retry: {email!r}")
+            except Exception as queue_exc:
+                print(f"[billing] Failed to queue email for retry: {queue_exc}")
+
+
+# ---------------------------------------------------------------------------
+# Dead-letter email retry
+# ---------------------------------------------------------------------------
+
+def retry_dead_letter_emails(admin_conn: sqlite3.Connection, max_retries: int = 3) -> int:
+    """Retry sending emails from the dead-letter queue.
+
+    Returns the number of successfully sent emails.
+    """
+    # Get all pending emails with retry_count < max_retries
+    rows = admin_conn.execute(
+        """SELECT id, email, api_key, tier FROM dead_letter_emails
+           WHERE retry_count < ?
+           ORDER BY created_at ASC""",
+        (max_retries,),
+    ).fetchall()
+
+    success_count = 0
+    for row in rows:
+        email_id = row[0]
+        email = row[1]
+        raw_key = row[2]
+        tier = row[3]
+
+        try:
+            # Try to send (without passing admin_conn to avoid infinite recursion)
+            resend_key = os.environ.get("RESEND_API_KEY", "")
+            if not resend_key:
+                # Skip in dev mode
+                continue
+
+            import httpx
+            tier_label = TIERS.get(tier, {}).get("label", tier.title())
+            subject = f"Your Engram {tier_label} API Key"
+            body = (
+                f"Hi,\n\n"
+                f"Thanks for subscribing to Engram {tier_label}!\n\n"
+                f"Your API key:\n\n"
+                f"  {raw_key}\n\n"
+                f"Add it to your environment:\n\n"
+                f"  export CB_API_KEY={raw_key}\n\n"
+                f"Or in your config:\n\n"
+                f"  Authorization: Bearer {raw_key}\n\n"
+                f"Keep this key secret — it cannot be recovered if lost. "
+                f"Contact support to rotate it.\n\n"
+                f"— Engram Team\n"
+            )
+
+            resp = httpx.post(
+                "https://api.resend.com/emails",
+                headers={"Authorization": f"Bearer {resend_key}"},
+                json={
+                    "from": "Engram <noreply@engram.unbidden.ai>",
+                    "to": [email],
+                    "subject": subject,
+                    "text": body,
+                },
+                timeout=10.0,
+            )
+            resp.raise_for_status()
+
+            # Success: remove from dead-letter queue
+            admin_conn.execute("DELETE FROM dead_letter_emails WHERE id = ?", (email_id,))
+            admin_conn.commit()
+            success_count += 1
+            print(f"[billing] Retry succeeded for {email!r}")
+
+        except Exception as exc:
+            # Update retry count and last_attempt
+            now = time.time()
+            admin_conn.execute(
+                """UPDATE dead_letter_emails
+                   SET retry_count = retry_count + 1, last_attempt = ?
+                   WHERE id = ?""",
+                (now, email_id),
+            )
+            admin_conn.commit()
+            print(f"[billing] Retry failed for {email!r} (attempt retry_count++): {exc}")
+
+    return success_count
 
 
 # ---------------------------------------------------------------------------
@@ -283,10 +402,25 @@ def verify_ls_signature(body: bytes, signature: str) -> bool:
 
 
 def tier_from_variant(variant_id: str) -> str:
-    """Map a LemonSqueezy variant ID to a tier name."""
-    if variant_id == os.environ.get("LS_TEAM_VARIANT_ID", ""):
+    """Map a LemonSqueezy variant ID to a tier name.
+
+    Checks both monthly and annual variant IDs for each tier:
+      LS_PRO_VARIANT_ID        — Pro monthly
+      LS_PRO_ANNUAL_VARIANT_ID — Pro annual
+      LS_TEAM_VARIANT_ID       — Team monthly
+      LS_TEAM_ANNUAL_VARIANT_ID — Team annual
+    """
+    team_ids = {
+        os.environ.get("LS_TEAM_VARIANT_ID", ""),
+        os.environ.get("LS_TEAM_ANNUAL_VARIANT_ID", ""),
+    } - {""}
+    if variant_id in team_ids:
         return "team"
-    if variant_id == os.environ.get("LS_PRO_VARIANT_ID", ""):
+    pro_ids = {
+        os.environ.get("LS_PRO_VARIANT_ID", ""),
+        os.environ.get("LS_PRO_ANNUAL_VARIANT_ID", ""),
+    } - {""}
+    if variant_id in pro_ids:
         return "pro"
     return "free"
 

@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "engram"
 version = "0.1.0"
 description = "A context intelligence layer for LLM workflows"
-requires-python = ">=3.11"
+requires-python = ">=3.13,<3.14"
 dependencies = [
     "click>=8.0",
     "httpx>=0.25",
@@ -20,6 +20,8 @@ dependencies = [
 dev = ["pytest>=7.0", "pytest-asyncio>=0.21", "ruff>=0.4"]
 api = ["fastapi>=0.100", "uvicorn[standard]>=0.22"]
 semantic = ["sqlite-vec", "sentence-transformers"]
+monitoring = ["sentry-sdk[fastapi]>=2.0"]
+openclaw = ["pyyaml>=6.0"]  # no extra deps beyond core; pyyaml already required
 
 [project.scripts]
 engram = "engram.cli:cli"
@@ -30,7 +32,7 @@ include = ["engram*", "orchestrator*"]
 
 [tool.ruff]
 line-length = 120
-target-version = "py311"
+target-version = "py313"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]

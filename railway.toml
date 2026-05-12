@@ -1,0 +1,17 @@
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+healthcheckPath = "/v1/health"
+healthcheckTimeout = 300
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 10
+
+# Environment variables to set in the Railway dashboard (Settings → Variables):
+#
+#   CB_USE_ADMIN_DB=1
+#   LS_WEBHOOK_SECRET=<from LemonSqueezy dashboard>
+#   SENTRY_DSN=<from Sentry project settings>
+#
+# Railway injects PORT automatically — do not set it manually.
