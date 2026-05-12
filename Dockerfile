@@ -14,9 +14,6 @@ COPY engram/ ./engram/
 # Install with api + monitoring extras (no dev or semantic extras)
 RUN pip install --no-cache-dir -e ".[api,monitoring]"
 
-# Persistent data volume
-VOLUME ["/data"]
-
 # Runtime env defaults (all overridable at deploy time)
 ENV PROJECTS_DIR=/data/projects \
     CB_USE_ADMIN_DB=1 \
