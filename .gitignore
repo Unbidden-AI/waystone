@@ -12,3 +12,4 @@ benchmarks/locomo/data/*.json
 .DS_Store
 .context-broker
 .claude/
+benchmarks/longmemeval/data/*.json
