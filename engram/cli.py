@@ -80,13 +80,17 @@ def init(ctx, project):
         click.echo(f"Project '{project}' already exists at {project_dir}")
         return
 
-    project_dir.mkdir(parents=True)
-    (project_dir / "transcripts").mkdir()
-    (project_dir / "exports").mkdir()
+    try:
+        project_dir.mkdir(parents=True)
+        (project_dir / "transcripts").mkdir()
+        (project_dir / "exports").mkdir()
 
-    db_path = get_db_path(config, project)
-    store = GraphStore(db_path)
-    store.close()
+        db_path = get_db_path(config, project)
+        store = GraphStore(db_path)
+        store.close()
+    except (PermissionError, OSError) as e:
+        click.echo(f"Error: Cannot initialize project '{project}': {e}", err=True)
+        sys.exit(1)
 
     click.echo(f"Initialized project '{project}' at {project_dir}")
 
@@ -97,7 +101,7 @@ _MAX_FILE_BYTES = 50 * 1024 * 1024  # 50 MB hard limit
 
 @cli.command("extract")
 @click.argument("project")
-@click.argument("transcript_file", type=click.Path(exists=True))
+@click.argument("transcript_file", type=click.Path())
 @click.option("--verify", is_flag=True, help="Run a second verification pass to catch missed facts")
 @click.option("--lessons", is_flag=True, help="Run a targeted pass hunting for lesson_learned nodes (failed approaches, rejected alternatives)")
 @click.option("--decisions", is_flag=True, help="Run a targeted pass hunting for decision nodes and their rationale")
@@ -126,6 +130,9 @@ def extract_cmd(ctx, project, transcript_file, verify, lessons, decisions, quest
         sys.exit(1)
 
     transcript_path = Path(transcript_file)
+    if not transcript_path.exists():
+        click.echo(f"Error: Transcript file '{transcript_file}' not found.", err=True)
+        sys.exit(1)
     file_size = transcript_path.stat().st_size
     if file_size > _MAX_FILE_BYTES:
         click.echo(
@@ -134,7 +141,15 @@ def extract_cmd(ctx, project, transcript_file, verify, lessons, decisions, quest
         )
         sys.exit(1)
 
-    transcript_text = transcript_path.read_text()
+    try:
+        transcript_text = transcript_path.read_text()
+    except UnicodeDecodeError as e:
+        click.echo(
+            f"Error: Could not read {transcript_path} as UTF-8: {e}\n"
+            f"Try saving the file as UTF-8 and try again.",
+            err=True,
+        )
+        sys.exit(1)
 
     # Auto-chunk: use explicit --chunk-size if given, otherwise chunk anything
     # over 20000 chars at 20000 (safe default for Gemini 2.5 Flash and similar models).
@@ -900,6 +915,92 @@ def show(ctx, project, failures):
                 click.echo(f"  [{node['type']}] {node['fact'][:80]}  ({tags})")
 
     store.close()
+
+
+@cli.command()
+@click.argument("project")
+@click.option("--top-k", default=None, type=int, help="Assumed nodes retrieved per query (default: from config)")
+@click.option("--queries", default=100, type=int, help="Query count for cumulative savings projection (default 100)")
+@click.pass_context
+def savings(ctx, project, top_k, queries):
+    """Estimate token and cost savings from using Engram vs full-context replay."""
+    config = _load_cfg(ctx.obj["config_path"])
+    db_path = get_db_path(config, project)
+
+    if not db_path.parent.exists():
+        click.echo(f"Error: Project '{project}' not found.", err=True)
+        sys.exit(1)
+
+    store = GraphStore(db_path)
+    stats = store.get_stats()
+    node_count = stats["node_count"]
+
+    if node_count == 0:
+        click.echo(f"Project '{project}' has no nodes yet. Run 'engram extract' first.")
+        store.close()
+        return
+
+    # Average fact length from actual node data
+    row = store.conn.execute(
+        "SELECT AVG(LENGTH(fact)) FROM nodes WHERE is_active = 1 OR is_active IS NULL"
+    ).fetchone()
+    avg_fact_chars = row[0] or 200.0
+
+    # Tags add ~half their JSON byte size in real content
+    tag_row = store.conn.execute(
+        "SELECT AVG(LENGTH(tags)) FROM nodes WHERE is_active = 1 OR is_active IS NULL"
+    ).fetchone()
+    avg_tags_chars = (tag_row[0] or 60.0) * 0.5
+    avg_node_chars = avg_fact_chars + avg_tags_chars
+    avg_tokens_per_node = avg_node_chars / 4.0  # ~4 chars/token
+
+    full_tokens = int(node_count * avg_tokens_per_node)
+
+    # Retrieval: top_k entry nodes expanded by BFS hops
+    default_top_k = config.get("defaults", {}).get("top_k", 10)
+    effective_top_k = top_k or default_top_k
+    hops = config.get("defaults", {}).get("hops", 3)
+    bfs_multiplier = min(2.5, 1.0 + hops * 0.5)  # hops=3 → ~2.5×, hops=1 → ~1.5×
+    retrieved_nodes = min(int(effective_top_k * bfs_multiplier), node_count)
+    retrieval_tokens = int(retrieved_nodes * avg_tokens_per_node)
+
+    savings_pct = (1.0 - retrieval_tokens / full_tokens) * 100 if full_tokens > 0 else 0.0
+
+    store.close()
+
+    # Price table: (label, $/1M input tokens)  — approximate list prices
+    PRICE_POINTS = [
+        ("Gemini 2.5 Flash-Lite", 0.10),
+        ("Gemini 2.5 Flash",      0.15),
+        ("Claude Haiku 4.5",      0.80),
+        ("Claude Sonnet 4.6",     3.00),
+    ]
+
+    click.echo(f"\nEngram Memory Savings — {project}")
+    click.echo("─" * 52)
+    click.echo(f"Graph:             {node_count:,} nodes  ·  {stats['edge_count']:,} edges")
+    click.echo(f"Avg node size:     ~{int(avg_tokens_per_node)} tokens  ({int(avg_node_chars)} chars)")
+    click.echo()
+    click.echo("Context per query:")
+    click.echo(f"  Full graph replay:   {full_tokens:>9,} tokens")
+    click.echo(f"  Engram retrieval:    {retrieval_tokens:>9,} tokens  (~{retrieved_nodes} nodes, top_k={effective_top_k}, hops={hops})")
+    click.echo(f"  Reduction:           {savings_pct:.0f}% fewer tokens per query")
+    click.echo()
+    click.echo(f"Estimated cost savings  (over {queries:,} queries, input tokens only):")
+    header = f"  {'Model':<26}  {'Full-ctx/q':>12}  {'Engram/q':>10}  {'Per-query':>10}  {'×{:,} queries'.format(queries):>13}"
+    click.echo(header)
+    click.echo(f"  {'─'*26}  {'─'*12}  {'─'*10}  {'─'*10}  {'─'*13}")
+    for label, price_per_m in PRICE_POINTS:
+        full_cost = full_tokens * price_per_m / 1_000_000
+        engram_cost = retrieval_tokens * price_per_m / 1_000_000
+        saved_per_q = full_cost - engram_cost
+        total_saved = saved_per_q * queries
+        click.echo(
+            f"  {label:<26}  ${full_cost:>11.4f}  ${engram_cost:>9.4f}  ${saved_per_q:>9.4f}  ${total_saved:>12.2f}"
+        )
+    click.echo()
+    click.echo("Note: based on graph topology and default retrieval settings.")
+    click.echo("Actual savings depend on query patterns and BFS traversal depth.")
 
 
 @cli.command()

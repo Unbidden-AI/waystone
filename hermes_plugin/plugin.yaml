@@ -1,0 +1,9 @@
+name: engram
+version: 0.1.0
+description: >
+  Engram — structured, DAG-based long-term memory for Hermes Agent.
+  Extracts facts from conversations into a typed knowledge graph (SQLite, zero infra)
+  and retrieves relevant subgraphs via BFS traversal. Supports confidence scoring,
+  temporal validity, supersession tracking, and fully offline / air-gapped operation.
+pip_dependencies:
+  - engram

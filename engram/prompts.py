@@ -763,16 +763,26 @@ Schema:
 EXISTING CONTEXT (already extracted — do NOT re-extract these):
 {existing_context}
 
-EXTRACT only DURABLE, MEANINGFUL preferences — the kind that would answer "what does this person like/dislike?":
+EXTRACT only DURABLE, MEANINGFUL preferences — the kind that would answer "what does this person like/dislike?" or "what are they interested in?":
 
 1. EXPLICIT STATED LIKES/DISLIKES: "I like X", "I love X", "I hate X", "I can't stand X", "my favorite is X", "I prefer X"
 2. RECURRING HABITS / ROUTINES: "I usually X", "I always X", "I typically X", "every morning I X" — only if the behavior is habitual, not one-time
 3. STRONG IMPLICIT PREFERENCES: Clear positive/negative reaction to a SPECIFIC item (not vague reactions like "that was nice")
 4. PREFERENCE UPDATES: "I used to like X but now I prefer Y" — use supersedes to link to the old preference node if already extracted
+5. INTELLECTUAL INTERESTS & DOMAIN AFFINITIES: Professional, academic, or hobby domains the user actively studies, works in, or follows. Extract as "User is interested in [domain]". Examples:
+   - User describes their research area, thesis topic, or field of study → preference node for that domain
+   - User discusses following a specific industry, technology, or topic space → preference node
+   - User asks detailed questions about a domain, revealing deep familiarity or active interest → preference node
+   These answer questions like "what publications/conferences/topics would this person find interesting?"
+6. POSITIVE EXPERIENTIAL PREFERENCES: Named venues, events, or activities the user attended and clearly enjoyed — even a single visit implies a genre/format preference. Extract the GENRE/TYPE preference, not just the instance:
+   - Attended and enjoyed a horror-themed event → "User enjoys horror-themed experiences / Halloween events"
+   - Visited a specific type of restaurant and loved it → "User enjoys [cuisine type] restaurants"
+   - Attended a specialized conference and found it valuable → "User values [conference type] events"
+   These answer "what should I recommend for this person's next trip / event / outing?"
 
 SKIP:
-- Fleeting one-off reactions or casual filler ("I liked that movie" when it's the only mention)
-- Opinions about events, news, or other people's choices
+- Purely casual one-off filler reactions with no genre implication ("that was a nice lunch" with no further context)
+- Opinions about other people's choices or external news events
 - Context already captured in EXISTING CONTEXT
 
 RULES:
@@ -780,14 +790,18 @@ RULES:
 - The fact must be self-contained: state WHO has the preference, WHAT they like/dislike/do (specific value, not just a category), and any qualifying context.
 - Format as a declarative statement: "The user prefers oat milk lattes over regular coffee" NOT "I like lattes".
 - Tag with the topic (broad: "coffee", "exercise") AND specific value ("oat milk latte", "trail running"). Always include "preference" as a tag.
-- CRITICAL — CATEGORY BRIDGING TAGS: For any preference involving a specific brand, product model, or named item, ALSO add generic category tags that a question would use to find it. Examples:
+- CRITICAL — CATEGORY BRIDGING TAGS: For any preference involving a specific brand, product model, named item, domain, or experience, ALSO add generic category tags that a question would use to find it. Examples:
     • "Zagg screen protectors for iPhone 13 Pro" → also tag: "phone accessories", "mobile accessories", "phone", "accessories"
     • "prefers Merrell trail shoes" → also tag: "footwear", "shoes", "hiking gear"
     • "wind down by 9:30pm" or "reads before bed" → also tag: "evening", "evening routine", "nighttime", "bedtime"
     • "morning cold brew" → also tag: "morning", "morning routine", "coffee", "morning drink"
     • "vegetarian diet" or "avoids gluten" → also tag: "diet", "food", "eating", "dietary restrictions"
     • "uses standing desk at work" → also tag: "work setup", "workspace", "office"
-  The goal: if someone asks "what accessories does this person use for their phone?", the tag "phone accessories" must be present even if the fact says "Zagg screen protector for iPhone 13 Pro".
+    • "interested in AI applications in healthcare" → also tag: "AI", "artificial intelligence", "healthcare", "research", "publications", "conferences"
+    • "enjoys horror-themed events / Halloween Horror Nights" → also tag: "theme park", "Halloween", "horror", "events", "entertainment", "attractions", "Universal Studios"
+    • "interested in machine learning research" → also tag: "ML", "machine learning", "AI", "research", "papers", "conferences", "NeurIPS", "ICML"
+    • "prefers ocean-view hotel rooms" → also tag: "hotel", "accommodation", "travel", "lodging", "ocean view", "view"
+  The goal: if someone asks "what publications would this person find interesting?" or "what hotel should I recommend?", the broad category tags must be present to surface these nodes via keyword matching.
 - AIM FOR 3–8 NODES per call. Do NOT emit trivial or redundant preferences. Hard cap: 10 nodes maximum per call.
 - If a preference supersedes a previously extracted one, set supersedes to the old node's ID.
 - If nothing meaningful is found, return {"nodes": [], "edges": []}.

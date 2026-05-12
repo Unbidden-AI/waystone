@@ -23,6 +23,7 @@ Usage (from extractor.py or scoring.py):
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 from typing import TYPE_CHECKING
@@ -412,7 +413,9 @@ def get_provider(config: dict) -> LLMProvider | None:
         log.warning("use_native_sdk=true but no Gemini API key found — falling back")
         return None
 
-    cache_key = f"{model}:{api_key}"
+    # Hash the API key to avoid leaking it in cache keys or logs
+    key_hash = hashlib.sha256(api_key.encode()).hexdigest()[:16]
+    cache_key = f"{model}:{key_hash}"
     if cache_key in _provider_instances:
         return _provider_instances[cache_key]
 

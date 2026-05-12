@@ -2564,3 +2564,355 @@ The dominant cost in the pipeline is the embedding-based scoring passes (semanti
 ### Recommendation
 
 Keep AutoSearch as a latency knob for production-scale deployments (`autosearch: true`, `autosearch_threshold: 0.40`). Do not enable by default in benchmark configs — recall neutrality is good, but the latency benefit requires larger graphs to be significant. The p95 regression on small graphs makes it mildly harmful as a default.
+
+---
+
+## Embedded Graph Database Evaluation — RAG / Scale Architecture
+
+*April 2026*
+
+### Motivation
+
+Engram's current SQLite backend has a known scaling ceiling: BFS via per-hop SQL queries degrades around 200K–500K nodes on dense graphs, and SQLite does not natively provide vector search or concurrent multi-process writes. Two use-case pressures drove this evaluation:
+
+1. **RAG adaptation** — using Engram's extractor as a preprocessing layer for static document corpora, where graph depth and node count could reach millions.
+2. **Hook-based continuous writes** — multiple Claude Code sessions writing to the same project simultaneously; SQLite handles this via WAL but at contention cost.
+
+The goal was to identify whether an off-the-shelf embedded database could replace SQLite and handle all four requirements natively.
+
+---
+
+### The Four Requirements
+
+Any replacement database must satisfy all four:
+
+| # | Requirement | Why It Matters |
+|---|-------------|---------------|
+| 1 | **Multi-writer (concurrent writes)** | Multiple hook processes write facts simultaneously during active sessions |
+| 2 | **Vector search (ANN)** | Semantic retrieval — embedding cosine similarity for SmartVector and AutoSearch |
+| 3 | **Incremental FTS indexing** | BM25 keyword search must update incrementally as nodes are added, without full index rebuild |
+| 4 | **Graph traversal** | BFS over node neighborhoods; O(1) neighbor lookups are critical at scale |
+
+---
+
+### Candidates Evaluated
+
+#### Kuzu
+- **What it is:** Graph-native embedded database, Cypher query language, C++ core, MIT license.
+- **Strengths:** Direct pointer-based adjacency lists (O(1) neighbor lookups), property graph model, active development, permissive license.
+- **Blocker 1 — Immutable FTS:** BM25 full-text indexes are built once at creation and cannot be updated incrementally. Adding new nodes requires DROP + recreate of the entire index — prohibitive for continuous hook-based writes.
+- **Blocker 2 — Single-writer:** Only one `READ_WRITE` Database object may exist per store at a time. A second process attempting to open the database for write raises `BufferManager` or lock errors. No MVCC; no serialized write queue built in.
+- **Verdict for vanilla Engram:** Blocked on both issues. Not viable as a drop-in replacement.
+- **Verdict for RAG-only Engram:** Blocker 2 disappears (single-process batch extraction). Blocker 1 is acceptable for batch workloads (rebuild FTS at end of each extraction batch). **Viable for RAG.** This is the recommended starting point for a RAG adaptation before committing to a custom database.
+
+#### LadybugDB (Kuzu fork, Predictable Labs)
+- **What it is:** Kuzu fork with OPFS support, BSD compat, WAL checkpoint improvements, buffer manager fixes. v0.15.4.2 (April 2026).
+- **Blockers:** Inherits both Kuzu blockers unchanged. v0.15.4.2 is a maintenance/bugfix release — no changes to FTS architecture or write concurrency model.
+- **Verdict:** Not a viable alternative to Kuzu. Tracks Kuzu closely; any Kuzu fix will appear here eventually but on Kuzu's timeline.
+
+#### RyuGraph (Kuzu fork, v25.9.1)
+- **What it is:** Another Kuzu fork. Column-store and query optimizer improvements.
+- **Blockers:** Inherits both Kuzu blockers unchanged. FTS index architecture not modified. Single-writer constraint not addressed.
+- **Verdict:** Same blockers, same verdict as LadybugDB.
+
+#### Cozo (MPL-2.0)
+- **What it is:** Embedded graph + relational database with Datalog query language, Tantivy-backed FTS, RocksDB or memory storage.
+- **Strengths:** Mutable Tantivy FTS (incremental add/update/delete — solves Blocker 1). Datalog is natural for recursive graph queries.
+- **Blocker:** Single-writer via RocksDB file locks. Only one process can hold the RocksDB write lock at a time. Does not support concurrent multi-process writes.
+- **License concern:** MPL-2.0 is file-level copyleft. Files that import Cozo must be MPL-2.0 or compatible. Not GPL-viral, but requires careful isolation if Engram is commercial. Consult legal before adopting.
+- **Verdict:** Solves FTS mutability but not multi-writer. Partial improvement over Kuzu; MPL license adds friction.
+
+#### DuckDB (MIT)
+- **What it is:** In-process OLAP columnar database; MVCC concurrent reads, SQL, excellent for analytics.
+- **Strengths:** Truly concurrent readers (MVCC), fast columnar scans, MIT license.
+- **Blockers:** No multi-process concurrent writes (single-writer, like SQLite WAL but no built-in serialization). No native FTS. No native graph traversal — adjacency list queries require multiple self-joins, not BFS.
+- **Verdict:** Excellent analytical store. Wrong shape for Engram's access pattern.
+
+#### SurrealDB
+- **What it is:** Multi-model database: document + graph + relational + FTS, multi-writer, mutable indexes.
+- **Why disqualified:** Business Source License 1.1 (BSL 1.1). Converts to Apache 2.0 after a delay, but cannot be used in commercial products before the conversion date. Violates Engram's license policy (MIT/Apache 2.0/BSD/Public Domain only). Do not adopt.
+
+#### FalkorDB
+- **What it is:** Redis-based graph database, Cypher, RedisGraph successor.
+- **Why disqualified:** Server Source Public License (SSPL). SSPL requires open-sourcing the entire service stack if the software is offered as a service. Violates license policy. Do not adopt.
+
+---
+
+### Why the "Unicorn" Embedded Database Does Not Exist
+
+No single permissively-licensed embedded database satisfies all four requirements today:
+
+- **Multi-writer + graph:** Kuzu has graph, not multi-writer.
+- **Multi-writer + FTS:** Cozo has mutable FTS, not multi-writer (RocksDB single-writer).
+- **Multi-writer + vectors + FTS + graph:** SurrealDB satisfies all four but BSL disqualifies it.
+
+The market gap is real. The path forward is composition.
+
+---
+
+### Lance + Tantivy + Graph Layer Architecture
+
+The recommended path for full requirements satisfaction under a permissive license is to compose three specialized primitives:
+
+| Requirement | Primitive | License | Notes |
+|-------------|-----------|---------|-------|
+| Multi-writer | **Apache Lance** | Apache 2.0 | MVCC via versioned fragment files; multiple writers produce independent fragments, merged on read |
+| Vector search | **Apache Lance** | Apache 2.0 | HNSW index built-in; integrated with the same storage layer as graph data |
+| Incremental FTS | **Tantivy** (via `tantivy-py`) | MIT | Mutable BM25; add/update/delete without full rebuild; segments merge in background |
+| Graph traversal | **Custom adjacency layer** | — | Lance tables for nodes/edges + CSR in-memory index for O(1) neighbor lookups |
+
+#### Apache Lance
+
+Lance is a columnar storage format (similar to Parquet but optimized for ML workloads). Key properties:
+- **MVCC via versioned fragments:** Each writer appends new fragment files independently. Readers always see a consistent snapshot from their transaction start. Merge/compaction runs asynchronously.
+- **No global write lock:** Multiple processes can write simultaneously because each write is a new immutable fragment, not an in-place update.
+- **HNSW vector search:** Built into the format; ANN queries run directly against Lance without a separate vector index service.
+- **Columnar scans:** Fast for batch reads (whole-graph export, analytics, training data export).
+
+#### Tantivy / tantivy-py
+
+Tantivy is a Rust full-text search library (the engine behind Meilisearch and others). `tantivy-py` exposes Python bindings.
+- **Mutable index:** `writer.add_document()` / `writer.delete_documents()` / `writer.commit()` — no DROP+recreate required.
+- **BM25 + phrase search:** Equivalent quality to Kuzu's FTS, but updateable.
+- **Segment-based:** New documents go into small in-memory segments, background merger compacts them. Reads are always consistent.
+- **Separate from Lance:** Tantivy index lives alongside Lance files in the project directory. Needs explicit sync on write (add node to Lance → add document to Tantivy in same transaction scope, or with a repair pass on startup).
+
+#### Graph Layer: CSR In-Memory Index
+
+SQLite's graph traversal is not graph-native — adjacency is stored in a B-tree and BFS requires a SQL query per hop. Kuzu is graph-native because it uses direct pointer-based adjacency lists.
+
+The recommended approach for a Lance-backed graph is to build a **CSR (Compressed Sparse Row)** index in memory at startup:
+
+```
+startup:
+  load all edges from Lance → build CSR dict: node_id → [neighbor_ids]
+  BFS now uses dict lookups, no I/O per hop
+
+incremental updates:
+  new edge written to Lance
+  CSR entry updated in-place (append to neighbor list)
+  hot-reload supported without full rebuild
+```
+
+This gives graph-native BFS performance (O(1) per neighbor lookup) while persisting the graph in Lance's columnar format. For stores up to ~5M edges, the CSR fits comfortably in memory (a 5M-edge graph with 16-byte UUIDs consumes ~240MB).
+
+**Note:** SQLite is *not* columnar storage. It is a B-tree row store. The "graph on columnar" model is Lance + CSR, not SQLite.
+
+#### Python BFS vs. Rust Extension
+
+| | Python BFS + CSR | Rust Extension |
+|---|---|---|
+| **Implementation effort** | Low — pure Python dict lookups | High — FFI, PyO3, build toolchain |
+| **Performance (1M edges)** | ~10–50ms per query | ~1–5ms per query |
+| **Performance (10M+ edges)** | ~100–500ms, GIL contention | ~10–50ms, no GIL |
+| **When to start** | Phase 1 — validate architecture | Phase 3 — after product/market fit |
+| **When it becomes necessary** | >5M edges in production | Same threshold |
+| **CSR RAM** | ~240MB at 5M edges | Same (CSR lives in shared memory) |
+
+**Recommendation:** Start with Python BFS. The crossover point where Rust becomes necessary is around 5M edges — well beyond current Engram scale (30K nodes as of April 2026). Build the Rust extension as a Phase 3 optimization if and when production load justifies it.
+
+#### Cypher and Datalog Query Layers
+
+These are optional query language layers on top of the graph primitives. For internal Engram use, Python BFS is sufficient and neither is required. Their value is for **external API queryability** (v4+ in the roadmap):
+
+| | Cypher | Datalog |
+|---|---|---|
+| **Style** | Declarative pattern matching, ASCII art graph syntax | Logic programming, recursive rules |
+| **Strength** | Path finding, variable-length traversal, industry standard (Neo4j, Kuzu, FalkorDB) | Natural for transitive closure, aggregate graph queries |
+| **Adoption** | Wider — familiar to anyone who has used Neo4j | Narrower — more academic, used in Cozo, Datomic |
+| **Recommended for Engram?** | Yes, if exposing a query API in v4 | Optional — Datalog is a superset of what Cypher handles for recursive queries, but Cypher has far more tooling |
+
+If a query API is built, Cypher is the better default for developer familiarity. Datalog is worth considering for power users doing complex recursive graph queries (e.g., "all facts reachable within 3 hops of this entity that were extracted before date X").
+
+---
+
+### Extended Requirements: Features Commonly Needed for This Database Class
+
+Beyond the four core requirements, a production AI agent memory database needs the following. These are not optional enhancements — several are design-time decisions that cannot be retrofitted cleanly.
+
+#### Foundational (must be designed in from day one)
+
+**Embedding model versioning**
+Embeddings from different models live in incompatible vector spaces. Upgrading from `text-embedding-3-small` to `text-embedding-3-large` invalidates every existing vector — they cannot be compared to new ones. The database must track which model version produced each embedding, support mixed-version stores during migration, and run background re-embedding without blocking queries. If this is not in the schema from day one, a model upgrade means a full store rebuild or a silent accuracy cliff where old nodes never surface in new queries.
+
+**Conflict resolution / merge semantics**
+Multi-writer solves "two writers can both write simultaneously." It does not answer: "two writers both extracted a fact about the same entity at the same time — now what?" Lance's fragment model keeps both writers' data, but the graph layer needs explicit merge semantics for edges. Options: last-write-wins, higher-confidence-wins, or a manual review queue for conflicts above a threshold. Without a defined policy, multi-writer stores accumulate contradictory edge states silently.
+
+**Tiered storage / hot-cold archiving**
+Without automatic archiving, stores grow unboundedly and retrieval *actively degrades* — old low-relevance nodes still score well enough to consume top_k slots. Nodes not accessed in N days should be demoted to a cold tier: still queryable, deprioritized and slower to load, freeing hot-tier space for recent facts. This is the database-level implementation of the roadmap's `fact decay` concept. A 3-year-old Engram store at 500K nodes with no archiving will have retrieval dilution that no strategy tuning can fix.
+
+#### High Priority (needed before production scale)
+
+**Embedding compression / quantization**
+At 1M nodes with 1536-dimensional float32 embeddings, vector storage alone is ~6GB. Binary quantization gives 32× compression with ~5% ANN recall loss; product quantization gives 16–64× with better recall characteristics. Quantization must be a storage-time decision (not a query-time flag) with the tradeoff documented. Without it, vector storage dominates disk and memory costs at scale.
+
+**Query result caching / memoization**
+Hooks fire after every session. If the same project receives near-identical queries from multiple agents (e.g., "what's the current auth approach" from 15 sessions), the full ANN + BFS + strategy pipeline runs 15 times on identical inputs. A query cache keyed on (embedding hash, graph version, strategy config) with a short TTL (5 minutes) eliminates most repeated work. Critical for the v5 multi-agent scenario where multiple agents query the same project simultaneously.
+
+**Cross-store atomicity**
+Lance and Tantivy are separate write targets. A process crash between a Lance write and the corresponding Tantivy write leaves the node in the graph but not in the FTS index. Implement as a write-ahead log with a startup repair pass that detects and closes gaps. Without this, FTS index drift accumulates silently on any non-clean shutdown.
+
+#### Important (needed for ecosystem and long-term ops)
+
+**Time-travel queries**
+Lance's versioned fragment model makes point-in-time queries nearly free to implement. "What did the graph look like at timestamp T?" is directly useful for the existing `--at-time` retrieval flag and for debugging extraction regressions. Expose as a first-class query parameter. Most graph databases don't provide this at all.
+
+**Hybrid query in a single pass**
+Currently Engram runs vector → BFS → FTS as sequential pipeline stages with RRF combination. A purpose-built database could run all three in one pass: nodes within embedding distance X AND containing keyword Y AND reachable from node Z within N hops. This is the hard research problem in multi-model databases. Approximate solutions (predicate pushdown on ANN + BFS-bounded FTS) are achievable; exact solutions require tight storage integration between the three index types.
+
+**Property filtering on ANN queries**
+"Top-10 most semantically similar nodes with confidence > 0.8 extracted after 2026-01-01." Standard ANN indexes return global nearest neighbors and post-filter, which wastes the recall budget. Filtered ANN (IVF with predicate pushdown) is the correct solution and is rarely implemented well in embedded databases. Lance has early support for this; it needs to be a first-class query path in the graph layer.
+
+**Approximate graph analytics**
+PageRank, betweenness centrality, community detection — for identifying hub nodes (facts with many dependents), orphan nodes (isolated facts, likely extraction artifacts), and topic clusters. Not needed for basic retrieval but valuable for graph health monitoring, the v6 observability roadmap, and for surfacing which facts are structurally most important to preserve during cold-tier archiving.
+
+**Change data capture (CDC)**
+"What changed since the last time I queried?" Useful for cache invalidation, incremental embedding refresh when a node fact is updated, and audit logs. Lance's versioned fragments make this nearly free: diff fragment version N-1 vs N to get the delta. Expose as a first-class API call.
+
+**Import / export interoperability**
+Export to Parquet, Arrow, JSON-L, RDF Turtle, NetworkX GraphML. Import from those formats. Table stakes for ecosystem adoption at v4+. Lance gives Parquet-compatible export nearly for free; graph topology export is the additional work.
+
+**Background maintenance scheduler**
+Lance compaction, Tantivy segment merging, CSR hot-reload, re-embedding on model upgrade, cold-tier archiving — all need to run without blocking reads or writes. A priority-lane scheduler (low-priority background vs high-priority user query) prevents maintenance from degrading query latency during active sessions.
+
+**Multi-tenancy / namespace isolation**
+One database process, multiple projects, zero cross-project leakage with row-level security enforced at query time. The schema must be designed for tenant_id from the start — retrofitting it into a 5M-node store is a migration nightmare. Needed before v7/v8 multi-user deployment.
+
+#### Summary Table
+
+| Feature | Priority | Design-time? | Phase |
+|---------|----------|-------------|-------|
+| Embedding model versioning | Critical | ✅ yes | 1 |
+| Cross-store atomicity (WAL repair) | Critical | ✅ yes | 1 |
+| Conflict resolution / merge semantics | Critical | ✅ yes | 1 |
+| Multi-tenancy schema | Critical | ✅ yes | 1 |
+| Tiered storage / hot-cold archiving | High | no | 2 |
+| Embedding compression / quantization | High | no | 2 |
+| Query result caching | High | no | 2 |
+| Change data capture (CDC) | High | no | 2 |
+| Time-travel queries | Medium | no | 2 |
+| Property filtering on ANN | Medium | no | 2–3 |
+| Background maintenance scheduler | Medium | no | 2 |
+| Approximate graph analytics | Medium | no | 3 |
+| Hybrid query (single pass) | Low/research | no | 3+ |
+| Import / export interoperability | Low | no | 3 |
+
+---
+
+### RAG-Specific Engram: Recommended Starting Point
+
+For a RAG corpus adaptation (batch extraction, not hook-based continuous writes):
+
+- **Use Kuzu.** The single-writer blocker does not apply to single-process batch extraction. The FTS immutability blocker is acceptable for batch workloads (rebuild at end of each extraction run, not per-node).
+- **This is the validation vehicle.** Build Engram RAG on Kuzu to validate the product hypothesis before investing in a custom database layer.
+- **Migration path is clean:** The Engram extractor and retrieval pipeline are decoupled from the storage backend. A `KuzuStore` can be swapped in alongside `GraphStore` (SQLite) without rewriting extraction or retrieval logic. The Lance+Tantivy store can later be swapped in the same way.
+
+---
+
+### Development Path: Lance + Tantivy + Graph Layer
+
+This is the path to a purpose-built database layer that satisfies all four core requirements under permissive licenses, extended to cover the production requirements identified above.
+
+**Decided: ANNS with re-ranking as the vector retrieval pattern**
+Binary or PQ quantization for the initial ANN candidate fetch (fast, compressed); exact float32 cosine re-ranking over the top-N candidates before passing to BFS and the strategy pipeline. This gets most of the storage and speed benefits of quantization with near-zero recall loss. Applies to the Lance HNSW index. Re-ranking candidate pool size is configurable (default: top-100 from ANN → re-rank → top-k to BFS).
+
+**Quantization: where the gains actually are**
+The primary benefit of quantization is not disk savings — it's RAM and search speed. At 1M nodes:
+- Float32 HNSW in-memory index: ~12–24GB RAM
+- Binary quantized HNSW: ~400MB–1GB RAM
+That difference determines whether the index fits on a laptop. Disk savings (~6GB → 6.2GB when storing both float32 and binary) are secondary. Search speed also improves: binary vector comparison (bitwise AND + popcount) is ~10–30× faster than float32 dot product, with better CPU cache utilization.
+
+Storing both float32 and quantized vectors in the hot store is correct for Engram's current scale (sub-1M nodes). Float32 vectors are needed for the re-ranking step and for future re-quantization if the scheme changes. At 10M+ nodes, revisit a tiered approach: quantized vectors in hot store, float32 on cold/cheap storage, fetched only for re-ranking top-100 candidates (~10–20ms cold fetch latency acceptable at that scale). At current scale (35K nodes, ~210MB total), disk is not the constraint.
+
+**Phase 1 — Foundation (3–4 months)**
+Goals: all four core requirements satisfied; design-time decisions locked in correctly.
+- Implement `LanceStore` as a drop-in alongside `GraphStore`
+- Lance tables: `nodes`, `edges`, `embeddings` — schema includes `tenant_id` and `embedding_model_version` from day one
+- Tantivy index alongside Lance files; write-ahead log for cross-store atomicity; startup repair pass to close any write gaps
+- Python BFS over CSR in-memory index (O(1) neighbor lookups)
+- ANNS with re-ranking: binary quantization → ANN top-100 → exact float32 re-rank → top-k to BFS
+- HNSW index via Lance native API; quantized vectors stored alongside original float32 for re-ranking
+- Conflict resolution policy: higher-confidence-wins with a `conflict_log` table for manual review above threshold
+- Multi-tenancy: `tenant_id` on all rows, enforced at query layer
+- All four core requirements satisfied; all design-time requirements locked in
+
+**Phase 2 — Production Hardening (2–3 months)**
+Goals: ready for multi-user, multi-agent, long-running production deployments.
+- Tiered storage: automatic cold-tier archiving for nodes not accessed in N days (configurable TTL)
+- Embedding compression: binary quantization as default; product quantization available via config flag
+- Query result cache: keyed on (embedding hash, graph version, strategy config), 5-minute TTL
+- Change data capture: Lance fragment diff exposed as `store.changes_since(version)` API
+- Time-travel queries: `store.at_time(iso8601)` — thin wrapper over Lance versioned fragments
+- Background maintenance scheduler: Lance compaction, Tantivy merge, CSR hot-reload, priority lanes
+- Property filtering on ANN: predicate pushdown for confidence and recency filters on vector queries
+- Migrate benchmark configs to `LanceStore`; validate recall parity vs SQLite on LOCOMO
+- Migrate production Engram instances; deprecate `GraphStore` for new projects
+
+**Phase 3 — Scale and Ecosystem (ongoing, as needed)**
+Goals: performance at >5M edges; external queryability; ecosystem adoption.
+- Rust BFS extension when >5M edges in production (PyO3, replaces Python CSR BFS)
+- Tantivy index sharding for very large corpora
+- Approximate graph analytics: PageRank, centrality, community detection (graph health monitoring + v6 observability)
+- Hybrid query: single-pass vector + BFS + FTS with RRF (research track; approximate solution first)
+- Import/export: Parquet, Arrow, JSON-L, NetworkX GraphML — Lance gives Parquet nearly for free
+- Cypher query layer if external API queryability is required (v4 roadmap)
+- Embedding model upgrade path: background re-embedding job, mixed-version store support during migration
+
+**Solo developer feasibility:** Yes. Lance Python bindings (`pylance`) are stable. `tantivy-py` is well-documented. The CSR index is ~100 lines of Python. The primary complexity is cross-store atomicity (WAL repair pass) and embedding model versioning (schema discipline). Both are solvable at Phase 1 if designed in from the start. Total estimated effort: **6–12 months** for Phases 1–2 with AI tooling. Phase 3 is ongoing optimization, not a hard deadline. Compare: 18–24 months for a Kuzu MVCC fork; 3–5 person-years for a database engine from scratch.
+
+**License summary for this stack:**
+
+| Component | License | Status |
+|-----------|---------|--------|
+| Apache Lance | Apache 2.0 | ✅ Approved |
+| tantivy-py | MIT | ✅ Approved |
+| Custom graph layer | Engram proprietary | ✅ |
+| PyO3 (if Rust extension) | MIT/Apache 2.0 | ✅ Approved |
+
+---
+
+## PureDocBench — Document Parsing Benchmark Analysis (2026-05-11)
+
+**Source:** arXiv 2605.07492, summarized by Norm / TLDR AI newsletter
+
+### What PureDocBench Is
+A programmatically-generated document parsing benchmark with source-traceable ground truth. Documents are rendered from HTML/CSS, so correctness is verifiable — no human annotation errors. Coverage: 10 domains, 66 subcategories, 1,475 pages × 3 quality tiers (clean / digitally-degraded / real-degraded) = 4,425 test images, 40 models evaluated.
+
+### OmniDocBench Reliability Problem
+Auditing of the widely-used OmniDocBench found **2,580 annotation errors out of 21,353 scored blocks — 12.08% error rate**. Every leaderboard ranking from OmniDocBench should be treated skeptically; models were partly ranked by agreement with wrong ground truth.
+
+### Key Results (40 models)
+| Finding | Detail |
+|---------|--------|
+| Best performer | ~74/100 — document parsing far from solved |
+| Performance spread | 44.6 points between best and worst |
+| Small specialists | ≤4B param parsers matched or beat VLMs 5–100× larger |
+| Formula recognition | No model exceeded 67% — universal weak point |
+| Degradation robustness | General VLMs degrade more gracefully than pipeline specialists |
+
+### Engram Implications
+1. **Graph quality is bounded by parse quality.** Engram's LLM extraction pass receives whatever text the parser produces — bad parses propagate into the graph.
+2. **OmniDocBench training contamination.** Any model trained/eval'd against OmniDocBench may have absorbed its errors. Numeric and structured facts in tables are likely the most affected category (noise in annotation ∝ visual complexity).
+3. **Small specialist parser as pre-processor.** A ≤4B param document parser before Engram's LLM extraction pass could improve node quality at negligible cost increase. Candidate integration point: `engram extract` preprocessing pipeline.
+4. **Formula/table → numeric recall gap.** The ≤67% formula recall ceiling maps directly to the pattern of numeric-threshold recall failures seen in LOCOMO (q_pipe_03-style questions). Root cause may be upstream, not in Engram's extraction prompt.
+5. **Action item:** Evaluate top-ranked small specialist parsers as optional `--parser` flag for `engram extract` (see candidate list below).
+
+### Candidate Small Parsers for `--parser` Integration (2026-05-11)
+
+Sourced from OmniDocBench v1.5/v1.6 leaderboard (primary 2026 document parsing benchmark). All handle PDF + raster images; all output clean markdown.
+
+| Model | Params | OmniDocBench Score | License | Install |
+|-------|--------|--------------------|---------|---------|
+| **MinerU2.5-Pro** | 1.2B | **95.69** (SOTA) | OpenDataLab | `pip install "mineru-vl-utils[transformers]"` |
+| **GLM-OCR** | 0.9B | 94.62 | MIT | `pip install glm-ocr` |
+| **PaddleOCR-VL-1.5** | 0.9B | 94.50 | Apache 2.0 | `pip install "paddleocr[doc-parser]"` |
+
+All three exceed Gemini 3 Pro (90.33) at 20–250× fewer parameters.
+
+**Formula recognition standout:** MinerU2.5-Pro scores 97.29 CDM on formula extraction — directly relevant to LOCOMO q_pipe_03-style numeric recall failures. This is the pre-processor to target for that class of failures.
+
+**Recommended integration plan:**
+- `engram extract --parser glm-ocr doc.pdf` → GLM-OCR converts to clean markdown → existing LLM extraction unchanged
+- Default tier: GLM-OCR (MIT, 0.9B, 1.86 pages/sec, consumer GPU compatible)
+- Quality tier: MinerU2.5-Pro (SOTA accuracy, especially formula/table)
+- Text-only inputs (no `--parser` flag) — zero change to existing workflow

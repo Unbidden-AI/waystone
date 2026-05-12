@@ -153,7 +153,7 @@ DEFAULT_STRATEGIES = {
     "cross_encoder_rerank": False,  # Post-BFS re-ranking: score (query, fact) pairs via cross-encoder
     "process_slots": 5,  # Reserved slots for process nodes before top_k cut (0 = disabled)
     "preference_fanout": False,  # Inject all preference nodes when query contains preference-signal verbs
-    "preference_fanout_cap": 20,  # Max preference nodes to inject (ranked by cosine sim to query; 0 = unlimited)
+    "preference_fanout_cap": 50,  # Max preference nodes to inject (ranked by cosine sim to query; 0 = unlimited)
     "semantic_retrieval": False,  # Independent linear scan: all node embeddings → top-K by cosine, union with BFS pool
     "semantic_retrieval_k": 40,   # How many top-cosine nodes to inject from the linear scan
     "extend_stop_words": False,   # Add counting/temporal words to stop list (LOCOMO only; hurts LME multi-session)
@@ -288,6 +288,15 @@ def retrieve_with_stats(
             - token_budget (int): Max estimated tokens in output (0 = off)
             - relevance_scoring (bool): Rank entry nodes by tag overlap count
     """
+    # Check for empty graph early
+    stats = store.get_stats()
+    if stats["node_count"] == 0:
+        return RetrievalResult(
+            markdown="Graph is empty — extract a transcript first: engram extract <project> <transcript_file>",
+            nodes_before_strategies=0,
+            nodes_after_strategies=0,
+        )
+
     strats = {**DEFAULT_STRATEGIES, **(strategies or {})}
 
     # Auto-route temporal queries: enable timeline output + proximity boost.
@@ -655,7 +664,7 @@ def retrieve_with_stats(
     # prevents the ~250-node full-inject from polluting multi-session retrieval where some
     # preference nodes happen to have non-zero cosine scores.
     if strats.get("preference_fanout"):
-        query_tokens = set(task_description.lower().split())
+        query_tokens = set(re.sub(r"[^\w\s]", " ", task_description.lower()).split())
         if query_tokens & _PREFERENCE_SIGNAL_VERBS:
             collected_ids = {n["id"] for n in collected_nodes}
             pref_nodes = store.get_nodes_by_type("preference")

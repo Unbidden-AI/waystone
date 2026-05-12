@@ -1,0 +1,52 @@
+app = "engram-api"
+primary_region = "ord"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  CB_USE_ADMIN_DB = "1"
+  PORT = "8000"
+
+# Secrets to set via `fly secrets set` (NOT stored in fly.toml):
+#   LS_WEBHOOK_SECRET=...
+#   SENTRY_DSN=...
+#   SMTP_HOST=...   (if email delivery is configured)
+
+[mounts]
+  source = "engram_data"
+  destination = "/data"
+
+[[services]]
+  internal_port = 8000
+  protocol = "tcp"
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[services.ports]]
+    handlers = ["tls", "http"]
+    port = 443
+    force_https = true
+
+  [[services.ports]]
+    handlers = ["http"]
+    port = 80
+
+  [services.concurrency]
+    type = "requests"
+    hard_limit = 250
+    soft_limit = 200
+
+  [[services.http_checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "get"
+    path = "/v1/health"
+    port = 8000
+    timeout = "5s"
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1

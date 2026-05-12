@@ -1,6 +1,9 @@
 """Tests for the MCP server tools."""
 
 import asyncio
+import json
+import subprocess
+import sys
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -184,3 +187,47 @@ class TestMcpToolsAllLoad:
         assert "engram_extract" in names
         assert "engram_stats" in names
         assert "engram_list_projects" in names
+
+
+class TestMcpJsonRpcHandshake:
+    """End-to-end integration test: spawn engram-mcp, send JSON-RPC initialize, verify response."""
+
+    def test_initialize_handshake(self):
+        """Spawn the MCP server subprocess and verify the JSON-RPC initialize handshake."""
+        # Build the initialize request per MCP/JSON-RPC 2.0 spec
+        init_request = json.dumps({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "test-client", "version": "0.0.1"},
+            },
+        }) + "\n"
+
+        # Use the installed console script; fall back to invoking run_server via -c
+        proc = subprocess.Popen(
+            [sys.executable, "-c", "from engram.mcp_server import run_server; run_server()"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        try:
+            stdout, _ = proc.communicate(input=init_request.encode(), timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            raise AssertionError("MCP server did not respond within 10 seconds")
+
+        # Parse the first line of output as JSON-RPC
+        lines = [l for l in stdout.decode().splitlines() if l.strip()]
+        assert lines, "MCP server produced no stdout output"
+        response = json.loads(lines[0])
+
+        assert response.get("jsonrpc") == "2.0"
+        assert response.get("id") == 1
+        assert "result" in response, f"Expected 'result', got: {response}"
+        result = response["result"]
+        assert "serverInfo" in result or "protocolVersion" in result, (
+            f"Unexpected initialize result shape: {result}"
+        )

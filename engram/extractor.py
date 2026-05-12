@@ -27,6 +27,33 @@ log = logging.getLogger(__name__)
 _EXISTING_ID_PATTERN = re.compile(r"^n_[0-9a-f]{8}$")
 
 
+def _classify_llm_error(exc: Exception, status_code: int | None = None) -> str:
+    """Classify an LLM error into actionable categories.
+
+    Returns one of: "auth", "rate_limit", "quota", "timeout", "api"
+    """
+    exc_str = str(exc).lower()
+
+    # Auth errors
+    if status_code in (401, 403) or any(term in exc_str for term in ("invalid api key", "authentication", "unauthorized")):
+        return "auth"
+
+    # Rate limit errors
+    if status_code == 429 or "rate limit" in exc_str or "quota exceeded" in exc_str:
+        return "rate_limit"
+
+    # Quota/billing errors
+    if any(term in exc_str for term in ("quota", "billing", "insufficient quota")):
+        return "quota"
+
+    # Timeout errors
+    if isinstance(exc, (asyncio.TimeoutError, TimeoutError)) or "timeout" in exc_str:
+        return "timeout"
+
+    # Everything else
+    return "api"
+
+
 class ExtractionBuffer:
     """Buffers conversation turns and decides when to flush to the LLM."""
 
@@ -211,7 +238,11 @@ async def _call_llm(prompt: str, config: dict, domain_profile=None) -> str:
                         await asyncio.sleep(wait)
                         continue
                     response.raise_for_status()
-                    data = response.json()
+                    try:
+                        data = response.json()
+                    except json.JSONDecodeError as e:
+                        raw = response.text[:200]
+                        raise ValueError(f"LLM returned non-JSON response (status {response.status_code}): {raw!r}") from e
                     choice = data["choices"][0]
                     finish_reason = choice.get("finish_reason")
                     content = choice["message"]["content"]
@@ -328,15 +359,37 @@ async def extract(transcript_text: str, config: dict, store=None, source_transcr
         extraction = parse_llm_response(content)
     except Exception as exc:
         error_msg = str(exc)
+
+        # Classify the error for better user feedback
+        if "Could not parse JSON" in error_msg:
+            error_type = "json_parse"
+        else:
+            error_type = _classify_llm_error(exc)
+
         if store:
             store.log_extraction_failure(
-                error_type="json_parse" if "Could not parse JSON" in error_msg else "api",
+                error_type=error_type,
                 error_message=error_msg,
                 raw_response=content if "content" in locals() else "",
                 source_transcript=source_transcript,
                 model=config.get("llm", {}).get("model", ""),
             )
-        raise
+
+        # Provide actionable error messages based on error type
+        if error_type == "auth":
+            raise ValueError(
+                "LLM authentication failed — check your API key in config.yaml or GEMINI_API_KEY env var"
+            ) from exc
+        elif error_type == "rate_limit":
+            raise ValueError("LLM rate limit hit — wait a moment and try again") from exc
+        elif error_type == "quota":
+            raise ValueError("LLM quota exceeded — check your API plan or billing") from exc
+        elif error_type == "timeout":
+            raise ValueError(
+                "LLM request timed out — try increasing `llm.timeout` in config.yaml"
+            ) from exc
+        else:
+            raise
     result = assign_ids(extraction)
     nodes = result["nodes"]
     edges = result["edges"]

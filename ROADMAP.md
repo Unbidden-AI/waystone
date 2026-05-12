@@ -332,6 +332,60 @@ The combination of `process` nodes + `reflect` + in-session triggering makes Con
 
 ## Phase 5: Distribution & Growth (ongoing)
 
+### Hermes Agent Memory Provider Integration
+
+**What**: Implement Engram as a first-class memory provider plugin for [Hermes Agent](https://github.com/nousresearch/hermes-agent) (Nous Research, Feb 2026 — 64K+ GitHub stars, ~$1B valuation). Hermes is the fastest-growing open-source autonomous agent platform of 2026, operating across Discord, Telegram, Slack, Email, and 10+ other platforms.
+
+**Why this matters**: Hermes has a first-class, documented `MemoryProvider` plugin interface. Existing providers (Mem0, Honcho, Hindsight, Supermemory) are all plugging into the same interface. Engram's DAG structure + typed nodes + supersedes logic + SQLite (zero infra) is the most differentiated option in that ecosystem. This is a direct distribution channel to 64K+ developers already using Hermes.
+
+**Architecture**: Hermes calls `prefetch(query)` before each turn and `sync_turn(user, assistant)` after each response. Engram maps cleanly:
+
+| Hermes lifecycle hook | Engram operation |
+|---|---|
+| `initialize(session_id)` | Open GraphStore, configure project path |
+| `prefetch(query)` | Run BFS retrieval (`retriever.py`), inject structured context into system prompt |
+| `sync_turn(user, assistant)` | Queue `engram extract` on new turn content (background, non-blocking) |
+| `get_tool_schemas()` | Expose `engram_query`, `engram_search` as Hermes tools |
+| `shutdown()` | Flush extraction queue, close store |
+
+**Implementation** (`plugins/memory/engram/` in the Hermes Agent repo, or as a standalone installable):
+
+```
+plugins/memory/engram/
+├── __init__.py       # EngramMemoryProvider(MemoryProvider) implementation
+├── plugin.yaml       # name, description, config_schema
+└── cli.py            # engram-specific CLI extensions (optional)
+```
+
+Key implementation notes:
+- `prefetch()` must return in ≤5 seconds (Hermes hard deadline) — BFS retrieval is sub-second, safe
+- `sync_turn()` must be non-blocking — queue extraction to a background thread; don't await LLM call
+- `is_available()` checks that the configured Engram project DB exists; no network calls
+- Config fields: `project` (required), `db_path` (optional override), `top_k`, `hops`
+
+**MCP path (orthogonal, already works)**: Hermes is a full MCP client. The existing `engram-mcp` server can be pointed at by any Hermes instance today with zero new code — just add it to Hermes's MCP server list. This is the zero-effort integration; the memory provider plugin is the deeper, lifecycle-aware integration.
+
+**Competitive position among Hermes memory providers**:
+
+| Provider | Storage | Infra required | Graph structure | Temporal validity |
+|---|---|---|---|---|
+| **Engram** | SQLite | None (local file) | DAG + typed edges | ✓ supersedes, valid_to |
+| Mem0 | Vector DB | Cloud API | Flat cards | ✗ |
+| Hindsight | External server | Cloud API | Entity graph | Partial |
+| Honcho | Cloud DB | Cloud API | Flat | ✗ |
+| Supermemory | Cloud DB | Cloud API | Flat | ✗ |
+
+Engram is the only zero-infrastructure, fully local, graph-structured option.
+
+**Implementation effort**: ~1 day. The `MemoryProvider` interface is fully documented and stable.
+
+**Next steps**:
+1. Implement `plugins/memory/engram/__init__.py` against Hermes's abstract `MemoryProvider`
+2. Test against Hermes's CLI gateway (Discord or Telegram session)
+3. Submit as a PR to `nousresearch/hermes-agent` plugins directory
+4. Publish as `engram-hermes` on PyPI for standalone install (`pip install engram-hermes`)
+5. Cross-post to Hermes's Discord/community to claim the memory provider slot before competitors
+
 ### Claude Code Marketplace / MCP Registry
 
 Submit to Anthropic's MCP server registry once it exists. This is the single highest-leverage distribution channel — zero CAC for the target audience.

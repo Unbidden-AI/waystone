@@ -549,6 +549,60 @@ LME_ABLATION_CONFIGS: dict[str, AblationConfig] = {
     # them by scoring every stored embedding against the query and injecting the top-K
     # into the candidate pool before semantic_rerank unifies and re-ranks.
     # Reuses engram_lme_gemini_s_user_patched checkpoints (same as pref_fanout).
+    # Punctuation-fix-only validation (2026-04-23).
+    # Conclusion from testing: adding broad words ("tips", "ideas", "planning") to
+    # _PREFERENCE_SIGNAL_VERBS caused net regressions — fan-out fires on information-seeking
+    # questions ("tips for battery life", "tips for Tokyo navigation") and injects irrelevant
+    # preference nodes that displace correct BFS context. Signal word additions reverted.
+    # Only change vs apr15_repro: re.sub strips punctuation before tokenizing so
+    # "suggestions?" matches "suggestions" in the verb set.
+    # Also discovered: gemini-2.5-flash-lite judge has ~15pp variance on n=30 re-scoring —
+    # not reliable for detecting small preference improvements. temporal_auto_route=False.
+    "engram_lme_s_pref_fix_20260423": AblationConfig(
+        name="engram_lme_s_pref_fix_20260423",
+        description=(
+            "Punctuation-fix-only (Apr-23 2026). re.sub strips punctuation before tokenizing "
+            "so 'suggestions?' matches signal verbs. New signal words (tips/ideas/planning) "
+            "reverted — caused net regressions on information-seeking questions. "
+            "temporal_auto_route=False. Reuses user_patched checkpoints."
+        ),
+        superseded_pruning=True,
+        recency_decay=True,
+        top_k=100,
+        semantic_rerank=True,
+        semantic_rerank_cap=0,
+        dedup_threshold=0.95,
+        domain="episodic_personal",
+        abstention_mode=True,
+        person_anchoring=True,
+        preference_fanout=True,
+        temporal_auto_route=False,
+        checkpoint_source="engram_lme_gemini_s_user_patched",
+    ),
+
+    "engram_lme_s_pref_cap50_20260424": AblationConfig(
+        name="engram_lme_s_pref_cap50_20260424",
+        description=(
+            "Raised preference_fanout_cap 20→50 (Apr-24 2026). Identical to pref_fix_20260423 "
+            "but cap=50 to give the new intellectual-interest and experiential-preference nodes "
+            "(added by preference_pass Apr-23) more room to rank in alongside behavioral prefs. "
+            "Reuses user_patched checkpoints (with Apr-23 pref extraction)."
+        ),
+        superseded_pruning=True,
+        recency_decay=True,
+        top_k=100,
+        semantic_rerank=True,
+        semantic_rerank_cap=0,
+        dedup_threshold=0.95,
+        domain="episodic_personal",
+        abstention_mode=True,
+        person_anchoring=True,
+        preference_fanout=True,
+        preference_fanout_cap=50,
+        temporal_auto_route=False,
+        checkpoint_source="engram_lme_gemini_s_user_patched",
+    ),
+
     "engram_lme_s_semantic_retrieval": AblationConfig(
         name="engram_lme_s_semantic_retrieval",
         description=(
@@ -566,6 +620,37 @@ LME_ABLATION_CONFIGS: dict[str, AblationConfig] = {
         person_anchoring=True,
         semantic_retrieval=True,
         semantic_retrieval_k=40,
+        checkpoint_source="engram_lme_gemini_s_user_patched",
+    ),
+
+    # Combo: semantic_retrieval + preference_fanout, temporal_auto_route=False.
+    # semantic_retrieval alone (26.7% pref) is worse than apr15_repro (50%).
+    # Hypothesis: temporal_auto_route=True in the base config routes temporal-sounding
+    # preference queries to temporal mode, restricting retrieval.  Also, without
+    # preference_fanout the top-40 cosine scan has no preference-type bias.
+    # This config tests whether combining both channels with temporal routing off
+    # beats the apr15_repro baseline.
+    "engram_lme_s_sem_plus_fanout": AblationConfig(
+        name="engram_lme_s_sem_plus_fanout",
+        description=(
+            "Semantic retrieval + preference fan-out + temporal_auto_route=False. "
+            "Full linear cosine scan (k=40) + preference fan-out (top-20 pref nodes). "
+            "temporal_auto_route off to avoid restricting preference queries. "
+            "Reuses user_patched checkpoints."
+        ),
+        superseded_pruning=True,
+        recency_decay=True,
+        top_k=100,
+        semantic_rerank=True,
+        semantic_rerank_cap=0,
+        dedup_threshold=0.95,
+        domain="episodic_personal",
+        abstention_mode=True,
+        person_anchoring=True,
+        preference_fanout=True,
+        semantic_retrieval=True,
+        semantic_retrieval_k=40,
+        temporal_auto_route=False,
         checkpoint_source="engram_lme_gemini_s_user_patched",
     ),
 }

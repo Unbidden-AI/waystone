@@ -69,8 +69,18 @@ class GraphStore:
 
     def __init__(self, db_path: str | Path, dedup_threshold: float = 0.95):
         self.db_path = Path(db_path)
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(str(self.db_path))
+        try:
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        except (PermissionError, OSError) as e:
+            raise RuntimeError(
+                f"Cannot create project database at {self.db_path}: {e}. Check directory permissions."
+            ) from e
+        try:
+            self.conn = sqlite3.connect(str(self.db_path), timeout=30.0)
+        except (PermissionError, OSError) as e:
+            raise RuntimeError(
+                f"Cannot open database at {self.db_path}: {e}. Check file and directory permissions."
+            ) from e
         self.conn.row_factory = sqlite3.Row
         # Performance tuning — applied before any schema work
         self.conn.executescript("""
@@ -94,7 +104,7 @@ class GraphStore:
             log.debug("sqlite-vec extension loaded")
             return True
         except (ImportError, AttributeError, Exception) as e:
-            log.debug("sqlite-vec not available (%s: %s) — semantic search disabled", type(e).__name__, e)
+            log.warning("sqlite-vec not available (%s: %s) — semantic search disabled", type(e).__name__, e)
             return False
 
     def init_db(self):
@@ -1064,6 +1074,53 @@ class GraphStore:
         """Fetch all edges."""
         rows = self.conn.execute("SELECT * FROM edges").fetchall()
         return [dict(r) for r in rows]
+
+    def deactivate_node(self, node_id: str) -> None:
+        """Soft-delete a node by setting is_active=0 and valid_to=now.
+
+        The node is retained in the DB for audit / temporal queries.
+        """
+        expiry = datetime.now(timezone.utc).isoformat()
+        self.conn.execute(
+            "UPDATE nodes SET is_active = 0, valid_to = COALESCE(valid_to, ?) WHERE id = ?",
+            (expiry, node_id),
+        )
+        self.conn.commit()
+
+    def boost_confidence(self, node_id: str, delta: float = 0.02) -> None:
+        """Increment a node's confidence score by delta, capped at 1.0."""
+        self.conn.execute(
+            "UPDATE nodes SET confidence = MIN(1.0, COALESCE(confidence, 0.5) + ?) WHERE id = ?",
+            (delta, node_id),
+        )
+        self.conn.commit()
+
+    def prune_superseded(self) -> int:
+        """Deactivate any nodes that appear in a supersedes list but are still active.
+
+        This is a safety net for nodes that slipped through merge_extraction's
+        supersedes handling (e.g. nodes merged before a superseding node arrived).
+
+        Returns the number of nodes pruned.
+        """
+        expiry = datetime.now(timezone.utc).isoformat()
+        cursor = self.conn.execute(
+            """
+            UPDATE nodes
+            SET is_active = 0,
+                valid_to  = COALESCE(valid_to, ?)
+            WHERE id IN (
+                SELECT DISTINCT je.value
+                FROM nodes n, json_each(n.supersedes) je
+                WHERE json_type(n.supersedes) = 'array'
+                  AND je.value != ''
+            )
+            AND is_active = 1
+            """,
+            (expiry,),
+        )
+        self.conn.commit()
+        return cursor.rowcount
 
     def merge_extraction(self, nodes: list[dict], edges: list[dict]) -> dict[str, str]:
         """Merge extracted nodes and edges into the graph.

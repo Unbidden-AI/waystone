@@ -145,8 +145,12 @@ def get_api_url(config: dict) -> str:
 
 
 def get_api_key(config: dict) -> str | None:
-    """Return API key from config or CB_API_KEY env var."""
-    return config.get("api_key") or os.environ.get("CB_API_KEY") or None
+    """Return API key from CB_API_KEY env var or config file.
+
+    Env var takes precedence over config file so container/CI secrets
+    are never silently overridden by a stale config.yaml value.
+    """
+    return os.environ.get("CB_API_KEY") or config.get("api_key") or None
 
 
 def make_remote_client(config: dict):
