@@ -262,7 +262,7 @@ class TestAPIAuthEdgeCases:
         """Simple API without admin DB (self-hosted mode)."""
         monkeypatch.delenv("CB_USE_ADMIN_DB", raising=False)
         monkeypatch.delenv("LS_WEBHOOK_SECRET", raising=False)
-        monkeypatch.setenv("CB_API_KEY", "self-hosted-secret")
+        monkeypatch.setenv("ENGRAM_API_KEY", "self-hosted-secret")
 
         config = {
             "llm": {"base_url": "http://localhost:1234/v1", "model": "test"},
@@ -504,7 +504,7 @@ class TestAPIEndpointConsistency:
     def api_strict_auth(self, tmp_path, monkeypatch):
         """API with strict auth enabled."""
         monkeypatch.delenv("CB_USE_ADMIN_DB", raising=False)
-        monkeypatch.setenv("CB_API_KEY", "required_key")
+        monkeypatch.setenv("ENGRAM_API_KEY", "required_key")
 
         config = {
             "llm": {"base_url": "http://localhost:1234/v1", "model": "test"},
@@ -524,7 +524,7 @@ class TestAPIEndpointConsistency:
         assert r.status_code == 200
 
     def test_all_other_endpoints_require_auth(self, api_strict_auth):
-        """All other endpoints should require auth when CB_API_KEY is set."""
+        """All other endpoints should require auth when ENGRAM_API_KEY is set."""
         endpoints = [
             ("GET", "/v1/projects"),
             ("POST", "/v1/projects/test"),

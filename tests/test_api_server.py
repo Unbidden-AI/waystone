@@ -68,9 +68,9 @@ class TestHealth:
         assert "version" in r.json()
 
     def test_health_no_auth_needed(self, project_setup, monkeypatch):
-        """Health endpoint is unauthenticated even when CB_API_KEY is set."""
+        """Health endpoint is unauthenticated even when ENGRAM_API_KEY is set."""
         _, _, config = project_setup
-        monkeypatch.setenv("CB_API_KEY", "secret")
+        monkeypatch.setenv("ENGRAM_API_KEY", "secret")
         from engram.api_server import app
         with patch("engram.api_server._cfg", return_value=config):
             with TestClient(app) as c:
@@ -85,7 +85,7 @@ class TestHealth:
 class TestAuth:
     def test_401_when_key_set_and_missing(self, project_setup, monkeypatch):
         _, _, config = project_setup
-        monkeypatch.setenv("CB_API_KEY", "secret")
+        monkeypatch.setenv("ENGRAM_API_KEY", "secret")
         from engram.api_server import app
         with patch("engram.api_server._cfg", return_value=config):
             with TestClient(app) as c:
@@ -94,7 +94,7 @@ class TestAuth:
 
     def test_401_with_wrong_key(self, project_setup, monkeypatch):
         _, _, config = project_setup
-        monkeypatch.setenv("CB_API_KEY", "secret")
+        monkeypatch.setenv("ENGRAM_API_KEY", "secret")
         from engram.api_server import app
         with patch("engram.api_server._cfg", return_value=config):
             with TestClient(app) as c:
@@ -103,7 +103,7 @@ class TestAuth:
 
     def test_200_with_correct_key(self, project_setup, monkeypatch):
         _, _, config = project_setup
-        monkeypatch.setenv("CB_API_KEY", "secret")
+        monkeypatch.setenv("ENGRAM_API_KEY", "secret")
         from engram.api_server import app
         with patch("engram.api_server._cfg", return_value=config):
             with TestClient(app) as c:
@@ -111,8 +111,8 @@ class TestAuth:
         assert r.status_code == 200
 
     def test_open_when_no_key_set(self, api_client, monkeypatch):
-        """No auth required when CB_API_KEY is unset."""
-        monkeypatch.delenv("CB_API_KEY", raising=False)
+        """No auth required when ENGRAM_API_KEY is unset."""
+        monkeypatch.delenv("ENGRAM_API_KEY", raising=False)
         c, _, _ = api_client
         r = c.get("/v1/projects")
         assert r.status_code == 200

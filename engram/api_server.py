@@ -9,9 +9,9 @@ Usage:
     uvicorn context_broker.api_server:app --reload   # dev
 
 Auth:
-    Set CB_API_KEY env var on the server.  Clients pass it as:
+    Set ENGRAM_API_KEY env var on the server.  Clients pass it as:
         Authorization: Bearer <key>
-    When CB_API_KEY is not set, auth is skipped (local dev mode).
+    When ENGRAM_API_KEY is not set, auth is skipped (local dev mode).
 """
 
 from __future__ import annotations
@@ -93,7 +93,7 @@ def _check_auth(
 
     Priority:
       1. If CB_USE_ADMIN_DB=1 — look up key in admin.db, return key row dict.
-      2. If CB_API_KEY is set — simple env-var comparison (self-hosted mode).
+      2. If ENGRAM_API_KEY is set — simple env-var comparison (self-hosted mode).
          Returns a synthetic dict with tier="local".
       3. Otherwise — open access (local dev). Returns {"tier": "local"}.
 
@@ -126,7 +126,7 @@ def _check_auth(
 
         return key_info
 
-    required = os.environ.get("CB_API_KEY", "")
+    required = os.environ.get("ENGRAM_API_KEY", "")
     if not required:
         return {"tier": "local"}  # open access — local dev mode
     if not creds or creds.credentials != required:
@@ -517,7 +517,7 @@ def export_project(project: str, key_info: AuthDep, response: Response) -> dict:
 #
 #   client = openai.OpenAI(
 #       base_url="http://localhost:8000/v1",
-#       api_key="any",          # Engram auth uses CB_API_KEY header, not this
+#       api_key="any",          # Engram auth uses ENGRAM_API_KEY header, not this
 #   )
 #   client.chat.completions.create(
 #       model="gemini-2.5-flash",

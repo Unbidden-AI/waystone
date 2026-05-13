@@ -59,11 +59,11 @@ RATE_LIMITS: dict[str, dict] = {
     },
     "pro": {
         "requests_per_day": 5000,
-        "requests_per_minute": 60,
+        "requests_per_minute": 100,
     },
     "team": {
         "requests_per_day": 50000,
-        "requests_per_minute": 300,
+        "requests_per_minute": 500,
     },
 }
 
@@ -260,7 +260,7 @@ def send_key_email(email: str, raw_key: str, tier: str, admin_conn: sqlite3.Conn
         f"Your API key:\n\n"
         f"  {raw_key}\n\n"
         f"Add it to your environment:\n\n"
-        f"  export CB_API_KEY={raw_key}\n\n"
+        f"  export ENGRAM_API_KEY={raw_key}\n\n"
         f"Or in your config:\n\n"
         f"  Authorization: Bearer {raw_key}\n\n"
         f"Keep this key secret — it cannot be recovered if lost. "
@@ -346,7 +346,7 @@ def retry_dead_letter_emails(admin_conn: sqlite3.Connection, max_retries: int = 
                 f"Your API key:\n\n"
                 f"  {raw_key}\n\n"
                 f"Add it to your environment:\n\n"
-                f"  export CB_API_KEY={raw_key}\n\n"
+                f"  export ENGRAM_API_KEY={raw_key}\n\n"
                 f"Or in your config:\n\n"
                 f"  Authorization: Bearer {raw_key}\n\n"
                 f"Keep this key secret — it cannot be recovered if lost. "

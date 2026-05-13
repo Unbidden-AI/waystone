@@ -1955,7 +1955,7 @@ def serve_cmd(ctx, host, port, reload):
     \b
     Clients configure api_url in config.yaml to route requests here:
         api_url: http://localhost:8000
-        api_key: my-secret   # optional; set CB_API_KEY on server to require it
+        api_key: my-secret   # optional; set ENGRAM_API_KEY on server to require it
 
     Requires the 'api' extra:  pip install 'context-broker[api]'
     """

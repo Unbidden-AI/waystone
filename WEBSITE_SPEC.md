@@ -382,7 +382,7 @@ engram extract my-project MEMORY.md
 
 ### `/docs/api` — REST API Reference
 
-Base URL: `https://api.unbidden.ai` (hosted) or `http://localhost:8000` (self-hosted via `engram serve`)
+Base URL: `https://api.engram.unbidden.ai` (hosted) or `http://localhost:8000` (self-hosted via `engram serve`)
 
 Authentication: `Authorization: Bearer <api-key>` header on all requests except `/v1/health`.
 
@@ -617,7 +617,7 @@ strategies:
 
 # Remote API mode (optional — omit for local-only)
 remote:
-  url: https://api.unbidden.ai
+  url: https://api.engram.unbidden.ai
   api_key: ""               # or set ENGRAM_API_KEY env var
 ```
 
@@ -737,4 +737,4 @@ No. The MCP server runs as a background process. `engram_query` typically return
 - [ ] Confirm `ENGRAM_API_KEY` is the correct env var name for hosted mode
 - [ ] Write Quickstart page from `GETTING_STARTED.md`
 - [ ] Record 30-second demo GIF for product page hero
-- [ ] Decide: hosted API domain — `api.unbidden.ai` or `unbidden.ai/api`?
+- [x] Decide: hosted API domain — `api.engram.unbidden.ai` (decided 2026-05-13)
