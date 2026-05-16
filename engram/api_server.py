@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated
@@ -33,6 +34,7 @@ from .billing import (
     check_node_limit,
     check_project_limit,
     create_key,
+    get_or_create_key_by_email,
     open_admin_db,
     retry_dead_letter_emails,
     revoke_key_by_email,
@@ -84,6 +86,89 @@ _rate_limiter = RateLimiter()
 # ---------------------------------------------------------------------------
 
 _USE_ADMIN_DB = os.environ.get("CB_USE_ADMIN_DB", "").lower() in ("1", "true", "yes")
+
+# ---------------------------------------------------------------------------
+# Clerk JWT validation (for /account/key)
+# ---------------------------------------------------------------------------
+
+_CLERK_JWKS_URL = "https://clerk.unbidden.ai/.well-known/jwks.json"
+_CLERK_SECRET_KEY = os.environ.get("CLERK_SECRET_KEY", "")
+
+_jwks_cache: dict | None = None
+_jwks_fetched_at: float = 0.0
+_JWKS_TTL = 3600.0  # refresh JWKS hourly
+
+
+def _get_clerk_jwks() -> dict:
+    global _jwks_cache, _jwks_fetched_at
+    if _jwks_cache and (time.time() - _jwks_fetched_at) < _JWKS_TTL:
+        return _jwks_cache
+    import httpx
+    r = httpx.get(_CLERK_JWKS_URL, timeout=5.0)
+    r.raise_for_status()
+    _jwks_cache = r.json()
+    _jwks_fetched_at = time.time()
+    return _jwks_cache
+
+
+def _validate_clerk_jwt(token: str) -> dict:
+    """Validate a Clerk session JWT and return its decoded claims.
+
+    Requires PyJWT[crypto] (pyjwt + cryptography) to be installed.
+    Raises HTTPException 401 on any validation failure.
+    """
+    try:
+        import jwt
+        from jwt import PyJWKClient
+    except ImportError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="JWT validation library not installed (pip install 'pyjwt[crypto]')",
+        )
+
+    try:
+        jwks_client = PyJWKClient(_CLERK_JWKS_URL, cache_jwk_set=True, lifespan=3600)
+        signing_key = jwks_client.get_signing_key_from_jwt(token)
+        claims = jwt.decode(
+            token,
+            signing_key.key,
+            algorithms=["RS256"],
+            options={"verify_aud": False},
+        )
+        return claims
+    except Exception as exc:
+        log.warning("Clerk JWT validation failed: %s", exc)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired session token")
+
+
+def _get_email_from_clerk_sub(sub: str) -> str | None:
+    """Look up a user's primary email via Clerk Backend API using the user's sub (ID).
+
+    Requires CLERK_SECRET_KEY env var. Returns None if unavailable.
+    """
+    if not _CLERK_SECRET_KEY:
+        return None
+    try:
+        import httpx
+        r = httpx.get(
+            f"https://api.clerk.com/v1/users/{sub}",
+            headers={"Authorization": f"Bearer {_CLERK_SECRET_KEY}"},
+            timeout=5.0,
+        )
+        if r.status_code != 200:
+            log.warning("Clerk user lookup failed: %s %s", r.status_code, r.text[:200])
+            return None
+        data = r.json()
+        addresses = data.get("email_addresses", [])
+        primary_id = data.get("primary_email_address_id")
+        for addr in addresses:
+            if addr.get("id") == primary_id:
+                return addr.get("email_address")
+        if addresses:
+            return addresses[0].get("email_address")
+    except Exception as exc:
+        log.warning("Clerk user lookup error: %s", exc)
+    return None
 
 
 def _check_auth(
@@ -283,9 +368,8 @@ def get_account(key_info: AuthDep, response: Response) -> AccountResponse:
                     stats = store.get_stats()
                     total_nodes += stats.get("node_count", 0)
                     store.close()
-                except Exception:
-                    # Skip projects that can't be opened
-                    pass
+                except Exception as _proj_exc:
+                    log.warning("Could not open project stats for %s: %s", d.name, _proj_exc)
 
     from engram.billing import RATE_LIMITS
     limits = RATE_LIMITS.get(tier, RATE_LIMITS.get("free", {}))
@@ -445,8 +529,8 @@ async def extract_project(project: str, req: ExtractRequest, key_info: AuthDep, 
                 v = await verify_extraction(req.text, nodes, config)
                 nodes = nodes + v["nodes"]
                 edges = edges + v["edges"]
-            except Exception:
-                pass  # verification failure is non-fatal
+            except Exception as _ve:
+                log.warning("Verification pass failed (non-fatal): %s", _ve, exc_info=True)
 
     now = datetime.now(timezone.utc).isoformat()
     for node in nodes:
@@ -713,3 +797,60 @@ async def lemonsqueezy_webhook(request: Request) -> dict:
 
     # Unknown events are acknowledged but ignored
     return {"ok": True, "event": event, "ignored": True}
+
+
+# ---------------------------------------------------------------------------
+# Account key endpoint (Clerk-authenticated)
+# ---------------------------------------------------------------------------
+
+@app.get("/account/key")
+async def get_account_key(request: Request):
+    """Return the caller's Engram API key, authenticated via Clerk session JWT.
+
+    The browser calls this with: Authorization: Bearer <clerk-session-token>
+    The endpoint validates the JWT against Clerk's JWKS, extracts the user's
+    email via the Clerk Backend API, then looks up (or creates) their API key.
+
+    Requires: CB_USE_ADMIN_DB=1, CLERK_SECRET_KEY env vars on the server.
+    """
+    if not _USE_ADMIN_DB:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Account key endpoint is only available on the hosted service",
+        )
+
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing session token")
+
+    token = auth_header[7:]
+    claims = _validate_clerk_jwt(token)
+
+    # Try to get email from JWT claims first (works if Clerk JWT template includes email)
+    email = claims.get("email") or claims.get("primary_email_address")
+
+    # Fall back to Clerk Backend API using the sub (user ID)
+    if not email:
+        sub = claims.get("sub", "")
+        if sub:
+            email = _get_email_from_clerk_sub(sub)
+
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Could not determine email from session. Ensure CLERK_SECRET_KEY is set.",
+        )
+
+    conn = open_admin_db()
+    try:
+        key = get_or_create_key_by_email(conn, email)
+        # Fetch tier from the row we just found/created
+        row = conn.execute(
+            "SELECT tier FROM api_keys WHERE email = ? AND is_revoked = 0 ORDER BY created_at DESC LIMIT 1",
+            (email,),
+        ).fetchone()
+        tier = row["tier"] if row else "free"
+    finally:
+        conn.close()
+
+    return {"key": key, "tier": tier}

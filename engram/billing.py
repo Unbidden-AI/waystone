@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import logging
 import os
 import secrets
 import sqlite3
@@ -26,6 +27,8 @@ import time
 from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
+
+log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Tier definitions
@@ -102,6 +105,14 @@ def init_admin_db(conn: sqlite3.Connection) -> None:
             is_revoked INTEGER NOT NULL DEFAULT 0
         );
         CREATE INDEX IF NOT EXISTS idx_api_keys_email ON api_keys(email);
+""")
+    # Migration: add raw_key column for account page key retrieval
+    try:
+        conn.execute("ALTER TABLE api_keys ADD COLUMN raw_key TEXT")
+        conn.commit()
+    except Exception:
+        pass  # Column already exists
+    conn.executescript("""
 
         CREATE TABLE IF NOT EXISTS usage_log (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -148,11 +159,34 @@ def create_key(conn: sqlite3.Connection, email: str, tier: str = "free", org_id:
     raw, key_hash = generate_api_key()
     now = datetime.now(timezone.utc).isoformat()
     conn.execute(
-        "INSERT INTO api_keys (key_hash, tier, email, org_id, created_at, is_revoked) VALUES (?, ?, ?, ?, ?, 0)",
-        (key_hash, tier, email, org_id, now),
+        "INSERT INTO api_keys (key_hash, raw_key, tier, email, org_id, created_at, is_revoked) VALUES (?, ?, ?, ?, ?, ?, 0)",
+        (key_hash, raw, tier, email, org_id, now),
     )
     conn.commit()
     return raw
+
+
+def get_or_create_key_by_email(conn: sqlite3.Connection, email: str, tier: str = "free") -> str:
+    """Return the active raw API key for email, creating a free-tier key if none exists.
+
+    If the user has an existing key but it predates the raw_key column (no raw_key stored),
+    a new key is issued and the old hash-only row is revoked.
+    """
+    row = conn.execute(
+        "SELECT key_hash, raw_key, tier FROM api_keys WHERE email = ? AND is_revoked = 0 ORDER BY created_at DESC LIMIT 1",
+        (email,),
+    ).fetchone()
+    if row and row["raw_key"]:
+        return row["raw_key"]
+    if row and not row["raw_key"]:
+        # Pre-migration row — revoke it and issue a new key preserving the tier
+        tier = row["tier"]
+        conn.execute(
+            "UPDATE api_keys SET is_revoked = 1 WHERE key_hash = ?",
+            (row["key_hash"],),
+        )
+        conn.commit()
+    return create_key(conn, email, tier=tier)
 
 
 def validate_key(conn: sqlite3.Connection, raw_key: str) -> dict | None:
@@ -270,7 +304,7 @@ def send_key_email(email: str, raw_key: str, tier: str, admin_conn: sqlite3.Conn
 
     if not resend_key:
         # Dev mode: print to stdout so tests/local runs can see the key
-        print(f"[DEV] Would send email to {email!r}:\nSubject: {subject}\n{body}")
+        log.info("[DEV] Would send email to %r: Subject: %s", email, subject)
         return
 
     try:
@@ -290,7 +324,7 @@ def send_key_email(email: str, raw_key: str, tier: str, admin_conn: sqlite3.Conn
     except Exception as exc:
         # Non-fatal: key was already created; queue for retry if we have a connection
         error_msg = str(exc)
-        print(f"[billing] Email delivery failed for {email!r}: {error_msg}")
+        log.error("Email delivery failed for %r: %s", email, error_msg)
 
         if admin_conn:
             now = time.time()
@@ -301,9 +335,9 @@ def send_key_email(email: str, raw_key: str, tier: str, admin_conn: sqlite3.Conn
                     (email, raw_key, tier, now, now),
                 )
                 admin_conn.commit()
-                print(f"[billing] Queued email for retry: {email!r}")
+                log.info("Queued email for retry: %r", email)
             except Exception as queue_exc:
-                print(f"[billing] Failed to queue email for retry: {queue_exc}")
+                log.error("Failed to queue email for retry: %s", queue_exc)
 
 
 # ---------------------------------------------------------------------------
@@ -371,7 +405,7 @@ def retry_dead_letter_emails(admin_conn: sqlite3.Connection, max_retries: int = 
             admin_conn.execute("DELETE FROM dead_letter_emails WHERE id = ?", (email_id,))
             admin_conn.commit()
             success_count += 1
-            print(f"[billing] Retry succeeded for {email!r}")
+            log.info("Email retry succeeded for %r", email)
 
         except Exception as exc:
             # Update retry count and last_attempt
@@ -383,7 +417,7 @@ def retry_dead_letter_emails(admin_conn: sqlite3.Connection, max_retries: int = 
                 (now, email_id),
             )
             admin_conn.commit()
-            print(f"[billing] Retry failed for {email!r} (attempt retry_count++): {exc}")
+            log.error("Email retry failed for %r: %s", email, exc)
 
     return success_count
 
