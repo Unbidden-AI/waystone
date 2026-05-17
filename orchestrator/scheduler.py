@@ -11,7 +11,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass, asdict
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -214,7 +214,7 @@ class Scheduler:
                 "message": f"Schedule {schedule_name!r} is disabled",
             }
 
-        run_id = f"{schedule_name}_{int(datetime.utcnow().timestamp())}"
+        run_id = f"{schedule_name}_{int(datetime.now(timezone.utc).timestamp())}"
         log.info("Running schedule %r [%s]", schedule_name, run_id)
 
         try:
@@ -227,7 +227,7 @@ class Scheduler:
             )
 
             # Expand prompt template with current time vars
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             template_vars = {
                 "DATE": now.strftime("%Y-%m-%d"),
                 "TIME": now.strftime("%H:%M:%S"),
@@ -356,7 +356,7 @@ class Scheduler:
         ValueError
             If path is missing.
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         template_vars = {
             "DATE": now.strftime("%Y-%m-%d"),
             "TIME": now.strftime("%H:%M:%S"),
@@ -439,7 +439,7 @@ async def run_daemon(cfg: dict, store: GraphStore, project_root: str | None = No
     try:
         while True:
             await asyncio.sleep(60)
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
 
             for sched in schedules:
                 if _should_run(sched.schedule, now):
