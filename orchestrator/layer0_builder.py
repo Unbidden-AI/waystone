@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from waystone.store import GraphStore
 
@@ -194,7 +194,7 @@ def _fetch_recent_decisions(
     try:
         cutoff = None
         if recency_days > 0:
-            cutoff = (datetime.utcnow() - timedelta(days=recency_days)).isoformat()
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=recency_days)).isoformat()
 
         if cutoff:
             query = (

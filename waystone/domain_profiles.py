@@ -51,6 +51,17 @@ SOFTWARE_DEV = DomainProfile(
         "resolved": "the answer to a previously open question",
         "preference": "a stated preference for future work, not yet decided",
         "lesson_learned": "a failed approach, rejected alternative, or anti-pattern discovered",
+        "best_practice": (
+            "a reusable, validated pattern or technique the team has converged on and recommends "
+            "following — proven through experience, not just preferred. Distinct from lesson_learned "
+            "(which is a failure or rejection). Use when the fact says 'always do X' or 'the right "
+            "way to do X is Y' with evidence behind it."
+        ),
+        "tech_update": (
+            "a change in the technology landscape — new library version, deprecation, tool change, "
+            "API breaking change, or ecosystem shift — that affects how the project approaches a "
+            "problem. Capture: what changed, from what to what, and the implication for the project."
+        ),
         "transition": (
             'an evolution — captures BOTH the original state AND the new state AND why it changed, '
             'in a single self-contained node. Use for additive evolution, partial changes, and any '
@@ -68,6 +79,12 @@ SOFTWARE_DEV = DomainProfile(
         "relates_to": "loosely related — use this for decision→rationale links",
         "supersedes": "source replaces or overrides target",
         "conflicts_with": "source and target decisions are in active unresolved tension — neither has won yet",
+        "addresses": "source node (solution, implementation, decision) directly resolves the target (constraint, problem, question)",
+        "rejected_alternative": "source decision or implementation rejected the target approach — use when one path was explicitly not taken in favor of source",
+        "elaborates_on": "source node provides additional detail, depth, or specificity about the target without replacing it",
+        "part_of": "source node is a component, sub-step, or subset of the target — use for containment or decomposition",
+        "implements": "source node is the concrete realization of the target decision, design, or specification",
+        "enables": "source node unlocks, unblocks, or makes possible the target — use when source is a prerequisite that opens capability",
     },
     node_types_note=(
         'When a "decision" or "transition" node supersedes a prior approach, its tags MUST include '
@@ -978,6 +995,19 @@ AGENTIC_WORKFLOW = DomainProfile(
             "workflow — describe what it does, its inputs and outputs, any known limitations "
             "or rate limits, and when it should or should not be used."
         ),
+        "evaluation": (
+            "an assessment of whether a workflow run, agent output, or sub-task met its "
+            "success criteria — include what was evaluated, the criteria or rubric used, "
+            "the result (pass/fail/score), and any notable failure modes or edge cases "
+            "observed. Use for evals pipelines, automated grading, and human review."
+        ),
+        "artifact": (
+            "the produced output of a workflow run or agent task — a document, code file, "
+            "dataset, report, image, or other concrete deliverable. Include the artifact "
+            "type, what produced it, what task or goal it satisfies, and any quality or "
+            "format notes. Tag with the workflow name and run identifier so all outputs "
+            "of a run are retrievable together."
+        ),
     },
     edge_relations={
         "executes": "source workflow step or agent decision executes the target tool call or capability",
@@ -1107,6 +1137,20 @@ PRODUCT_MANAGEMENT = DomainProfile(
             "a scope boundary, resource limitation, compliance requirement, or "
             "non-negotiable — include the source of the constraint and how it shapes "
             "the product decisions or timeline."
+        ),
+        "metric": (
+            "a KPI, north star metric, or success measure being tracked for a feature, "
+            "initiative, or product area — include the metric name, how it is measured, "
+            "the current baseline, the target, and the owner. Link to the features or "
+            "hypotheses it validates via 'validates' edges."
+        ),
+        "persona": (
+            "a named user segment — a distinct group of users with shared goals, behaviors, "
+            "or characteristics (e.g. 'power user', 'new hire', 'data team lead'). Include "
+            "the segment name, defining characteristics, key jobs-to-be-done, and how it "
+            "differs from adjacent segments. Distinct from stakeholder (internal actors) "
+            "and insight (a research finding). A reusable reference node that multiple "
+            "features and user stories can link to."
         ),
     },
     edge_relations={
