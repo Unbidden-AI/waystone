@@ -40,10 +40,10 @@ import yaml
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
-from engram.config import get_db_path, get_project_dir, load_config
-from engram.extractor import extract
-from engram.retriever import estimate_tokens, extract_keywords, retrieve_with_stats
-from engram.store import GraphStore
+from waystone.config import get_db_path, get_project_dir, load_config
+from waystone.extractor import extract
+from waystone.retriever import estimate_tokens, extract_keywords, retrieve_with_stats
+from waystone.store import GraphStore
 
 BENCHMARKS_DIR = Path(__file__).parent
 TRANSCRIPTS_DIR = BENCHMARKS_DIR / "transcripts"

@@ -1,4 +1,4 @@
-"""Async HTTP client for the Engram hosted API.
+"""Async HTTP client for the Waystone hosted API.
 
 When ``api_url`` is set in config, operations route here instead of
 touching a local SQLite database.
@@ -18,7 +18,7 @@ DEFAULT_TIMEOUT = 120.0
 
 
 class RemoteContextBroker:
-    """Thin async client over the Engram REST API.
+    """Thin async client over the Waystone REST API.
 
     All methods raise ``httpx.HTTPStatusError`` on 4xx/5xx responses.
     """

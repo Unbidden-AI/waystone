@@ -1,18 +1,18 @@
-"""Engram OpenClaw skill — persistent knowledge graph memory for OpenClaw.
+"""Waystone OpenClaw skill — persistent knowledge graph memory for OpenClaw.
 
 Hooks (registered via SKILL.md):
-    engram.openclaw:on_session_start
-    engram.openclaw:on_turn_end
-    engram.openclaw:on_session_end
-    engram.openclaw:on_dream
+    waystone.openclaw:on_session_start
+    waystone.openclaw:on_turn_end
+    waystone.openclaw:on_session_end
+    waystone.openclaw:on_dream
 
 Commands (triggered by @claw <command>):
     remember, recall, forget, summarize, sync_now, status, dream, export
 
 Quick start:
-    pip install engram[openclaw]
-    export ENGRAM_PROJECT=myproject
-    engram init myproject
+    pip install waystone[openclaw]
+    export WAYSTONE_PROJECT=myproject
+    waystone init myproject
 """
 
 from .skill import (

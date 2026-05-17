@@ -1,11 +1,11 @@
-"""MCP server for Engram.
+"""MCP server for Waystone.
 
 Exposes context retrieval and extraction as MCP tools so Claude Code
 (and any MCP-compatible client) can call them directly without hook setup.
 
 Usage:
-    engram mcp-serve                   # run on stdio (for Claude Code)
-    engram mcp-serve --transport sse   # run as HTTP SSE server
+    waystone mcp-serve                   # run on stdio (for Claude Code)
+    waystone mcp-serve --transport sse   # run as HTTP SSE server
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ from .store import GraphStore
 
 log = logging.getLogger(__name__)
 
-mcp = FastMCP(name="context-broker")
+mcp = FastMCP(name="waystone")
 
 _MAX_EXTRACT_CHARS = 200_000  # ~50k tokens — hard cap on MCP extract input
 
@@ -37,7 +37,7 @@ _MAX_EXTRACT_CHARS = 200_000  # ~50k tokens — hard cap on MCP extract input
 
 def _setup_logging() -> None:
     """Set up structured logging to file with rotation."""
-    log_dir = Path.home() / ".engram" / "logs"
+    log_dir = Path.home() / ".waystone" / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
 
     log_file = log_dir / "mcp_server.log"
@@ -61,17 +61,17 @@ def _setup_logging() -> None:
 # ---------------------------------------------------------------------------
 
 def _find_project_marker(start: Path | None = None) -> str | None:
-    """Walk up from start (or CWD) looking for a .context-broker file."""
+    """Walk up from start (or CWD) looking for a .waystone file."""
     path = (start or Path.cwd()).resolve()
     for candidate in [path, *path.parents]:
-        marker = candidate / ".context-broker"
+        marker = candidate / ".waystone"
         if marker.exists():
             return marker.read_text().strip()
     return None
 
 
 def _resolve_project(project: str | None, cwd: str | None = None) -> str:
-    """Return project name, auto-detecting from .context-broker if not given.
+    """Return project name, auto-detecting from .waystone if not given.
 
     cwd should be the caller's working directory (not the MCP server's CWD).
     When running multiple Claude Code instances, pass cwd= to avoid all
@@ -84,10 +84,10 @@ def _resolve_project(project: str | None, cwd: str | None = None) -> str:
     if detected:
         return detected
     raise ValueError(
-        "No project specified and no .context-broker marker found. "
+        "No project specified and no .waystone marker found. "
         "Pass project= explicitly, or pass cwd= (your working directory) "
-        "so the server can locate the correct .context-broker marker. "
-        "Run 'engram init <project>' to create one."
+        "so the server can locate the correct .waystone marker. "
+        "Run 'waystone init <project>' to create one."
     )
 
 
@@ -100,10 +100,10 @@ def _load_config() -> dict:
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-def engram_query(
+def waystone_query(
     task: Annotated[str, "Task description or question to retrieve context for"],
-    project: Annotated[str | None, "Project name (auto-detected from .context-broker if omitted)"] = None,
-    cwd: Annotated[str | None, "Your working directory (pass this when auto-detecting project, so the server resolves the correct .context-broker marker)"] = None,
+    project: Annotated[str | None, "Project name (auto-detected from .waystone if omitted)"] = None,
+    cwd: Annotated[str | None, "Your working directory (pass this when auto-detecting project, so the server resolves the correct .waystone marker)"] = None,
     hops: Annotated[int, "Graph traversal depth (default 3)"] = 3,
     top_k: Annotated[int, "Max nodes to return (default 25)"] = 25,
 ) -> str:
@@ -120,7 +120,7 @@ def engram_query(
         if is_remote(config):
             client = make_remote_client(config)
             result = asyncio.run(client.query(project_name, task, hops=hops, top_k=top_k))
-            log.debug(f"engram_query: project={project_name}, task_length={len(task)}, remote=true")
+            log.debug(f"waystone_query: project={project_name}, task_length={len(task)}, remote=true")
             return result["markdown"] or f"(graph is empty for '{project_name}')"
 
         db_path = get_db_path(config, project_name)
@@ -128,7 +128,7 @@ def engram_query(
         if not db_path.exists():
             raise FileNotFoundError(
                 f"No graph found for project '{project_name}'. "
-                f"Extract a transcript first: engram extract {project_name} <transcript_file>"
+                f"Extract a transcript first: waystone extract {project_name} <transcript_file>"
             )
 
         store = GraphStore(db_path)
@@ -150,14 +150,14 @@ def engram_query(
                 top_k=effective_top_k,
                 strategies=strategies,
             )
-            log.debug(f"engram_query: project={project_name}, nodes_returned={result.nodes_after_strategies}, tokens={result.tokens_estimated}")
+            log.debug(f"waystone_query: project={project_name}, nodes_returned={result.nodes_after_strategies}, tokens={result.tokens_estimated}")
         finally:
             store.close()
         return result.markdown
     except (ValueError, FileNotFoundError, RuntimeError):
         raise  # already user-friendly
     except Exception as e:
-        log.error(f"engram_query failed: {e}", exc_info=True)
+        log.error(f"waystone_query failed: {e}", exc_info=True)
         try:
             import sentry_sdk
             if sentry_sdk.is_initialized():
@@ -168,9 +168,9 @@ def engram_query(
 
 
 @mcp.tool()
-def engram_extract(
+def waystone_extract(
     text: Annotated[str, "Text to extract facts from (transcript, spec, notes, etc.)"],
-    project: Annotated[str | None, "Project name (auto-detected from .context-broker if omitted)"] = None,
+    project: Annotated[str | None, "Project name (auto-detected from .waystone if omitted)"] = None,
     cwd: Annotated[str | None, "Your working directory (pass this when auto-detecting project)"] = None,
     source_name: Annotated[str, "Label for this text (shown in node source info)"] = "mcp_extract",
     verify: Annotated[bool, "Run a second verification pass to catch missed facts"] = False,
@@ -198,7 +198,7 @@ def engram_extract(
             result = asyncio.run(
                 client.extract(project_name, text, source_name=source_name, verify=verify)
             )
-            log.debug(f"engram_extract: project={project_name}, nodes={result['nodes_extracted']}, edges={result['edges_extracted']}, remote=true")
+            log.debug(f"waystone_extract: project={project_name}, nodes={result['nodes_extracted']}, edges={result['edges_extracted']}, remote=true")
             return (
                 f"Extracted {result['nodes_extracted']} nodes, {result['edges_extracted']} edges "
                 f"into '{project_name}'.\n"
@@ -211,7 +211,7 @@ def engram_extract(
         if not db_path.parent.exists():
             raise FileNotFoundError(
                 f"Project '{project_name}' not found. "
-                f"Initialize it first: engram init {project_name}"
+                f"Initialize it first: waystone init {project_name}"
             )
 
         async def _run() -> str:
@@ -225,8 +225,8 @@ def engram_extract(
                     v_result = await verify_extraction(text, nodes, config)
                     nodes = nodes + v_result["nodes"]
                     edges = edges + v_result["edges"]
-                except Exception:
-                    pass  # Verification failure is non-fatal; continue with pass 1
+                except Exception as _ve:
+                    log.warning("Verification pass failed (non-fatal): %s", _ve, exc_info=True)
 
             now = datetime.now(timezone.utc).isoformat()
             for node in nodes:
@@ -251,7 +251,7 @@ def engram_extract(
     except (ValueError, FileNotFoundError):
         raise  # already user-friendly
     except Exception as e:
-        log.error(f"engram_extract failed: {e}", exc_info=True)
+        log.error(f"waystone_extract failed: {e}", exc_info=True)
         try:
             import sentry_sdk
             if sentry_sdk.is_initialized():
@@ -262,7 +262,7 @@ def engram_extract(
 
 
 @mcp.tool()
-def engram_stats(
+def waystone_stats(
     project: Annotated[str | None, "Project name (auto-detected if omitted)"] = None,
     cwd: Annotated[str | None, "Your working directory (pass this when auto-detecting project)"] = None,
 ) -> str:
@@ -278,7 +278,7 @@ def engram_stats(
         if is_remote(config):
             client = make_remote_client(config)
             stats = asyncio.run(client.get_stats(project_name))
-            log.debug(f"engram_stats: project={project_name}, nodes={stats['node_count']}, edges={stats['edge_count']}, remote=true")
+            log.debug(f"waystone_stats: project={project_name}, nodes={stats['node_count']}, edges={stats['edge_count']}, remote=true")
             lines = [
                 f"Project: {project_name}",
                 f"Nodes: {stats['node_count']}  Edges: {stats['edge_count']}",
@@ -298,7 +298,7 @@ def engram_stats(
         stats = store.get_stats()
         store.close()
 
-        log.debug(f"engram_stats: project={project_name}, nodes={stats['node_count']}, edges={stats['edge_count']}")
+        log.debug(f"waystone_stats: project={project_name}, nodes={stats['node_count']}, edges={stats['edge_count']}")
         lines = [
             f"Project: {project_name}",
             f"Nodes: {stats['node_count']}  Edges: {stats['edge_count']}",
@@ -311,7 +311,7 @@ def engram_stats(
     except (ValueError, FileNotFoundError):
         raise  # already user-friendly
     except Exception as e:
-        log.error(f"engram_stats failed: {e}", exc_info=True)
+        log.error(f"waystone_stats failed: {e}", exc_info=True)
         try:
             import sentry_sdk
             if sentry_sdk.is_initialized():
@@ -323,7 +323,7 @@ def engram_stats(
 
 @mcp.tool()
 def engram_list_projects() -> str:
-    """List all available Engram projects on this machine."""
+    """List all available Waystone projects on this machine."""
     try:
         config = _load_config()
 
@@ -338,10 +338,10 @@ def engram_list_projects() -> str:
                 lines.append(f"  {p['name']}  ({p['node_count']} nodes, {p['edge_count']} edges)")
             return "\n".join(lines)
 
-        projects_dir = Path(config.get("projects_dir", Path.home() / ".context-broker" / "projects"))
+        projects_dir = Path(config.get("projects_dir", Path.home() / ".waystone" / "projects"))
 
         if not projects_dir.exists():
-            return "No projects found. Run 'engram init <project>' to create one."
+            return "No projects found. Run 'waystone init <project>' to create one."
 
         projects = [
             d.name for d in sorted(projects_dir.iterdir())
@@ -349,7 +349,7 @@ def engram_list_projects() -> str:
         ]
 
         if not projects:
-            return "No projects found. Run 'engram init <project>' to create one."
+            return "No projects found. Run 'waystone init <project>' to create one."
 
         log.debug(f"engram_list_projects: project_count={len(projects)}")
         lines = [f"Available projects ({len(projects)}):"]

@@ -31,11 +31,11 @@ import yaml
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
-from engram.config import get_db_path, get_project_dir, load_config
-from engram.extractor import extract, verify_extraction, extract_targeted
-from engram.cli import _split_at_paragraphs
-from engram.retriever import retrieve_with_stats
-from engram.store import GraphStore
+from waystone.config import get_db_path, get_project_dir, load_config
+from waystone.extractor import extract, verify_extraction, extract_targeted
+from waystone.cli import _split_at_paragraphs
+from waystone.retriever import retrieve_with_stats
+from waystone.store import GraphStore
 
 BENCHMARKS_DIR = Path(__file__).parent
 TRANSCRIPTS_DIR = BENCHMARKS_DIR / "transcripts"
@@ -258,7 +258,7 @@ def run_extraction(config: dict, project_name: str, transcript_path: Path, verif
 # ---------------------------------------------------------------------------
 
 def main():
-    parser = argparse.ArgumentParser(description="Generation quality eval for Context Broker")
+    parser = argparse.ArgumentParser(description="Generation quality eval for Waystone")
     parser.add_argument("--config", default="benchmarks/model_configs/gemini_25_flash.yaml",
                         help="Model config YAML (default: gemini_25_flash)")
     parser.add_argument("--transcript", default="project_api_design",

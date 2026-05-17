@@ -1,5 +1,5 @@
 """
-LOCOMO benchmark harness for Engram.
+LOCOMO benchmark harness for Waystone.
 
 Usage:
     # Quick dev run (1 conversation, keyword scoring only)
@@ -177,7 +177,7 @@ def _run_config(
         tmp_dir = db_dir
     else:
         from pathlib import Path as _Path
-        tmp_dir = str(_Path.home() / ".engram" / "locomo_cache" / config.name)
+        tmp_dir = str(_Path.home() / ".waystone" / "locomo_cache" / config.name)
         _Path(tmp_dir).mkdir(parents=True, exist_ok=True)
     conversations = list(ds.iter_conversations(limit=limit, sample_ids=sample_ids))
 
@@ -193,7 +193,7 @@ def _run_config(
             store = None
         else:
             from pathlib import Path as _Path
-            from engram.store import GraphStore as _GraphStore
+            from waystone.store import GraphStore as _GraphStore
             import shutil as _shutil
             import yaml as _yaml
             checkpoint_path = str(_Path(tmp_dir) / f"{conv.sample_id}.db")
@@ -216,7 +216,7 @@ def _run_config(
                 store = _GraphStore(checkpoint_path)
             elif config.checkpoint_source:
                 # Copy checkpoint from the source config's dir instead of re-extracting
-                source_dir = str(_Path.home() / ".engram" / "locomo_cache" / config.checkpoint_source)
+                source_dir = str(_Path.home() / ".waystone" / "locomo_cache" / config.checkpoint_source)
                 source_path = str(_Path(source_dir) / f"{conv.sample_id}.db")
                 if _Path(source_path).exists():
                     _Path(tmp_dir).mkdir(parents=True, exist_ok=True)
@@ -457,7 +457,7 @@ def _retrieve_context(
     parts: list[str] = []
 
     if config.use_bfs and store is not None:
-        from engram.retriever import retrieve_with_stats
+        from waystone.retriever import retrieve_with_stats
 
         strategies: dict[str, Any] = {
             "superseded_pruning": config.superseded_pruning,
@@ -537,7 +537,7 @@ def _preflight_check(
     db_dir_override: str | None,
 ) -> None:
     """Print extraction model config and which conversations will need extraction vs reuse."""
-    from engram.config import load_config
+    from waystone.config import load_config
 
     cfg = load_config()
     llm = cfg.get("llm", {})
@@ -566,7 +566,7 @@ def _preflight_check(
         if db_dir_override:
             db_dir = db_dir_override
         else:
-            db_dir = str(Path.home() / ".engram" / "locomo_cache" / config_name)
+            db_dir = str(Path.home() / ".waystone" / "locomo_cache" / config_name)
 
         will_extract = []
         will_reuse = []
@@ -576,7 +576,7 @@ def _preflight_check(
             if cp.exists():
                 will_reuse.append(conv.sample_id)
             elif config.checkpoint_source and not db_dir_override:
-                src = Path.home() / ".engram" / "locomo_cache" / config.checkpoint_source / f"{conv.sample_id}.db"
+                src = Path.home() / ".waystone" / "locomo_cache" / config.checkpoint_source / f"{conv.sample_id}.db"
                 if src.exists():
                     will_copy.append(conv.sample_id)
                 else:
@@ -605,7 +605,7 @@ def _preflight_check(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="LOCOMO benchmark harness for Engram",
+        description="LOCOMO benchmark harness for Waystone",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
@@ -650,7 +650,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--db-dir", default=None,
-        help="Directory for SQLite DBs. Defaults to ~/.engram/locomo_cache/<config_name>/ "
+        help="Directory for SQLite DBs. Defaults to ~/.waystone/locomo_cache/<config_name>/ "
              "so checkpoints persist automatically across runs. Override to use a different "
              "location or share DBs between configs. Different domains or dedup_thresholds "
              "need different dirs.",

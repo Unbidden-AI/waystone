@@ -2,7 +2,7 @@
 
 import pytest
 
-from engram.retriever import (
+from waystone.retriever import (
     apply_recency_decay,
     apply_token_budget,
     assemble_markdown,
@@ -13,7 +13,7 @@ from engram.retriever import (
     retrieve_with_stats,
     score_by_relevance,
 )
-from engram.store import GraphStore
+from waystone.store import GraphStore
 
 
 @pytest.fixture

@@ -27,10 +27,10 @@ jobs:
       - name: Lint
         run: |
           pip install ruff
-          ruff check engram/ tests/
+          ruff check waystone/ tests/
 
       - name: Run tests
         run: pytest tests/ -v --tb=short
 
       - name: Smoke test CLI
-        run: engram --help
+        run: waystone --help

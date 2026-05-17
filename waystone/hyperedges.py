@@ -6,7 +6,7 @@ query time to inject sibling nodes from the same cluster that BFS missed.
 
 Usage::
 
-    from engram.hyperedges import rebuild_hyperedges
+    from waystone.hyperedges import rebuild_hyperedges
     n = rebuild_hyperedges(store)  # returns number of hyperedges written
 
 Complexity: O(n²) in node count — fast for LOCOMO-scale DBs (n ≤ 600) but may need
@@ -29,7 +29,7 @@ def rebuild_hyperedges(
     """Build the hyperedge index for *store* and write it to ``hyperedge_members``.
 
     Args:
-        store: A :class:`~engram.store.GraphStore` instance (open, writable).
+        store: A :class:`~waystone.store.GraphStore` instance (open, writable).
         threshold: Cosine similarity floor for two nodes to share a hyperedge.
         min_size: Minimum cluster size to emit as a hyperedge (singleton clusters discarded).
         max_size: Maximum cluster size (early-stops per-node scan once reached).

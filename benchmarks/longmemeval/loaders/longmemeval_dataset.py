@@ -41,7 +41,7 @@ from benchmarks.locomo.loaders.locomo_dataset import (
 #   1 = single-session recall
 #   2 = temporal reasoning
 #   3 = multi-session / open-domain
-#   4 = knowledge update (Engram's key differentiator)
+#   4 = knowledge update (Waystone's key differentiator)
 LME_QUESTION_TYPES = {
     "single-session-user":        1,
     "single-session-assistant":   1,

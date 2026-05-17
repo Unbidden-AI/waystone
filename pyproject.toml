@@ -3,7 +3,7 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "engram"
+name = "waystone"
 version = "0.1.0"
 description = "A context intelligence layer for LLM workflows"
 requires-python = ">=3.13,<3.14"
@@ -24,11 +24,11 @@ monitoring = ["sentry-sdk[fastapi]>=2.0"]
 openclaw = ["pyyaml>=6.0"]  # no extra deps beyond core; pyyaml already required
 
 [project.scripts]
-engram = "engram.cli:cli"
-engram-mcp = "engram.mcp_server:run_server"
+waystone = "waystone.cli:cli"
+waystone-mcp = "waystone.mcp_server:run_server"
 
 [tool.setuptools.packages.find]
-include = ["engram*", "orchestrator*"]
+include = ["waystone*", "orchestrator*"]
 
 [tool.ruff]
 line-length = 120

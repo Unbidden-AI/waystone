@@ -125,7 +125,7 @@ def _parse_json(text: str):
 
 def _make_client() -> tuple[openai.OpenAI, str]:
     """Build an OpenAI-compatible client from config.yaml, return (client, model)."""
-    from engram.config import load_config
+    from waystone.config import load_config
     cfg = load_config()
     llm_cfg = cfg.get("llm", {})
     base_url = llm_cfg.get("base_url", "https://generativelanguage.googleapis.com/v1beta/openai")

@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-CACHE_ROOT = Path.home() / ".engram" / "longmemeval_cache"
+CACHE_ROOT = Path.home() / ".waystone" / "longmemeval_cache"
 
 USER_NODE_ID = "n_user_anchor_00000000"
 USER_NODE = {

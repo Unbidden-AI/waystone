@@ -8,7 +8,7 @@ Question type categories (for --categories filtering):
     1 = single-session-user / single-session-assistant / single-session-preference
     2 = temporal-reasoning
     3 = multi-session
-    4 = knowledge-update  ← Engram's key differentiator (supersedes mechanism)
+    4 = knowledge-update  ← Waystone's key differentiator (supersedes mechanism)
     5 = absent-information (M split only)
 """
 
@@ -328,7 +328,7 @@ LME_ABLATION_CONFIGS: dict[str, AblationConfig] = {
     # engram_lme_gemini_s DBs (see patch_user_person_nodes.py). Person anchoring
     # now has a hub node to BFS from — tests whether the extraction gap (no User
     # person node) was the sole reason person_anchoring did nothing.
-    # Run against --db-dir ~/.engram/longmemeval_cache/engram_lme_gemini_s_user_patched
+    # Run against --db-dir ~/.waystone/longmemeval_cache/engram_lme_gemini_s_user_patched
     "engram_lme_s_user_patched": AblationConfig(
         name="engram_lme_s_user_patched",
         description=(

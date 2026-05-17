@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Claude Code status line script with Context Broker retrieval metrics.
+"""Claude Code status line script with Waystone retrieval metrics.
 
 Displays standard session info (model, context %, cost) plus CB metrics:
   - While buffering: turn count until first extraction
@@ -23,7 +23,7 @@ import sys
 import time
 from pathlib import Path
 
-STATE_DIR = Path.home() / ".engram"
+STATE_DIR = Path.home() / ".waystone"
 STATE_MAX_AGE_SECS = 300  # Don't show stale CB state after 5 min
 
 

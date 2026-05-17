@@ -1,4 +1,4 @@
-"""CLI entry point for the Context Broker Orchestrator (interactive REPL)."""
+"""CLI entry point for the Waystone Orchestrator (interactive REPL)."""
 
 from __future__ import annotations
 
@@ -36,8 +36,8 @@ except ImportError:
 
 import click
 
-from engram.config import get_db_path, load_config
-from engram.store import GraphStore
+from waystone.config import get_db_path, load_config
+from waystone.store import GraphStore
 
 from .conversation import Conversation
 
@@ -55,7 +55,7 @@ Commands:
   /quit       Exit
 """
 
-_BANNER = "Context Broker Orchestrator — type /help for commands, Ctrl-C to exit."
+_BANNER = "Waystone Orchestrator — type /help for commands, Ctrl-C to exit."
 
 
 def _setup_logging(verbose: bool) -> None:
@@ -151,16 +151,16 @@ async def _repl(conversation: Conversation, stream: bool) -> None:
 def main(project: str, config_path: str | None, stream: bool, verbose: bool) -> None:
     """Start an interactive orchestrator session for PROJECT.
 
-    PROJECT is the name of a Context Broker project (same namespace used by
-    ``engram init`` / ``engram extract``).  The orchestrator loads the project's
+    PROJECT is the name of a Waystone project (same namespace used by
+    ``waystone init`` / ``waystone extract``).  The orchestrator loads the project's
     graph store and starts a REPL that keeps a sliding history window,
     retrieves relevant graph context on every turn, and compacts old messages
     back into the graph automatically.
 
     \b
     Example:
-        engram orchestrate my_project
-        engram orchestrate my_project --config ./config.yaml -v
+        waystone orchestrate my_project
+        waystone orchestrate my_project --config ./config.yaml -v
     """
     _setup_logging(verbose)
 
@@ -170,7 +170,7 @@ def main(project: str, config_path: str | None, stream: bool, verbose: bool) -> 
     if not db_path.exists():
         click.echo(
             f"Project {project!r} not found at {db_path}. "
-            "Run `engram init <project>` first.",
+            "Run `waystone init <project>` first.",
             err=True,
         )
         sys.exit(1)

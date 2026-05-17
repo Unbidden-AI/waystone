@@ -23,7 +23,7 @@ Estimated cost (30 preference-type samples × 50 sessions × ~3K tokens input):
 Usage:
     python3.13 benchmarks/longmemeval/preference_pass.py \\
         --dataset benchmarks/longmemeval/data/longmemeval_s_cleaned.json \\
-        --checkpoint-dir ~/.engram/longmemeval_cache/engram_lme_gemini_s_user_patched \\
+        --checkpoint-dir ~/.waystone/longmemeval_cache/engram_lme_gemini_s_user_patched \\
         [--limit N] [--workers N] [--dry-run] [--question-type single-session-preference]
 """
 
@@ -46,9 +46,9 @@ try:
 except ImportError:
     pass
 
-from engram.config import load_config
-from engram.extractor import extract_targeted, extract_implicit_prefs, assign_ids
-from engram.store import GraphStore
+from waystone.config import load_config
+from waystone.extractor import extract_targeted, extract_implicit_prefs, assign_ids
+from waystone.store import GraphStore
 from benchmarks.longmemeval.loaders.longmemeval_dataset import LongMemEvalDataset
 
 
@@ -276,7 +276,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--checkpoint-dir",
-        default=str(Path.home() / ".engram" / "longmemeval_cache" / "engram_lme_gemini_s_user_patched"),
+        default=str(Path.home() / ".waystone" / "longmemeval_cache" / "engram_lme_gemini_s_user_patched"),
         help="Directory containing .db checkpoint files",
     )
     parser.add_argument("--limit", type=int, default=None, help="Process only first N samples")

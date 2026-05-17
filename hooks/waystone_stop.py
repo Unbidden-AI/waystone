@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
-"""Claude Code Stop hook for Context Broker — transcript recording + maintenance.
+"""Claude Code Stop hook for Waystone — transcript recording + maintenance.
 
 After each conversation stop:
-  1. Saves a clean markdown transcript to ~/.context-broker/transcripts/<project>/.
+  1. Saves a clean markdown transcript to ~/.waystone/transcripts/<project>/.
   2. Spawns background extraction of only the NEW turns since last extraction,
      with 2 prior turns prepended as read-only co-reference context.
   3. If enough new nodes have been added since the last reconcile, spawns background
-     `engram reconcile` to find supersedes relationships.
+     `waystone reconcile` to find supersedes relationships.
 
 Per-session extraction state is tracked in
-  ~/.context-broker/transcripts/<project>/<session_short_id>.state
+  ~/.waystone/transcripts/<project>/<session_short_id>.state
 so that each Stop-hook fire only extracts the delta (not the full growing transcript).
 
-Thresholds (tunable via ~/.context-broker/config.yaml under 'maintenance:'):
+Thresholds (tunable via ~/.waystone/config.yaml under 'maintenance:'):
   reconcile_threshold: 75   # new nodes since last reconcile before triggering
   reconcile_min_total: 100  # minimum total nodes before reconcile makes sense
 
 The saved transcripts can also be re-extracted manually with:
-  engram extract <project> ~/.context-broker/transcripts/<project>/<file>.md
+  waystone extract <project> ~/.waystone/transcripts/<project>/<file>.md
 
 Install:
   python hooks/install.py
@@ -33,7 +33,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-TRANSCRIPTS_DIR = Path.home() / ".engram" / "transcripts"
+TRANSCRIPTS_DIR = Path.home() / ".waystone" / "transcripts"
 
 # Number of already-extracted turns to prepend as read-only co-reference context
 PRIOR_CONTEXT_TURNS = 2
@@ -90,8 +90,8 @@ def main():
         sys.exit(0)
 
     try:
-        from engram.config import get_db_path, load_config
-        from engram.store import GraphStore
+        from waystone.config import get_db_path, load_config
+        from waystone.store import GraphStore
 
         config = load_config()
         project = _detect_project(cwd)
@@ -270,16 +270,16 @@ def _save_state(state_path: Path, state: dict) -> None:
 # ---------------------------------------------------------------------------
 
 def _engram_cmd() -> list[str]:
-    """Return the best available command prefix to invoke the engram CLI."""
+    """Return the best available command prefix to invoke the waystone CLI."""
     import shutil
-    cli = shutil.which("engram")
+    cli = shutil.which("waystone")
     if cli:
         return [cli]
-    return [sys.executable, "-m", "engram.cli"]
+    return [sys.executable, "-m", "waystone.cli"]
 
 
 def _spawn_background_extraction(project: str, transcript_path: str) -> None:
-    """Spawn `engram extract <project> <transcript> --verify` as a detached process."""
+    """Spawn `waystone extract <project> <transcript> --verify` as a detached process."""
     try:
         subprocess.Popen(
             _engram_cmd() + ["extract", project, transcript_path, "--verify"],
@@ -292,7 +292,7 @@ def _spawn_background_extraction(project: str, transcript_path: str) -> None:
 
 
 def _maybe_spawn_reconcile(project: str, current_nodes: int, project_dir: Path, config: dict) -> None:
-    """Spawn `engram reconcile` if enough new nodes have accumulated since last reconcile."""
+    """Spawn `waystone reconcile` if enough new nodes have accumulated since last reconcile."""
     maint_cfg = config.get("maintenance", {})
     threshold = int(maint_cfg.get("reconcile_threshold", DEFAULT_RECONCILE_THRESHOLD))
     min_total = int(maint_cfg.get("reconcile_min_total", DEFAULT_RECONCILE_MIN_TOTAL))
@@ -338,12 +338,12 @@ def _maybe_spawn_reconcile(project: str, current_nodes: int, project_dir: Path, 
 # ---------------------------------------------------------------------------
 
 def _detect_project(cwd: str) -> str:
-    """Find the Context Broker project name for this working directory."""
+    """Find the Waystone project name for this working directory."""
     cwd_path = Path(cwd).resolve()
     home = Path.home()
 
     for directory in [cwd_path, *cwd_path.parents]:
-        marker = directory / ".context-broker"
+        marker = directory / ".waystone"
         if marker.exists():
             try:
                 name = marker.read_text().strip()

@@ -3,7 +3,7 @@
 
 import pytest
 
-from engram.store import GraphStore
+from waystone.store import GraphStore
 
 
 @pytest.fixture

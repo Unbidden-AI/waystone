@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from engram.store import GraphStore
+from waystone.store import GraphStore
 
 
 @pytest.fixture
@@ -56,11 +56,11 @@ class TestContextBrokerQuery:
         tmp_path, db_path, config = project_setup
 
         monkeypatch.chdir(tmp_path)
-        (tmp_path / ".context-broker").write_text("test-project\n")
+        (tmp_path / ".waystone").write_text("test-project\n")
 
-        from engram.mcp_server import engram_query
-        with patch("engram.mcp_server._load_config", return_value=config):
-            result = engram_query(task="database storage", project="test-project")
+        from waystone.mcp_server import waystone_query
+        with patch("waystone.mcp_server._load_config", return_value=config):
+            result = waystone_query(task="database storage", project="test-project")
 
         assert "PostgreSQL" in result
 
@@ -68,28 +68,28 @@ class TestContextBrokerQuery:
         monkeypatch.chdir(tmp_path)
         config = {"llm": {}, "defaults": {}, "strategies": {}, "projects_dir": str(tmp_path / "projects")}
 
-        from engram.mcp_server import engram_query
-        with patch("engram.mcp_server._load_config", return_value=config):
+        from waystone.mcp_server import waystone_query
+        with patch("waystone.mcp_server._load_config", return_value=config):
             with pytest.raises(FileNotFoundError):
-                engram_query(task="anything", project="nonexistent-project")
+                waystone_query(task="anything", project="nonexistent-project")
 
     def test_raises_when_no_project_detected(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         config = {"llm": {}, "defaults": {}, "strategies": {}, "projects_dir": str(tmp_path / "projects")}
 
-        from engram.mcp_server import engram_query
-        with patch("engram.mcp_server._load_config", return_value=config):
+        from waystone.mcp_server import waystone_query
+        with patch("waystone.mcp_server._load_config", return_value=config):
             with pytest.raises(ValueError, match="No project specified"):
-                engram_query(task="anything")
+                waystone_query(task="anything")
 
 
 class TestContextBrokerStats:
     def test_returns_stats(self, project_setup):
         tmp_path, db_path, config = project_setup
 
-        from engram.mcp_server import engram_stats
-        with patch("engram.mcp_server._load_config", return_value=config):
-            result = engram_stats(project="test-project")
+        from waystone.mcp_server import waystone_stats
+        with patch("waystone.mcp_server._load_config", return_value=config):
+            result = waystone_stats(project="test-project")
 
         assert "Nodes: 2" in result
         assert "test-project" in result
@@ -97,18 +97,18 @@ class TestContextBrokerStats:
     def test_raises_on_missing_project(self, tmp_path):
         config = {"llm": {}, "defaults": {}, "strategies": {}, "projects_dir": str(tmp_path / "projects")}
 
-        from engram.mcp_server import engram_stats
-        with patch("engram.mcp_server._load_config", return_value=config):
+        from waystone.mcp_server import waystone_stats
+        with patch("waystone.mcp_server._load_config", return_value=config):
             with pytest.raises(FileNotFoundError):
-                engram_stats(project="nonexistent")
+                waystone_stats(project="nonexistent")
 
 
 class TestContextBrokerListProjects:
     def test_lists_existing_projects(self, project_setup):
         tmp_path, db_path, config = project_setup
 
-        from engram.mcp_server import engram_list_projects
-        with patch("engram.mcp_server._load_config", return_value=config):
+        from waystone.mcp_server import engram_list_projects
+        with patch("waystone.mcp_server._load_config", return_value=config):
             result = engram_list_projects()
 
         assert "test-project" in result
@@ -117,8 +117,8 @@ class TestContextBrokerListProjects:
     def test_returns_message_when_no_projects(self, tmp_path):
         config = {"llm": {}, "defaults": {}, "strategies": {}, "projects_dir": str(tmp_path / "nonexistent")}
 
-        from engram.mcp_server import engram_list_projects
-        with patch("engram.mcp_server._load_config", return_value=config):
+        from waystone.mcp_server import engram_list_projects
+        with patch("waystone.mcp_server._load_config", return_value=config):
             result = engram_list_projects()
 
         assert "No projects found" in result
@@ -128,10 +128,10 @@ class TestContextBrokerExtract:
     def test_raises_on_oversized_input(self, project_setup):
         tmp_path, db_path, config = project_setup
 
-        from engram.mcp_server import _MAX_EXTRACT_CHARS, engram_extract
-        with patch("engram.mcp_server._load_config", return_value=config):
+        from waystone.mcp_server import _MAX_EXTRACT_CHARS, waystone_extract
+        with patch("waystone.mcp_server._load_config", return_value=config):
             with pytest.raises(ValueError, match="exceeds the"):
-                engram_extract(
+                waystone_extract(
                     text="x" * (_MAX_EXTRACT_CHARS + 1),
                     project="test-project",
                 )
@@ -139,10 +139,10 @@ class TestContextBrokerExtract:
     def test_raises_on_missing_project(self, tmp_path):
         config = {"llm": {}, "defaults": {}, "strategies": {}, "projects_dir": str(tmp_path / "projects")}
 
-        from engram.mcp_server import engram_extract
-        with patch("engram.mcp_server._load_config", return_value=config):
+        from waystone.mcp_server import waystone_extract
+        with patch("waystone.mcp_server._load_config", return_value=config):
             with pytest.raises(FileNotFoundError):
-                engram_extract(text="some text", project="nonexistent")
+                waystone_extract(text="some text", project="nonexistent")
 
     def test_extract_merges_into_graph(self, project_setup):
         tmp_path, db_path, config = project_setup
@@ -159,10 +159,10 @@ class TestContextBrokerExtract:
             "edges": [],
         }
 
-        from engram.mcp_server import engram_extract
-        with patch("engram.mcp_server._load_config", return_value=config):
-            with patch("engram.mcp_server.extract", new=AsyncMock(return_value=mock_result)):
-                result = engram_extract(
+        from waystone.mcp_server import waystone_extract
+        with patch("waystone.mcp_server._load_config", return_value=config):
+            with patch("waystone.mcp_server.extract", new=AsyncMock(return_value=mock_result)):
+                result = waystone_extract(
                     text="We decided to use Redis for rate limiting.",
                     project="test-project",
                 )
@@ -179,18 +179,18 @@ class TestContextBrokerExtract:
 class TestMcpToolsAllLoad:
     def test_all_four_tools_registered(self):
         """Smoke test: all four tools load without decorator errors."""
-        from engram.mcp_server import mcp
+        from waystone.mcp_server import mcp
 
         tool_names = asyncio.run(mcp.list_tools())
         names = {t.name for t in tool_names}
-        assert "engram_query" in names
-        assert "engram_extract" in names
-        assert "engram_stats" in names
+        assert "waystone_query" in names
+        assert "waystone_extract" in names
+        assert "waystone_stats" in names
         assert "engram_list_projects" in names
 
 
 class TestMcpJsonRpcHandshake:
-    """End-to-end integration test: spawn engram-mcp, send JSON-RPC initialize, verify response."""
+    """End-to-end integration test: spawn waystone-mcp, send JSON-RPC initialize, verify response."""
 
     def test_initialize_handshake(self):
         """Spawn the MCP server subprocess and verify the JSON-RPC initialize handshake."""
@@ -208,7 +208,7 @@ class TestMcpJsonRpcHandshake:
 
         # Use the installed console script; fall back to invoking run_server via -c
         proc = subprocess.Popen(
-            [sys.executable, "-c", "from engram.mcp_server import run_server; run_server()"],
+            [sys.executable, "-c", "from waystone.mcp_server import run_server; run_server()"],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,

@@ -10,7 +10,7 @@ Also tests the _find_duplicate logic used in extract_config_cmd via a
 synthetic dedup index, and verifies that the dedup threshold default (0.92)
 catches redundant nodes without dropping distinct rules.
 
-Requires: sentence-transformers installed (pip install engram[semantic])
+Requires: sentence-transformers installed (pip install waystone[semantic])
 Skip gracefully if not available.
 """
 
@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import pytest
 
-from engram.embedder import is_available, embed_text, cosine_similarity
+from waystone.embedder import is_available, embed_text, cosine_similarity
 
 
 pytestmark = pytest.mark.skipif(

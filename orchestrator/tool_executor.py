@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 from .types import ToolCall, ToolResult
 
 if TYPE_CHECKING:
-    from engram.store import GraphStore
+    from waystone.store import GraphStore
 
 log = logging.getLogger(__name__)
 

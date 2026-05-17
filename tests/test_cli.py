@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from click.testing import CliRunner
 
-from engram.cli import cli
-from engram.store import GraphStore
+from waystone.cli import cli
+from waystone.store import GraphStore
 
 
 @pytest.fixture
@@ -215,9 +215,9 @@ class TestDoctor:
     def test_doctor_detects_marker(self, runner, tmp_path):
         r, config, _ = runner
         # Write a marker in the tmp_path so doctor can detect it
-        (tmp_path / ".context-broker").write_text("test-project\n")
+        (tmp_path / ".waystone").write_text("test-project\n")
         result = r.invoke(cli, ["--config", config, "doctor"], catch_exceptions=False)
-        assert ".context-broker marker found" in result.output
+        assert ".waystone marker found" in result.output
 
 
 class TestImportClaudeSessions:
@@ -265,7 +265,7 @@ class TestImportClaudeSessions:
             "edges": [],
         }
 
-        with patch("engram.cli.extract", new=AsyncMock(return_value=mock_result)):
+        with patch("waystone.cli.extract", new=AsyncMock(return_value=mock_result)):
             result = r.invoke(cli, [
                 "--config", config,
                 "import-claude-sessions", "test-project", str(session_file),
@@ -275,7 +275,7 @@ class TestImportClaudeSessions:
         assert "1 nodes" in result.output
 
         db_path = project_tmp / "projects" / "test-project" / "context.db"
-        from engram.store import GraphStore
+        from waystone.store import GraphStore
         store = GraphStore(db_path)
         node = store.get_node("n_import001")
         store.close()
@@ -286,7 +286,7 @@ class TestJsonlToMarkdown:
     def test_plain_string_content(self, tmp_path):
         import json
 
-        from engram.cli import _jsonl_to_markdown
+        from waystone.cli import _jsonl_to_markdown
 
         f = tmp_path / "session.jsonl"
         f.write_text(
@@ -300,7 +300,7 @@ class TestJsonlToMarkdown:
     def test_content_block_list(self, tmp_path):
         import json
 
-        from engram.cli import _jsonl_to_markdown
+        from waystone.cli import _jsonl_to_markdown
 
         f = tmp_path / "session.jsonl"
         f.write_text(
@@ -315,7 +315,7 @@ class TestJsonlToMarkdown:
     def test_skips_invalid_json_lines(self, tmp_path):
         import json
 
-        from engram.cli import _jsonl_to_markdown
+        from waystone.cli import _jsonl_to_markdown
 
         f = tmp_path / "session.jsonl"
         f.write_text(
@@ -326,7 +326,7 @@ class TestJsonlToMarkdown:
         assert "Valid line" in md
 
     def test_empty_file(self, tmp_path):
-        from engram.cli import _jsonl_to_markdown
+        from waystone.cli import _jsonl_to_markdown
         f = tmp_path / "empty.jsonl"
         f.write_text("")
         assert _jsonl_to_markdown(f) == ""

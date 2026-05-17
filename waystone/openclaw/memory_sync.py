@@ -1,21 +1,21 @@
-"""MEMORY.md <-> Engram graph synchronisation for the OpenClaw skill.
+"""MEMORY.md <-> Waystone graph synchronisation for the OpenClaw skill.
 
 Three operations:
-  bootstrap(store, cfg)       — render graph nodes → write Engram section to MEMORY.md
+  bootstrap(store, cfg)       — render graph nodes → write Waystone section to MEMORY.md
   seed_from_memory_md(cfg)    — parse existing MEMORY.md → extract → seed graph
-  write_back(store, cfg)      — refresh the Engram section after new extraction
+  write_back(store, cfg)      — refresh the Waystone section after new extraction
 
 All file writes are atomic (fcntl.flock + NamedTemporaryFile + rename) to
 prevent data loss if OpenClaw's native dreaming runs concurrently.
 
 MEMORY.md layout after bootstrap/write-back:
     <user's own content unchanged>
-    <!-- engram:start -->
-    ## Engram Context
+    <!-- waystone:start -->
+    ## Waystone Context
     <rendered nodes by type>
-    <!-- engram:end -->
+    <!-- waystone:end -->
 
-The engram block is bookended by HTML comments so we can reliably find and
+The waystone block is bookended by HTML comments so we can reliably find and
 replace it without touching the user's handwritten content.
 """
 
@@ -29,13 +29,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from engram.store import GraphStore
+    from waystone.store import GraphStore
 
 log = logging.getLogger(__name__)
 
 # Sentinel comments that wrap our injected block
-_START = "<!-- engram:start -->"
-_END = "<!-- engram:end -->"
+_START = "<!-- waystone:start -->"
+_END = "<!-- waystone:end -->"
 
 # Node types rendered, in display order
 _TYPE_ORDER = [
@@ -66,10 +66,10 @@ _TYPE_LABELS = {
 # ---------------------------------------------------------------------------
 
 def bootstrap(store: "GraphStore", cfg: dict) -> bool:
-    """Render graph nodes → MEMORY.md Engram section.
+    """Render graph nodes → MEMORY.md Waystone section.
 
     Called on session start. If the graph has nodes, writes them to the
-    ``## Engram Context`` section of MEMORY.md (creating the section if it
+    ``## Waystone Context`` section of MEMORY.md (creating the section if it
     doesn't exist). If the graph is empty, does nothing.
 
     Returns True if MEMORY.md was updated, False otherwise.
@@ -84,23 +84,23 @@ def bootstrap(store: "GraphStore", cfg: dict) -> bool:
         if not nodes:
             return False
 
-        section_header = cfg.get("memory_md_section", "## Engram Context")
+        section_header = cfg.get("memory_md_section", "## Waystone Context")
         rendered = _render_nodes(nodes, section_header)
         memory_path = _get_memory_md_path(cfg)
         _inject_section(memory_path, rendered, cfg)
-        log.info("engram: bootstrapped MEMORY.md with %d nodes", len(nodes))
+        log.info("waystone: bootstrapped MEMORY.md with %d nodes", len(nodes))
         return True
     except Exception as e:
-        log.warning("engram: bootstrap failed: %s", e)
+        log.warning("waystone: bootstrap failed: %s", e)
         return False
 
 
 def seed_from_memory_md(cfg: dict) -> int:
     """Parse existing MEMORY.md → extract facts → seed graph.
 
-    Called on session start when the Engram graph is empty but MEMORY.md
+    Called on session start when the Waystone graph is empty but MEMORY.md
     exists (e.g. first-time install, or user migrating from native OpenClaw
-    memory to Engram).
+    memory to Waystone).
 
     Returns the number of nodes extracted (0 if nothing was done).
     """
@@ -114,34 +114,34 @@ def seed_from_memory_md(cfg: dict) -> int:
     try:
         text = memory_path.read_text(encoding="utf-8").strip()
     except Exception as e:
-        log.warning("engram: could not read MEMORY.md: %s", e)
+        log.warning("waystone: could not read MEMORY.md: %s", e)
         return 0
 
     if not text:
         return 0
 
-    # Strip the engram block itself to avoid circular extraction
-    text = _strip_engram_block(text)
+    # Strip the waystone block itself to avoid circular extraction
+    text = _strip_waystone_block(text)
     if not text.strip():
         return 0
 
-    engram_cfg = cfg.get("_engram", {})
+    waystone_cfg = cfg.get("_waystone", {})
     db_path = _get_db_path(cfg)
 
     try:
-        from engram.store import GraphStore
+        from waystone.store import GraphStore
         store = GraphStore(db_path)
     except Exception as e:
         raise DBInitError(f"Could not open graph store at {db_path}: {e}") from e
 
     try:
-        from engram.extractor import extract
-        result = asyncio.run(extract(text, engram_cfg, store=store, source_transcript="memory_md_seed"))
+        from waystone.extractor import extract
+        result = asyncio.run(extract(text, waystone_cfg, store=store, source_transcript="memory_md_seed"))
         nodes = result.get("nodes", [])
         edges = result.get("edges", [])
         if nodes:
             store.merge_extraction(nodes, edges)
-        log.info("engram: seeded %d nodes from MEMORY.md", len(nodes))
+        log.info("waystone: seeded %d nodes from MEMORY.md", len(nodes))
         return len(nodes)
     except Exception as e:
         raise LLMExtractionError(f"Extraction from MEMORY.md failed: {e}") from e
@@ -150,24 +150,24 @@ def seed_from_memory_md(cfg: dict) -> int:
 
 
 def write_back(store: "GraphStore", cfg: dict) -> bool:
-    """Refresh the Engram section of MEMORY.md from the current graph.
+    """Refresh the Waystone section of MEMORY.md from the current graph.
 
     Called after successful extraction. Re-renders the top-K nodes and
-    replaces the existing engram block in MEMORY.md.
+    replaces the existing waystone block in MEMORY.md.
 
     Returns True if MEMORY.md was updated, False on failure.
     """
     try:
         top_k = cfg.get("context_top_k", 15)
         nodes = _get_top_nodes(store, top_k)
-        section_header = cfg.get("memory_md_section", "## Engram Context")
+        section_header = cfg.get("memory_md_section", "## Waystone Context")
         rendered = _render_nodes(nodes, section_header)
         memory_path = _get_memory_md_path(cfg)
         _inject_section(memory_path, rendered, cfg)
-        log.info("engram: write-back complete (%d nodes)", len(nodes))
+        log.info("waystone: write-back complete (%d nodes)", len(nodes))
         return True
     except Exception as e:
-        log.warning("engram: write-back failed: %s", e)
+        log.warning("waystone: write-back failed: %s", e)
         return False
 
 
@@ -191,7 +191,7 @@ def _get_top_nodes(store: "GraphStore", top_k: int) -> list[dict]:
         )
         return all_nodes[:top_k]
     except Exception as e:
-        log.warning("engram: could not fetch nodes: %s", e)
+        log.warning("waystone: could not fetch nodes: %s", e)
         return []
 
 
@@ -222,7 +222,7 @@ def _render_nodes(nodes: list[dict], section_header: str) -> str:
 
 
 def _inject_section(memory_path: Path, content: str, cfg: dict) -> None:
-    """Replace or append the Engram block in MEMORY.md atomically."""
+    """Replace or append the Waystone block in MEMORY.md atomically."""
     from .errors import MemoryMDCorruptError
 
     # Ensure parent dir exists
@@ -256,13 +256,13 @@ def _inject_section(memory_path: Path, content: str, cfg: dict) -> None:
 
 
 def _trim_to_cap(content: str, max_bytes: int) -> str:
-    """Trim the Engram section to fit within max_bytes.
+    """Trim the Waystone section to fit within max_bytes.
 
-    Removes facts from the bottom of the Engram block (oldest/lowest-priority
+    Removes facts from the bottom of the Waystone block (oldest/lowest-priority
     are rendered last). Preserves all user content outside the block.
     """
     if _START not in content or _END not in content:
-        # No engram block to trim — return as-is (user content untouched)
+        # No waystone block to trim — return as-is (user content untouched)
         return content
 
     start_idx = content.index(_START)
@@ -280,8 +280,8 @@ def _trim_to_cap(content: str, max_bytes: int) -> str:
     return pre + "\n".join(block_lines) + post
 
 
-def _strip_engram_block(text: str) -> str:
-    """Remove the Engram-injected block from MEMORY.md text."""
+def _strip_waystone_block(text: str) -> str:
+    """Remove the Waystone-injected block from MEMORY.md text."""
     if _START not in text or _END not in text:
         return text
     start = text.index(_START)
@@ -320,7 +320,7 @@ def _atomic_write(path: Path, content: str) -> None:
 def archive_overflow(cfg: dict) -> int:
     """Move content trimmed from MEMORY.md into MEMORY_ARCHIVE.md.
 
-    When the Engram block exceeds ``memory_md_max_bytes``, ``_trim_to_cap``
+    When the Waystone block exceeds ``memory_md_max_bytes``, ``_trim_to_cap``
     silently drops the lowest-priority facts.  This function instead moves the
     trimmed content to a sidecar archive file so nothing is permanently lost.
 
@@ -341,10 +341,10 @@ def archive_overflow(cfg: dict) -> int:
     try:
         current = memory_path.read_text(encoding="utf-8")
     except Exception as e:
-        log.warning("engram: archive_overflow could not read MEMORY.md: %s", e)
+        log.warning("waystone: archive_overflow could not read MEMORY.md: %s", e)
         return 0
 
-    # Extract the current engram block lines
+    # Extract the current waystone block lines
     if _START not in current or _END not in current:
         return 0
     start_idx = current.index(_START)
@@ -354,7 +354,7 @@ def archive_overflow(cfg: dict) -> int:
 
     # Re-render without cap to see what was trimmed
     try:
-        from engram.store import GraphStore
+        from waystone.store import GraphStore
         db_path = _get_db_path(cfg)
         store = GraphStore(db_path)
         try:
@@ -363,13 +363,13 @@ def archive_overflow(cfg: dict) -> int:
         finally:
             store.close()
     except Exception as e:
-        log.warning("engram: archive_overflow could not open store: %s", e)
+        log.warning("waystone: archive_overflow could not open store: %s", e)
         return 0
 
     if not all_nodes:
         return 0
 
-    section_header = cfg.get("memory_md_section", "## Engram Context")
+    section_header = cfg.get("memory_md_section", "## Waystone Context")
     full_rendered = _render_nodes(all_nodes, section_header)
     full_block = f"{_START}\n{full_rendered}\n{_END}"
     full_size = len((current[:start_idx] + full_block + current[end_idx:]).encode("utf-8"))
@@ -391,10 +391,10 @@ def archive_overflow(cfg: dict) -> int:
             f.write(f"\n<!-- archived {timestamp} -->\n")
             for ln in trimmed_lines:
                 f.write(ln + "\n")
-        log.info("engram: archived %d trimmed line(s) to %s", len(trimmed_lines), archive_path)
+        log.info("waystone: archived %d trimmed line(s) to %s", len(trimmed_lines), archive_path)
         return len(trimmed_lines)
     except Exception as e:
-        log.warning("engram: archive_overflow write failed: %s", e)
+        log.warning("waystone: archive_overflow write failed: %s", e)
         return 0
 
 

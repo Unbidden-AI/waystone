@@ -15,7 +15,7 @@ pytest.importorskip("fastapi", reason="fastapi not installed — skip webhook te
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from engram.billing import _hash_key, init_admin_db, validate_key  # noqa: E402
+from waystone.billing import _hash_key, init_admin_db, validate_key  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -97,8 +97,8 @@ def client_with_db(tmp_path, admin_db_path):
         "strategies": {},
         "projects_dir": str(tmp_path / "projects"),
     }
-    from engram.api_server import app
-    with patch("engram.api_server._cfg", return_value=config):
+    from waystone.api_server import app
+    with patch("waystone.api_server._cfg", return_value=config):
         with TestClient(app) as c:
             yield c, admin_db_path
 
@@ -187,7 +187,7 @@ class TestSubscriptionCreated:
         # Dev mode (no RESEND_API_KEY) prints key to stdout
         out = capsys.readouterr().out
         assert "emailtest@example.com" in out
-        assert "engram_" in out  # key prefix in dev mode stdout
+        assert "waystone_" in out  # key prefix in dev mode stdout
 
     def test_response_includes_tier(self, client_with_db):
         c, _ = client_with_db
@@ -224,7 +224,7 @@ class TestSubscriptionCancelled:
     def test_returns_200_ok(self, client_with_db):
         c, db_path = client_with_db
         # Pre-create a key directly in the file DB
-        from engram.billing import create_key
+        from waystone.billing import create_key
         db = _open_db(db_path)
         create_key(db, email="sub@example.com", tier="pro")
         db.close()
@@ -234,7 +234,7 @@ class TestSubscriptionCancelled:
 
     def test_revokes_key(self, client_with_db):
         c, db_path = client_with_db
-        from engram.billing import create_key
+        from waystone.billing import create_key
         db = _open_db(db_path)
         raw = create_key(db, email="cancel@example.com", tier="pro")
         db.close()
@@ -245,7 +245,7 @@ class TestSubscriptionCancelled:
 
     def test_revoke_count_in_response(self, client_with_db):
         c, db_path = client_with_db
-        from engram.billing import create_key
+        from waystone.billing import create_key
         db = _open_db(db_path)
         create_key(db, email="multi@example.com", tier="pro")
         create_key(db, email="multi@example.com", tier="pro")

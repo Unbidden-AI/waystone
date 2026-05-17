@@ -1,29 +1,29 @@
-"""LangGraph BaseStore adapter for Engram.
+"""LangGraph BaseStore adapter for Waystone.
 
-Exposes Engram's DAG-based knowledge graph as a LangGraph-compatible
+Exposes Waystone's DAG-based knowledge graph as a LangGraph-compatible
 long-term memory store. Agents call ``store.search()`` to retrieve typed
 subgraph context and ``store.put()`` to persist structured facts — all
-backed by Engram's local SQLite graph.
+backed by Waystone's local SQLite graph.
 
 Usage::
 
-    from engram.store import GraphStore
-    from engram.langgraph_store import EngramStore
+    from waystone.store import GraphStore
+    from waystone.langgraph_store import WaystoneStore
     from langgraph.graph import StateGraph
 
     graph_store = GraphStore("/path/to/context.db")
-    memory = EngramStore(graph_store)
+    memory = WaystoneStore(graph_store)
 
     builder = StateGraph(...)
     graph = builder.compile(store=memory)
 
 Namespace convention:
-    LangGraph namespaces map to Engram tags.
+    LangGraph namespaces map to Waystone tags.
     ``("user_alice", "decisions")`` → tags ``["user_alice", "decisions"]``
     ``("project_api", "constraints")`` → tags ``["project_api", "constraints"]``
 
 Storage encoding:
-    Each ``put()`` call stores one node in the Engram graph with:
+    Each ``put()`` call stores one node in the Waystone graph with:
     - ``source_transcript`` = ``"lg:{ns1}|{ns2}|...:{key}"``  (for exact lookup)
     - ``tags``              = ``list(namespace)``
     - ``fact``              = ``value["content"]`` or ``json.dumps(value)``
@@ -108,7 +108,7 @@ def _encode_source(namespace: tuple[str, ...], key: str) -> str:
 def _decode_source(source: str) -> tuple[tuple[str, ...], str] | None:
     """Decode a source_transcript value back to (namespace, key).
 
-    Returns None if the source was not encoded by EngramStore.
+    Returns None if the source was not encoded by WaystoneStore.
     """
     if not source.startswith(_PREFIX):
         return None
@@ -123,17 +123,17 @@ def _decode_source(source: str) -> tuple[tuple[str, ...], str] | None:
 
 
 # ---------------------------------------------------------------------------
-# EngramStore
+# WaystoneStore
 # ---------------------------------------------------------------------------
 
-class EngramStore(_get_base_store()):
-    """LangGraph BaseStore implementation backed by an Engram GraphStore.
+class WaystoneStore(_get_base_store()):
+    """LangGraph BaseStore implementation backed by an Waystone GraphStore.
 
     Args:
-        graph_store: An open ``engram.store.GraphStore`` instance.
+        graph_store: An open ``waystone.store.GraphStore`` instance.
         hops: BFS traversal depth for ``search()`` queries (default: 2).
         top_k: Maximum nodes returned per ``search()`` query (default: 10).
-        strategies: Engram strategy overrides passed to ``retrieve()``.
+        strategies: Waystone strategy overrides passed to ``retrieve()``.
 
     Thread safety:
         - Concurrent reads are safe (SQLite WAL mode enabled by default)
@@ -146,7 +146,7 @@ class EngramStore(_get_base_store()):
 
     def __init__(
         self,
-        graph_store: Any,  # engram.store.GraphStore — typed loosely to avoid circular import
+        graph_store: Any,  # waystone.store.GraphStore — typed loosely to avoid circular import
         hops: int = 2,
         top_k: int = 10,
         strategies: dict | None = None,
@@ -187,7 +187,7 @@ class EngramStore(_get_base_store()):
                 ))
             else:
                 raise NotImplementedError(
-                    f"Unsupported op type: {type(op).__name__}. Update EngramStore.batch() to handle it."
+                    f"Unsupported op type: {type(op).__name__}. Update WaystoneStore.batch() to handle it."
                 )
         return results
 
@@ -202,9 +202,9 @@ class EngramStore(_get_base_store()):
         db_path = self._store.db_path
 
         def _run_in_thread():
-            from engram.store import GraphStore
+            from waystone.store import GraphStore
             store = GraphStore(db_path)
-            adapter = EngramStore(store, hops, top_k, strategies)
+            adapter = WaystoneStore(store, hops, top_k, strategies)
             try:
                 return adapter.batch(ops_list)
             finally:
@@ -224,7 +224,7 @@ class EngramStore(_get_base_store()):
                 (source,),
             ).fetchone()
         except Exception as e:
-            log.warning("EngramStore._get failed: %s", e)
+            log.warning("WaystoneStore._get failed: %s", e)
             return None
 
         if row is None:
@@ -250,7 +250,7 @@ class EngramStore(_get_base_store()):
             )
             self._store.conn.commit()
         except Exception as e:
-            log.warning("EngramStore._put deactivation failed: %s", e)
+            log.warning("WaystoneStore._put deactivation failed: %s", e)
 
         if value is None:
             # value=None signals delete — deactivation above is sufficient
@@ -262,7 +262,7 @@ class EngramStore(_get_base_store()):
             fact = json.dumps(value)
 
         node_type = value.get("type") or (namespace[-1] if namespace else "preference")
-        # Map LangGraph-style type names to valid Engram types where possible
+        # Map LangGraph-style type names to valid Waystone types where possible
         _type_map = {
             "memory": "preference",
             "fact": "implementation",
@@ -291,7 +291,7 @@ class EngramStore(_get_base_store()):
         try:
             self._store.add_node(node)
         except Exception as e:
-            log.error("EngramStore._put add_node failed: %s", e)
+            log.error("WaystoneStore._put add_node failed: %s", e)
             raise
 
     def _search(
@@ -302,7 +302,7 @@ class EngramStore(_get_base_store()):
         limit: int,
         offset: int,
     ) -> list[Any]:
-        from engram.retriever import retrieve_with_stats
+        from waystone.retriever import retrieve_with_stats
 
         results: list[Any] = []
 
@@ -318,7 +318,7 @@ class EngramStore(_get_base_store()):
                 )
                 nodes = retrieval.nodes[offset:offset + limit] if retrieval.nodes else []
             except Exception as e:
-                log.warning("EngramStore._search retrieval failed: %s", e)
+                log.warning("WaystoneStore._search retrieval failed: %s", e)
                 nodes = []
 
             # Filter to namespace prefix if provided
@@ -341,7 +341,7 @@ class EngramStore(_get_base_store()):
             # No query — return all nodes in namespace prefix, applying filter if given
             try:
                 if not namespace_prefix:
-                    # Empty prefix: return all EngramStore-managed nodes
+                    # Empty prefix: return all WaystoneStore-managed nodes
                     rows = self._store.conn.execute(
                         "SELECT * FROM nodes WHERE source_transcript LIKE ? AND is_active = 1 "
                         "ORDER BY created_at DESC LIMIT ? OFFSET ?",
@@ -361,7 +361,7 @@ class EngramStore(_get_base_store()):
                         (f"{base}{_KEY_SEP}%", f"{base}{_NS_SEP}%", limit, offset),
                     ).fetchall()
             except Exception as e:
-                log.warning("EngramStore._search prefix fetch failed: %s", e)
+                log.warning("WaystoneStore._search prefix fetch failed: %s", e)
                 rows = []
 
             for row in rows:
@@ -405,7 +405,7 @@ class EngramStore(_get_base_store()):
                 params + [fetch_limit],
             ).fetchall()
         except Exception as e:
-            log.warning("EngramStore._list_namespaces failed: %s", e)
+            log.warning("WaystoneStore._list_namespaces failed: %s", e)
             return []
 
         seen: set[tuple[str, ...]] = set()
@@ -462,7 +462,7 @@ class EngramStore(_get_base_store()):
             return decoded
         # Fallback: reconstruct from tags
         tags = node.get("tags", [])
-        ns = tuple(tags) if tags else ("engram",)
+        ns = tuple(tags) if tags else ("waystone",)
         return ns, node.get("id", "unknown")
 
 
@@ -480,7 +480,7 @@ def _parse_dt(value: str | None) -> datetime:
 
 
 def _matches_filter(node: dict, filter: dict) -> bool:
-    """Apply a LangGraph filter dict against an Engram node's value fields."""
+    """Apply a LangGraph filter dict against an Waystone node's value fields."""
     value = {"content": node["fact"], "type": node.get("type"), "tags": node.get("tags", [])}
     for k, v in filter.items():
         actual = value.get(k)
@@ -522,22 +522,22 @@ def _namespace_matches(ns: tuple[str, ...], conditions: Any) -> bool:
 # Convenience factory
 # ---------------------------------------------------------------------------
 
-def make_engram_store(
+def make_waystone_store(
     db_path: str | None = None,
     project: str | None = None,
     hops: int = 2,
     top_k: int = 10,
-) -> "EngramStore":
-    """Create an EngramStore from a project name or explicit db path.
+) -> "WaystoneStore":
+    """Create an WaystoneStore from a project name or explicit db path.
 
     Args:
         db_path: Explicit path to a ``context.db`` file.
-        project: Engram project name (resolves via default config).
+        project: Waystone project name (resolves via default config).
         hops: BFS traversal depth for search queries.
         top_k: Maximum nodes returned per search query.
 
     Returns:
-        A ready-to-use EngramStore instance.
+        A ready-to-use WaystoneStore instance.
 
     Thread safety:
         - SQLite WAL mode is enabled by default, allowing concurrent reads
@@ -546,11 +546,11 @@ def make_engram_store(
 
     Example::
 
-        store = make_engram_store(project="my-agent")
+        store = make_waystone_store(project="my-agent")
         graph = builder.compile(store=store)
     """
-    from engram.config import get_db_path, load_config
-    from engram.store import GraphStore
+    from waystone.config import get_db_path, load_config
+    from waystone.store import GraphStore
     from pathlib import Path
 
     if db_path:
@@ -561,4 +561,4 @@ def make_engram_store(
     else:
         raise ValueError("Provide either db_path or project")
 
-    return EngramStore(GraphStore(path), hops=hops, top_k=top_k)
+    return WaystoneStore(GraphStore(path), hops=hops, top_k=top_k)

@@ -1,4 +1,4 @@
-"""LLM-based extraction service for Engram."""
+"""LLM-based extraction service for Waystone."""
 
 import asyncio
 import json
@@ -263,7 +263,7 @@ async def _call_llm(prompt: str, config: dict, domain_profile=None) -> str:
             f"The model hit the token limit before completing the JSON. "
             f"Try: (1) increase max_tokens in config.yaml, "
             f"(2) use --chunk-size to split the input, or "
-            f"(3) use 'engram extract-replay' for turn-by-turn extraction."
+            f"(3) use 'waystone extract-replay' for turn-by-turn extraction."
         )
     return content
 
@@ -327,7 +327,7 @@ async def extract(transcript_text: str, config: dict, store=None, source_transcr
         if keywords:
             candidates = store.get_nodes_by_tags(keywords)
             # Augment with semantic search so nodes with different vocabulary are included.
-            from engram import embedder
+            from waystone import embedder
             if embedder.is_available() and store._vec_available:
                 query_blob = embedder.embed_text(transcript_text[:2000])  # first 2k chars as query
                 sem_ids = store.search_by_embedding(query_blob, top_k=30)
@@ -351,7 +351,7 @@ async def extract(transcript_text: str, config: dict, store=None, source_transcr
                     len(candidates),
                 )
 
-    from engram.config import get_domain_profile
+    from waystone.config import get_domain_profile
     domain_profile = get_domain_profile(config)
     prompt = build_extraction_prompt(transcript_text, domain_profile=domain_profile, existing_nodes=existing_nodes)
     try:
@@ -644,7 +644,7 @@ async def extract_turn(
     Args:
         turn_text: The conversation turn text to extract from.
         existing_nodes: Already-extracted nodes for context (not re-extracted).
-        config: Engram config dict.
+        config: Waystone config dict.
         domain_profile: DomainProfile to use. If None, uses config's domain setting
                         or falls back to software_dev.
 
@@ -652,7 +652,7 @@ async def extract_turn(
         dict with "nodes" (list[dict]) and "edges" (list[dict])
     """
     if domain_profile is None:
-        from engram.config import get_domain_profile
+        from waystone.config import get_domain_profile
         domain_profile = get_domain_profile(config)
     prompt = build_incremental_prompt(turn_text, existing_nodes, domain_profile)
     content = await _call_llm(prompt, config, domain_profile)
@@ -679,7 +679,7 @@ async def extract_config_items(config_text: str, config: dict) -> dict:
     Returns:
         dict with "nodes" list — each node has id, fact, type, confidence, pinned, tags.
     """
-    from engram.prompts import build_config_extraction_prompt
+    from waystone.prompts import build_config_extraction_prompt
     prompt = build_config_extraction_prompt(config_text)
     content_str = await _call_llm(prompt, config)
     # Parse response — config extraction uses a simpler schema (no edges)
@@ -991,7 +991,8 @@ async def reconcile_group(nodes: list[dict], config: dict) -> list[dict]:
         cleaned = re.sub(r"\n?```\s*$", "", cleaned)
         result = json.loads(cleaned)
         pairs = result.get("supersedes", [])
-    except Exception:
+    except Exception as _parse_exc:
+        log.warning("reconcile_group parse failed: %s", _parse_exc, exc_info=True)
         return []
 
     # Validate: only return pairs where both IDs exist in the input set

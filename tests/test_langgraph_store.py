@@ -6,13 +6,13 @@ import tempfile
 
 import pytest
 
-from engram.langgraph_store import (
-    EngramStore,
-    make_engram_store,
+from waystone.langgraph_store import (
+    WaystoneStore,
+    make_waystone_store,
     _decode_source,
     _encode_source,
 )
-from engram.store import GraphStore
+from waystone.store import GraphStore
 
 
 @pytest.fixture
@@ -25,7 +25,7 @@ def tmp_store(tmp_path):
 
 @pytest.fixture
 def adapter(tmp_store):
-    return EngramStore(tmp_store)
+    return WaystoneStore(tmp_store)
 
 
 # ---------------------------------------------------------------------------
@@ -45,7 +45,7 @@ def test_encode_decode_single_ns():
     assert _decode_source(_encode_source(ns, key)) == (ns, key)
 
 
-def test_decode_non_engram_source():
+def test_decode_non_waystone_source():
     assert _decode_source("not-an-lg-source") is None
     assert _decode_source("") is None
 
@@ -82,7 +82,7 @@ def test_put_none_deletes(adapter):
 
 
 def test_put_preserves_namespace_as_tags(tmp_store):
-    adapter = EngramStore(tmp_store)
+    adapter = WaystoneStore(tmp_store)
     adapter.put(("user_alice", "decisions"), "d1", {"content": "fact"})
     item = adapter.get(("user_alice", "decisions"), "d1")
     assert "user_alice" in item.value["tags"]
@@ -181,14 +181,14 @@ def test_alist_namespaces(adapter):
 
 
 # ---------------------------------------------------------------------------
-# make_engram_store factory
+# make_waystone_store factory
 # ---------------------------------------------------------------------------
 
 
-def test_make_engram_store_by_path(tmp_path):
+def test_make_waystone_store_by_path(tmp_path):
     db_path = tmp_path / "test.db"
     # Need to pre-create the store so db exists
     GraphStore(db_path).close()
-    store = make_engram_store(db_path=str(db_path))
+    store = make_waystone_store(db_path=str(db_path))
     assert store is not None
     store._store.close()

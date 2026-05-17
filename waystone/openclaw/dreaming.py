@@ -1,4 +1,4 @@
-"""Engram OpenClaw dreaming — reflection and reconciliation passes.
+"""Waystone OpenClaw dreaming — reflection and reconciliation passes.
 
 Replaces OpenClaw's native LLM-based dreaming with two deterministic passes:
 
@@ -9,7 +9,7 @@ Replaces OpenClaw's native LLM-based dreaming with two deterministic passes:
                    Detect and log genuine conflicts (two active nodes with contradictory facts).
 
 Both passes are zero-cost (no LLM calls). The result is written to
-~/.engram/openclaw_conflicts.log and returned as a DreamResult for callers.
+~/.waystone/openclaw_conflicts.log and returned as a DreamResult for callers.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from engram.store import GraphStore
+    from waystone.store import GraphStore
 
 log = logging.getLogger(__name__)
 
@@ -73,7 +73,7 @@ def run_dream(store: "GraphStore", cfg: dict) -> DreamResult:
     try:
         result.nodes_promoted = _reflect(store)
     except Exception as e:
-        log.warning("engram: reflection error: %s", e)
+        log.warning("waystone: reflection error: %s", e)
 
     try:
         pruned, conflicts = _reconcile(store)
@@ -82,11 +82,11 @@ def run_dream(store: "GraphStore", cfg: dict) -> DreamResult:
         if conflicts:
             _log_conflicts(conflicts, cfg)
     except Exception as e:
-        log.warning("engram: reconciliation error: %s", e)
+        log.warning("waystone: reconciliation error: %s", e)
 
     result.duration_ms = (time.monotonic() - t0) * 1000
     log.info(
-        "engram: dream complete — promoted=%d pruned=%d conflicts=%d (%.0fms)",
+        "waystone: dream complete — promoted=%d pruned=%d conflicts=%d (%.0fms)",
         result.nodes_promoted, result.nodes_pruned, result.conflicts_detected, result.duration_ms,
     )
     return result
@@ -301,8 +301,8 @@ def _looks_conflicting(fact_a: str, fact_b: str) -> bool:
 # ---------------------------------------------------------------------------
 
 def _log_conflicts(conflicts: list[ConflictRecord], cfg: dict) -> None:
-    """Append detected conflicts to ~/.engram/openclaw_conflicts.log."""
-    log_path = Path.home() / ".engram" / "openclaw_conflicts.log"
+    """Append detected conflicts to ~/.waystone/openclaw_conflicts.log."""
+    log_path = Path.home() / ".waystone" / "openclaw_conflicts.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:
@@ -314,9 +314,9 @@ def _log_conflicts(conflicts: list[ConflictRecord], cfg: dict) -> None:
                     f"  node_a ({c.node_a_id}): {c.node_a_fact}\n"
                     f"  node_b ({c.node_b_id}): {c.node_b_fact}\n"
                 )
-        log.info("engram: logged %d conflicts to %s", len(conflicts), log_path)
+        log.info("waystone: logged %d conflicts to %s", len(conflicts), log_path)
     except Exception as e:
-        log.warning("engram: could not write conflict log: %s", e)
+        log.warning("waystone: could not write conflict log: %s", e)
 
 
 def format_dream_summary(result: DreamResult) -> str:
@@ -327,7 +327,7 @@ def format_dream_summary(result: DreamResult) -> str:
         f"  Pruned {result.nodes_pruned} superseded nodes",
     ]
     if result.conflicts_detected:
-        log_path = Path.home() / ".engram" / "openclaw_conflicts.log"
+        log_path = Path.home() / ".waystone" / "openclaw_conflicts.log"
         parts.append(f"  Detected {result.conflicts_detected} potential conflicts → {log_path}")
     else:
         parts.append("  No conflicts detected")

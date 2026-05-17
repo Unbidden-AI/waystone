@@ -1,5 +1,5 @@
 """
-Quick test: run Engram extraction on generated transcripts for a given domain profile.
+Quick test: run Waystone extraction on generated transcripts for a given domain profile.
 
 Usage:
     python -m benchmarks.test_domain --domain episodic_personal
@@ -17,10 +17,10 @@ from pathlib import Path
 if __name__ == "__main__":
     sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from engram.extractor import extract_turn, ExtractionBuffer
-from engram.retriever import bfs_collect, score_by_relevance, extract_keywords
-from engram.store import GraphStore
-from engram.config import load_config, get_domain_profile
+from waystone.extractor import extract_turn, ExtractionBuffer
+from waystone.retriever import bfs_collect, score_by_relevance, extract_keywords
+from waystone.store import GraphStore
+from waystone.config import load_config, get_domain_profile
 
 
 async def ingest_transcript(

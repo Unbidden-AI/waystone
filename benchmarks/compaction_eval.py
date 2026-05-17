@@ -34,8 +34,8 @@ from pathlib import Path
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
-from engram.config import get_db_path, load_config
-from engram.store import GraphStore
+from waystone.config import get_db_path, load_config
+from waystone.store import GraphStore
 from orchestrator.context_manager import ContextManager
 from orchestrator.types import CompactionTrigger, Message
 

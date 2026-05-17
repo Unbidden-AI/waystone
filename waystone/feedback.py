@@ -1,4 +1,4 @@
-"""Interactive feedback labeling for Engram fact extraction outputs.
+"""Interactive feedback labeling for Waystone fact extraction outputs.
 
 Provides:
   - Interactive review loop: shows unrated nodes one by one, accepts u/d/s/q keypresses
@@ -77,7 +77,7 @@ def review_loop(store: "GraphStore", limit: int = 50) -> dict:
     skipped = 0
 
     print(f"\n{'='*60}")
-    print(f"  Engram Feedback — {total} unrated node(s)")
+    print(f"  Waystone Feedback — {total} unrated node(s)")
     print(f"  [u]p  [d]own  [s]kip  [q]uit")
     print(f"{'='*60}\n")
 

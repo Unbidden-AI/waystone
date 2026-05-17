@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy project files
 COPY pyproject.toml ./
-COPY engram/ ./engram/
+COPY waystone/ ./waystone/
 
 # Install with api + monitoring extras (no dev or semantic extras)
 RUN pip install --no-cache-dir -e ".[api,monitoring]"
@@ -22,4 +22,4 @@ ENV PROJECTS_DIR=/data/projects \
 EXPOSE 8000
 
 # Entrypoint: start uvicorn using PORT env var so Fly.io/Railway can override
-CMD ["sh", "-c", "uvicorn engram.api_server:app --host 0.0.0.0 --port ${PORT}"]
+CMD ["sh", "-c", "uvicorn waystone.api_server:app --host 0.0.0.0 --port ${PORT}"]

@@ -1,4 +1,4 @@
-"""Extraction prompt templates for Engram.
+"""Extraction prompt templates for Waystone.
 
 Prompts are parameterized by DomainProfile so the same extraction logic works
 across different domains (software_dev, episodic_personal, etc.).

@@ -1,13 +1,13 @@
-# Getting Started with Context Broker
+# Getting Started with Waystone
 
-Context Broker extracts facts from your Claude Code conversations into a knowledge graph, then injects relevant context into every future prompt — so Claude always knows your project's decisions, constraints, and history.
+Waystone extracts facts from your Claude Code conversations into a knowledge graph, then injects relevant context into every future prompt — so Claude always knows your project's decisions, constraints, and history.
 
 **Two setup paths — pick one:**
 
 | | MCP Server (recommended) | Hooks (manual) |
 |---|---|---|
 | **Setup** | One JSON snippet in Claude Code config | Run `hooks/install.py` |
-| **Extraction** | `engram onboard` or call `context_broker_extract` from Claude | `engram extract` after each session |
+| **Extraction** | `waystone onboard` or call `context_broker_extract` from Claude | `waystone extract` after each session |
 | **Context injection** | Claude calls `context_broker_query` automatically | Hook injects on every `UserPromptSubmit` |
 | **Best for** | New users, quick start | Power users, background auto-extraction |
 
@@ -23,7 +23,7 @@ Context Broker extracts facts from your Claude Code conversations into a knowled
 
 ## Step 1: Install the package
 
-From the Context Broker repo directory:
+From the Waystone repo directory:
 
 ```bash
 cd /Users/justinwalton/Apps/ContextBroker
@@ -33,19 +33,19 @@ pip install -e ".[dev]"
 Verify it worked:
 
 ```bash
-engram --help
+waystone --help
 ```
 
 ---
 
 ## Step 2: Configure your LLM API key
 
-Context Broker needs an LLM to extract facts from transcripts. Retrieval (the hot path on every prompt) is fully local SQLite — no LLM calls at query time.
+Waystone needs an LLM to extract facts from transcripts. Retrieval (the hot path on every prompt) is fully local SQLite — no LLM calls at query time.
 
-A config file has been created at `~/.context-broker/config.yaml`. Open it and replace `YOUR_GEMINI_API_KEY` with your key:
+A config file has been created at `~/.waystone/config.yaml`. Open it and replace `YOUR_GEMINI_API_KEY` with your key:
 
 ```bash
-open ~/.context-broker/config.yaml
+open ~/.waystone/config.yaml
 ```
 
 The file is pre-configured for Gemini (recommended). To use OpenAI instead, uncomment the OpenAI section and comment out the Gemini section.
@@ -56,11 +56,11 @@ The file is pre-configured for Gemini (recommended). To use OpenAI instead, unco
 
 ## Step 3A: Set up the MCP server (recommended)
 
-Add Context Broker as an MCP server so Claude Code can call it directly as a tool.
+Add Waystone as an MCP server so Claude Code can call it directly as a tool.
 
 **Option 1 — Claude Code CLI:**
 ```bash
-claude mcp add context-broker engram mcp-serve
+claude mcp add waystone waystone mcp-serve
 ```
 
 **Option 2 — Manual config:**
@@ -70,8 +70,8 @@ Edit `~/.claude/claude_desktop_config.json` (create it if it doesn't exist) and 
 ```json
 {
   "mcpServers": {
-    "context-broker": {
-      "command": "engram",
+    "waystone": {
+      "command": "waystone",
       "args": ["mcp-serve"]
     }
   }
@@ -80,18 +80,18 @@ Edit `~/.claude/claude_desktop_config.json` (create it if it doesn't exist) and 
 
 A ready-to-paste snippet is at `claude_mcp_config.json` in this repo.
 
-**Restart Claude Code.** You should see `context-broker` appear in the MCP server list.
+**Restart Claude Code.** You should see `waystone` appear in the MCP server list.
 
-> **Skip ahead:** Once the MCP server is running, jump to [Step 3A Quick Start](#step-3a-quick-start-engram-onboard) to import your existing sessions with one command.
+> **Skip ahead:** Once the MCP server is running, jump to [Step 3A Quick Start](#step-3a-quick-start-waystone-onboard) to import your existing sessions with one command.
 
 ---
 
-## Step 3A Quick Start: `engram onboard`
+## Step 3A Quick Start: `waystone onboard`
 
 If you've already used Claude Code, import your recent sessions in one step:
 
 ```bash
-engram onboard myproject
+waystone onboard myproject
 ```
 
 You'll see a menu of your recent Claude Code sessions:
@@ -123,7 +123,7 @@ This adds three things to `~/.claude/settings.json`:
 | Hook | What it does |
 |------|-------------|
 | `UserPromptSubmit` | Queries the graph and injects relevant context into every prompt |
-| `Stop` | Records each session as a transcript to `~/.context-broker/transcripts/<project>/` |
+| `Stop` | Records each session as a transcript to `~/.waystone/transcripts/<project>/` |
 | Status line | Shows retrieval metrics (nodes retrieved, tokens injected, latency) |
 
 **Restart Claude Code** after running the installer.
@@ -135,13 +135,13 @@ This adds three things to `~/.claude/settings.json`:
 In the root of the project you want to track:
 
 ```bash
-engram hook-init myproject
+waystone hook-init myproject
 ```
 
 Or manually:
 
 ```bash
-echo 'myproject' > /path/to/your/project/.context-broker
+echo 'myproject' > /path/to/your/project/.waystone
 ```
 
 Replace `myproject` with any short name (e.g. `ContextBroker`, `MyApp`). This name is how your graph is stored and identified.
@@ -176,20 +176,20 @@ Tech stack: React Native 0.73, Expo, PostgreSQL 15, FastAPI, SQLAlchemy 2.0.
 **Extract it:**
 
 ```bash
-engram extract myproject project_brief.md
+waystone extract myproject project_brief.md
 ```
 
 You'll get 20–50 nodes covering the decisions and constraints you wrote down. Every session from that point forward will have those facts available.
 
-> **Tip:** Design documents, ADRs, a README, or existing specifications work just as well — `engram extract` handles any markdown file, not just conversation transcripts.
+> **Tip:** Design documents, ADRs, a README, or existing specifications work just as well — `waystone extract` handles any markdown file, not just conversation transcripts.
 
 ---
 
 ## Step 4C: Set a project brief in the orchestrator static prompt (orchestrator mode only)
 
-If you're using `engram orchestrate` instead of the hooks/MCP path, add a 1–2 sentence project brief to the `static` field in your config. This gives the model orientation before it sees any retrieved graph context — particularly important on the first turn of a session when the graph may return nothing relevant.
+If you're using `waystone orchestrate` instead of the hooks/MCP path, add a 1–2 sentence project brief to the `static` field in your config. This gives the model orientation before it sees any retrieved graph context — particularly important on the first turn of a session when the graph may return nothing relevant.
 
-Open `~/.context-broker/config.yaml` and find the `orchestrator.system_prompt` section:
+Open `~/.waystone/config.yaml` and find the `orchestrator.system_prompt` section:
 
 ```yaml
 orchestrator:
@@ -224,8 +224,8 @@ The graph fills in the rich knowledge; `static` just gives the model a hook to h
 Just work normally in your project. The `Stop` hook automatically saves each session as a markdown transcript to:
 
 ```
-~/.context-broker/transcripts/<project>/YYYYMMDD_HHMMSS_<id>.md
-~/.context-broker/transcripts/<project>/latest.md  ← always points to most recent
+~/.waystone/transcripts/<project>/YYYYMMDD_HHMMSS_<id>.md
+~/.waystone/transcripts/<project>/latest.md  ← always points to most recent
 ```
 
 No action needed — it happens automatically at the end of every session.
@@ -237,7 +237,7 @@ No action needed — it happens automatically at the end of every session.
 After a session (or using any existing transcript):
 
 ```bash
-engram extract myproject ~/.context-broker/transcripts/myproject/latest.md
+waystone extract myproject ~/.waystone/transcripts/myproject/latest.md
 ```
 
 You'll see output like:
@@ -245,7 +245,7 @@ You'll see output like:
 Extracted 47 nodes, 23 edges from latest.md  [density=3.2/1kc  avg_tags=7.1  edge/node=0.49]
 ```
 
-The graph is now stored at `~/.context-broker/projects/myproject/context.db`.
+The graph is now stored at `~/.waystone/projects/myproject/context.db`.
 
 > **Have an existing transcript?** You can also extract from any exported Claude conversation (File → Export in Claude.ai, or a manually written markdown file). The format should use `**Name**: message` speaker labels, but the extractor handles most common formats.
 
@@ -254,13 +254,13 @@ The graph is now stored at `~/.context-broker/projects/myproject/context.db`.
 ## Step 7: Verify retrieval is working
 
 ```bash
-engram query myproject "how does the authentication work" --stats
+waystone query myproject "how does the authentication work" --stats
 ```
 
 Then check what the hook would inject for that query:
 
 ```bash
-engram last-context
+waystone last-context
 ```
 
 ---
@@ -283,19 +283,19 @@ Claude Sonnet 4.6 │ ctx [████░░░░] 12% │ $0.0041 │ CB(mypr
 ## Ongoing workflow
 
 ```
-Session ends → transcript auto-saved → run engram extract → next session has context
+Session ends → transcript auto-saved → run waystone extract → next session has context
 ```
 
 After a few sessions, accumulate transcripts and re-extract to grow the graph:
 
 ```bash
-engram extract myproject ~/.context-broker/transcripts/myproject/20260309_*.md
+waystone extract myproject ~/.waystone/transcripts/myproject/20260309_*.md
 ```
 
 Or extract each new session as it happens:
 
 ```bash
-engram extract myproject ~/.context-broker/transcripts/myproject/latest.md
+waystone extract myproject ~/.waystone/transcripts/myproject/latest.md
 ```
 
 ---
@@ -304,39 +304,39 @@ engram extract myproject ~/.context-broker/transcripts/myproject/latest.md
 
 ```bash
 # One-click import from recent Claude Code sessions
-engram onboard myproject
+waystone onboard myproject
 
 # Import specific .jsonl session files
-engram import-claude-sessions myproject ~/.claude/projects/abc123/session.jsonl
+waystone import-claude-sessions myproject ~/.claude/projects/abc123/session.jsonl
 
 # List discoverable sessions without importing
-engram import-claude-sessions myproject --list-only
+waystone import-claude-sessions myproject --list-only
 
 # Start the MCP server (for Claude Code integration)
-engram mcp-serve                  # stdio (default, for Claude Code)
-engram mcp-serve --transport sse  # HTTP SSE (for other clients)
+waystone mcp-serve                  # stdio (default, for Claude Code)
+waystone mcp-serve --transport sse  # HTTP SSE (for other clients)
 
 # See what's in your graph
-engram show myproject
+waystone show myproject
 
 # Query manually (useful for testing)
-engram query myproject "describe the data pipeline" --stats
+waystone query myproject "describe the data pipeline" --stats
 
 # See exactly what was injected into the last prompt
-engram last-context
+waystone last-context
 
 # Export the full graph as markdown
-engram export myproject
+waystone export myproject
 
 # Initialize a fresh empty graph
-engram init myproject
+waystone init myproject
 ```
 
 ---
 
 ## Uninstalling / Rolling Back
 
-If Context Broker doesn't work as expected and you want to remove it completely:
+If Waystone doesn't work as expected and you want to remove it completely:
 
 ### Step 1: Restore your Claude Code settings
 
@@ -361,31 +361,31 @@ If you prefer to edit manually instead, open `~/.claude/settings.json` and remov
 
 ### Step 2: Remove the project marker file
 
-In any project directory where you ran `engram hook-init` (or manually created `.context-broker`):
+In any project directory where you ran `waystone hook-init` (or manually created `.waystone`):
 
 ```bash
-rm /path/to/your/project/.context-broker
+rm /path/to/your/project/.waystone
 ```
 
-### Step 3: Remove Context Broker data (optional)
+### Step 3: Remove Waystone data (optional)
 
 This deletes all graphs, transcripts, and state:
 
 ```bash
-rm -rf ~/.context-broker/
+rm -rf ~/.waystone/
 ```
 
 To remove only a specific project's graph:
 
 ```bash
-rm -rf ~/.context-broker/projects/myproject/
-rm -rf ~/.context-broker/transcripts/myproject/
+rm -rf ~/.waystone/projects/myproject/
+rm -rf ~/.waystone/transcripts/myproject/
 ```
 
 ### Step 4: Uninstall the package
 
 ```bash
-pip uninstall context-broker
+pip uninstall waystone
 ```
 
 ---
@@ -393,14 +393,14 @@ pip uninstall context-broker
 ## Troubleshooting
 
 **"No graph found" in the status line**
-→ Run `engram onboard myproject` or `engram extract myproject <transcript>` to build the graph first.
+→ Run `waystone onboard myproject` or `waystone extract myproject <transcript>` to build the graph first.
 
 **MCP server not showing up in Claude Code**
-→ Confirm `engram mcp-serve` runs without error: `engram mcp-serve --help`
+→ Confirm `waystone mcp-serve` runs without error: `waystone mcp-serve --help`
 → Check that `~/.claude/claude_desktop_config.json` has the correct JSON syntax.
 → Restart Claude Code after editing the config.
 
-**`engram onboard` finds no sessions**
+**`waystone onboard` finds no sessions**
 → Sessions appear in `~/.claude/projects/` after using Claude Code at least once.
 → Check: `ls ~/.claude/projects/`
 
@@ -409,11 +409,11 @@ pip uninstall context-broker
 → Check `~/.claude/settings.json` for the hook entries.
 
 **"No relevant context found" on every query**
-→ Try `engram show myproject` to confirm nodes exist, then try a broader query term.
-→ Check that the `.context-broker` file in your project directory contains the correct project name.
+→ Try `waystone show myproject` to confirm nodes exist, then try a broader query term.
+→ Check that the `.waystone` file in your project directory contains the correct project name.
 
 **Extraction fails with auth error**
-→ Verify your `api_key` in `~/.context-broker/config.yaml` or confirm `OPENAI_API_KEY` is set in your shell.
+→ Verify your `api_key` in `~/.waystone/config.yaml` or confirm `OPENAI_API_KEY` is set in your shell.
 
 **Large transcript extraction fails or times out**
 → Add `--timeout 600` to extend the LLM timeout.
@@ -421,5 +421,5 @@ pip uninstall context-broker
 
 **Want to see the raw transcript the hook saved?**
 ```bash
-cat ~/.context-broker/transcripts/myproject/latest.md | head -50
+cat ~/.waystone/transcripts/myproject/latest.md | head -50
 ```

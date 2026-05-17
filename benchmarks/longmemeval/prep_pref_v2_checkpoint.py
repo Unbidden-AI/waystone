@@ -29,7 +29,7 @@ FAILING_SAMPLE_IDS = [
     "1a1907b4", "09d032c9", "d24813b1", "1da05512", "b6025781", "1d4e3b97",
 ]
 
-CACHE_ROOT = Path.home() / ".engram" / "longmemeval_cache"
+CACHE_ROOT = Path.home() / ".waystone" / "longmemeval_cache"
 SOURCE_DIR = CACHE_ROOT / "engram_lme_gemini_s_user_patched"
 DEST_DIR = CACHE_ROOT / "engram_lme_gemini_s_pref_v2"
 

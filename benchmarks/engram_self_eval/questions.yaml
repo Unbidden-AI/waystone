@@ -1,5 +1,5 @@
-# Engram self-eval question bank
-# Each question should be answerable from the Engram project graph.
+# Waystone self-eval question bank
+# Each question should be answerable from the Waystone project graph.
 # expected_keywords: at least one should appear in the retrieved context to pass auto-check.
 # category: architecture | config | benchmark | bugs | decisions | retrieval | gotchas
 
@@ -65,7 +65,7 @@ questions:
 
   - id: arch_02
     category: architecture
-    question: "What SQLite PRAGMAs does Engram apply at connection time and why?"
+    question: "What SQLite PRAGMAs does Waystone apply at connection time and why?"
     expected_keywords: [WAL, journal_mode, synchronous, cache_size, mmap]
     notes: "WAL + NORMAL sync + 64MB cache + mmap for read-heavy workload."
 

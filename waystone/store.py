@@ -325,7 +325,7 @@ class GraphStore:
 
         # Create vec0 virtual table for semantic search (requires sqlite-vec loaded)
         if self._vec_available:
-            from engram.embedder import EMBEDDING_DIM
+            from waystone.embedder import EMBEDDING_DIM
             self.conn.execute(
                 f"CREATE VIRTUAL TABLE IF NOT EXISTS node_embeddings USING vec0("
                 f"node_id TEXT PRIMARY KEY, embedding float[{EMBEDDING_DIM}])"
@@ -368,7 +368,7 @@ class GraphStore:
         )
         self.conn.commit()
         if self._vec_available:
-            from engram.embedder import EMBEDDING_DIM
+            from waystone.embedder import EMBEDDING_DIM
             self.conn.execute(
                 f"CREATE VIRTUAL TABLE IF NOT EXISTS vec_raw_sentences USING vec0("
                 f"sentence_id INTEGER PRIMARY KEY, embedding float[{EMBEDDING_DIM}])"
@@ -407,7 +407,7 @@ class GraphStore:
         # Semantic dedup: check for paraphrase duplicates before inserting
         _new_blob: bytes | None = None
         if self._vec_available:
-            from engram import embedder as _embedder
+            from waystone import embedder as _embedder
             if _embedder.is_available():
                 try:
                     _new_blob = _embedder.embed_text(node["fact"])
@@ -590,7 +590,7 @@ class GraphStore:
         """
         if not self._vec_available:
             return []
-        from engram import embedder
+        from waystone import embedder
         if not embedder.is_available():
             return []
 
@@ -1602,7 +1602,7 @@ class GraphStore:
         """
         if not self._vec_available:
             return 0
-        from engram import embedder
+        from waystone import embedder
         if not embedder.is_available():
             return 0
         rows = self.conn.execute(
@@ -1661,7 +1661,7 @@ class GraphStore:
         """
         if not self._vec_available:
             return 0
-        from engram import embedder
+        from waystone import embedder
         if not embedder.is_available():
             return 0
         rows = self.conn.execute(
@@ -1938,7 +1938,7 @@ class GraphStore:
 
         Returns the number of nodes removed.
         """
-        from engram import embedder
+        from waystone import embedder
         if not embedder.is_available():
             return 0
 

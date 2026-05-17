@@ -1,5 +1,5 @@
 """
-Generate synthetic domain-specific conversation transcripts for Engram testing.
+Generate synthetic domain-specific conversation transcripts for Waystone testing.
 
 Each transcript is a realistic multi-turn dialogue designed to exercise the
 node/edge types of a given domain profile.
@@ -27,7 +27,7 @@ from pathlib import Path
 if __name__ == "__main__":
     sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from engram.config import load_config
+from waystone.config import load_config
 pass  # imports resolved inside functions
 
 
@@ -297,7 +297,7 @@ _GENERATION_SYSTEM = (
 
 async def generate_transcript(scenario: dict, config: dict) -> str:
     """Generate a single transcript from a scenario prompt."""
-    from engram.extractor import _call_llm
+    from waystone.extractor import _call_llm
     full_prompt = _GENERATION_SYSTEM + "\n\n" + scenario["prompt"]
     return await _call_llm(full_prompt, config)
 

@@ -1,8 +1,8 @@
-# Engram Architecture
+# Waystone Architecture
 
 ## Overview
 
-Engram is a DAG-based context intelligence layer for LLM workflows. It extracts facts from
+Waystone is a DAG-based context intelligence layer for LLM workflows. It extracts facts from
 conversation transcripts, stores them as a typed knowledge graph, and retrieves relevant
 subgraphs given a task description. See `CLAUDE.md` for the command reference and data flow.
 
@@ -17,7 +17,7 @@ Thai food") may remain valid for years. A transition fact ("switched from S3 to 
 irrelevant once the migration is complete. A question node ("still deciding on auth provider")
 may be resolved within days. A single global decay rate treats all of these the same.
 
-Engram's `recency_decay` strategy originally applied one global half-life (`recency_half_life_days`)
+Waystone's `recency_decay` strategy originally applied one global half-life (`recency_half_life_days`)
 to all nodes using exponential decay:
 
 ```
@@ -36,9 +36,9 @@ RoMem introduces two key ideas for temporal knowledge graphs:
 
 **1. Per-relation volatility scores (αᵣ ∈ (0,1))**
 
-Rather than one global decay rate, each relation type (or in Engram's case, node type) gets
+Rather than one global decay rate, each relation type (or in Waystone's case, node type) gets
 its own volatility score. High-volatility relations decay quickly; low-volatility relations
-remain stable for months or years. RoMem learns these scores from data; Engram assigns them
+remain stable for months or years. RoMem learns these scores from data; Waystone assigns them
 by reasoning about node-type semantics:
 
 | Node type        | `half_life_by_type` (days) | Rationale |
@@ -79,12 +79,12 @@ rotated out — it contributes zero weight to retrieval and is naturally exclude
 RoMem reported 2–3× MRR improvement on MultiTQ and 85.7% recall on LoCoMo, benchmarked
 against HippoRAG and Mem0 as baselines.
 
-### Engram Implementation
+### Waystone Implementation
 
 Three RoMem components are implemented as independent ablation flags:
 
 **`half_life_by_type`** (Step 1) — dict mapping node type → half-life days. Wired into
-`apply_recency_decay()` in `engram/retriever.py`. Falls back to `recency_half_life_days`
+`apply_recency_decay()` in `waystone/retriever.py`. Falls back to `recency_half_life_days`
 for unlisted types. Zero code-path changes for configs that don't set it.
 
 **`phase_rotation`** (Step 2) — bool flag. When `True`, `apply_recency_decay()` uses
@@ -95,7 +95,7 @@ be combined or tested alone.
 score-zeroing pass. Superseded nodes remain in the graph (supporting `--at-time` temporal
 queries) but rank at the bottom of every result set, so `top_k` and `token_budget` cuts
 naturally exclude them from normal responses. Implemented as `apply_soft_supersede()` in
-`engram/retriever.py`.
+`waystone/retriever.py`.
 
 ### Ablation Configs
 
@@ -126,7 +126,7 @@ python -m benchmarks.locomo.harness \
 A complementary vision paper proposing five operations for long-term memory systems:
 TRIAGE, DECAY, CONTEXTUALIZE, CONSOLIDATE, and AUDIT. The paper's key concern — the
 "centrality-protected dominant interpretation" problem, where popular nodes crowd out
-minority hypotheses — maps directly to Engram's planned `minority_protected` flag (not
+minority hypotheses — maps directly to Waystone's planned `minority_protected` flag (not
 yet implemented).
 
 Planned additions based on this paper:
@@ -134,4 +134,4 @@ Planned additions based on this paper:
 - `gravity` float: blend of access frequency, recency, and in-degree
 - `minority_protected` flag: reserves `top_k` slots for low-confidence nodes with
   diverging facts on the same tags
-- `engram audit` command: exposes metabolism state for diagnostics
+- `waystone audit` command: exposes metabolism state for diagnostics

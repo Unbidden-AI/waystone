@@ -1,4 +1,4 @@
-"""Domain profiles for Engram extraction.
+"""Domain profiles for Waystone extraction.
 
 Each profile defines the node types, edge relations, and their descriptions
 used by the extraction LLM. Select a profile via config.yaml:

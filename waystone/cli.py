@@ -1,4 +1,4 @@
-"""CLI for Engram."""
+"""CLI for Waystone."""
 
 import asyncio
 import json
@@ -12,6 +12,7 @@ from pathlib import Path
 import click
 
 from .config import get_db_path, get_project_dir, load_config
+from .monitoring import init_sentry
 from .extractor import (
     ExtractionBuffer,
     extract,
@@ -63,7 +64,8 @@ def _load_cfg(config_path):
 @click.option("--config", "config_path", default=None, help="Path to config.yaml")
 @click.pass_context
 def cli(ctx, config_path):
-    """Engram — DAG-based context intelligence for LLM workflows."""
+    """Waystone — DAG-based context intelligence for LLM workflows."""
+    init_sentry()
     ctx.ensure_object(dict)
     ctx.obj["config_path"] = config_path
 
@@ -126,7 +128,7 @@ def extract_cmd(ctx, project, transcript_file, verify, lessons, decisions, quest
     db_path = get_db_path(config, project)
 
     if not db_path.parent.exists():
-        click.echo(f"Error: Project '{project}' not found. Run 'engram init {project}' first.", err=True)
+        click.echo(f"Error: Project '{project}' not found. Run 'waystone init {project}' first.", err=True)
         sys.exit(1)
 
     transcript_path = Path(transcript_file)
@@ -323,7 +325,7 @@ def extract_cmd(ctx, project, transcript_file, verify, lessons, decisions, quest
     if quality["low_tag_nodes"]:
         click.echo(
             f"  Warning: {quality['low_tag_nodes']} node(s) have < 4 tags — "
-            "may be hard to retrieve. Run 'engram show {project}' to inspect."
+            "may be hard to retrieve. Run 'waystone show {project}' to inspect."
         )
 
 
@@ -346,7 +348,7 @@ def extract_config_cmd(ctx, project, config_file, dry_run, source, dedup_thresho
     the resulting nodes into PROJECT's graph.
 
     Pinned nodes are flagged so they always appear in context output regardless
-    of query. Use 'engram pinned PROJECT' to review what's been pinned.
+    of query. Use 'waystone pinned PROJECT' to review what's been pinned.
     """
     config = _load_cfg(ctx.obj["config_path"])
     db_path = get_db_path(config, project)
@@ -382,7 +384,7 @@ def extract_config_cmd(ctx, project, config_file, dry_run, source, dedup_thresho
     dedup_index: list[tuple[str, str, bytes]] = []
     embedder_ok = False
     if dedup_threshold > 0:
-        from engram import embedder as _embedder
+        from waystone import embedder as _embedder
         if _embedder.is_available() and store._vec_available:
             embedder_ok = True
             dedup_index = store.get_pinned_embeddings()
@@ -391,7 +393,7 @@ def extract_config_cmd(ctx, project, config_file, dry_run, source, dedup_thresho
         """Return (matched_id, matched_fact, sim) if fact is near-duplicate of a pinned node."""
         if not embedder_ok or not dedup_index:
             return None
-        from engram import embedder as _embedder
+        from waystone import embedder as _embedder
         blob = _embedder.embed_text(fact)
         best_id, best_fact, best_sim = "", "", 0.0
         for pid, pfact, pemb in dedup_index:
@@ -546,12 +548,12 @@ def survey_cmd(ctx, project, dry_run, max_nodes, tags):
               help="Only include nodes tagged with at least one of these tags (e.g. --tags benchmark --tags model)")
 @click.pass_context
 def synthesize_cmd(ctx, project, dry_run, max_nodes, tags):
-    """Deprecated: Use 'engram survey' instead.
+    """Deprecated: Use 'waystone survey' instead.
 
     This command is an alias for backward compatibility. It forwards all arguments
     to the survey command.
     """
-    click.echo("Warning: `engram synthesize` is deprecated. Use `engram survey` instead.", err=True)
+    click.echo("Warning: `waystone synthesize` is deprecated. Use `waystone survey` instead.", err=True)
     # Forward to survey_cmd with the same context and arguments
     ctx.invoke(survey_cmd, project=project, dry_run=dry_run, max_nodes=max_nodes, tags=tags)
 
@@ -583,7 +585,7 @@ def reflect_cmd(ctx, project, transcript, since_turn, domain, chunk_size):
     db_path = get_db_path(config, project)
 
     if not db_path.parent.exists():
-        click.echo(f"Error: Project '{project}' not found. Run 'engram init {project}' first.", err=True)
+        click.echo(f"Error: Project '{project}' not found. Run 'waystone init {project}' first.", err=True)
         sys.exit(1)
 
     transcript_path = Path(transcript)
@@ -836,9 +838,9 @@ def query(ctx, project, task, hops, top_k, enable, disable, confidence, token_bu
     if stats["node_count"] == 0:
         click.echo(
             f"Graph is empty. Extract a transcript first:\n"
-            f"  engram extract {project} <transcript_file>\n"
+            f"  waystone extract {project} <transcript_file>\n"
             f"Or replay an existing transcript turn-by-turn:\n"
-            f"  engram extract-replay {project} <transcript_file>",
+            f"  waystone extract-replay {project} <transcript_file>",
             err=True,
         )
         store.close()
@@ -923,7 +925,7 @@ def show(ctx, project, failures):
 @click.option("--queries", default=100, type=int, help="Query count for cumulative savings projection (default 100)")
 @click.pass_context
 def savings(ctx, project, top_k, queries):
-    """Estimate token and cost savings from using Engram vs full-context replay."""
+    """Estimate token and cost savings from using Waystone vs full-context replay."""
     config = _load_cfg(ctx.obj["config_path"])
     db_path = get_db_path(config, project)
 
@@ -936,7 +938,7 @@ def savings(ctx, project, top_k, queries):
     node_count = stats["node_count"]
 
     if node_count == 0:
-        click.echo(f"Project '{project}' has no nodes yet. Run 'engram extract' first.")
+        click.echo(f"Project '{project}' has no nodes yet. Run 'waystone extract' first.")
         store.close()
         return
 
@@ -983,11 +985,11 @@ def savings(ctx, project, top_k, queries):
     click.echo()
     click.echo("Context per query:")
     click.echo(f"  Full graph replay:   {full_tokens:>9,} tokens")
-    click.echo(f"  Engram retrieval:    {retrieval_tokens:>9,} tokens  (~{retrieved_nodes} nodes, top_k={effective_top_k}, hops={hops})")
+    click.echo(f"  Waystone retrieval:    {retrieval_tokens:>9,} tokens  (~{retrieved_nodes} nodes, top_k={effective_top_k}, hops={hops})")
     click.echo(f"  Reduction:           {savings_pct:.0f}% fewer tokens per query")
     click.echo()
     click.echo(f"Estimated cost savings  (over {queries:,} queries, input tokens only):")
-    header = f"  {'Model':<26}  {'Full-ctx/q':>12}  {'Engram/q':>10}  {'Per-query':>10}  {'×{:,} queries'.format(queries):>13}"
+    header = f"  {'Model':<26}  {'Full-ctx/q':>12}  {'Waystone/q':>10}  {'Per-query':>10}  {'×{:,} queries'.format(queries):>13}"
     click.echo(header)
     click.echo(f"  {'─'*26}  {'─'*12}  {'─'*10}  {'─'*10}  {'─'*13}")
     for label, price_per_m in PRICE_POINTS:
@@ -1095,9 +1097,9 @@ def unpin(ctx, project, node_id, source):
 
     Examples:
 
-      engram unpin myproject some_node_id
+      waystone unpin myproject some_node_id
 
-      engram unpin myproject --source SOUL.md
+      waystone unpin myproject --source SOUL.md
     """
     if not node_id and not source:
         click.echo("Error: provide NODE_ID or --source LABEL.", err=True)
@@ -1303,7 +1305,7 @@ def reconcile_cmd(ctx, project, dry_run, max_cluster_size, semantic_dedup, dedup
 
     # --- Semantic dedup pass (embedding-based paraphrase merging) ---
     if semantic_dedup:
-        from engram import embedder as _embedder
+        from waystone import embedder as _embedder
         if not store._vec_available or not _embedder.is_available():
             click.echo("\nSemantic dedup skipped — sqlite-vec or sentence-transformers unavailable.")
         else:
@@ -1347,7 +1349,7 @@ def reconcile_cmd(ctx, project, dry_run, max_cluster_size, semantic_dedup, dedup
     else:
         click.echo(f"\nWrote {total_written} supersedes edge(s) to '{project}' graph.")
         if total_written:
-            click.echo("Run 'engram show' to inspect, or 'engram query' to see the pruned results.")
+            click.echo("Run 'waystone show' to inspect, or 'waystone query' to see the pruned results.")
 
 
 @cli.command("prune")
@@ -1387,9 +1389,9 @@ def prune_cmd(ctx, project, older_than_days, confidence_below, source_pattern, e
     Examples:
 
     \b
-      engram prune myproject --source live
-      engram prune myproject --older-than 90 --confidence-below 0.5
-      engram prune myproject --source live --execute
+      waystone prune myproject --source live
+      waystone prune myproject --older-than 90 --confidence-below 0.5
+      waystone prune myproject --source live --execute
     """
     if older_than_days is None and confidence_below is None and source_pattern is None:
         click.echo("Error: at least one filter (--older-than, --confidence-below, --source) is required.", err=True)
@@ -1521,8 +1523,8 @@ def dedup_cmd(ctx, project, threshold, top_k, limit, execute):
     Examples:
 
     \b
-      engram dedup myproject
-      engram dedup myproject --threshold 0.90 --execute
+      waystone dedup myproject
+      waystone dedup myproject --threshold 0.90 --execute
     """
     cfg = _load_cfg(ctx.obj["config_path"])
     db_path = get_db_path(cfg, project)
@@ -1581,14 +1583,14 @@ def dedup_cmd(ctx, project, threshold, top_k, limit, execute):
 def hook_init_cmd(ctx, project, target_dir):
     """Mark a directory so the Claude Code hook auto-detects the project.
 
-    Creates a .context-broker file containing the project name. The hook
+    Creates a .waystone file containing the project name. The hook
     reads this when determining which graph to query for context injection.
 
     Example:
-        engram hook-init myproject          # marks current directory
-        engram hook-init myproject --dir ~/code/myapp
+        waystone hook-init myproject          # marks current directory
+        waystone hook-init myproject --dir ~/code/myapp
     """
-    marker = Path(target_dir).resolve() / ".context-broker"
+    marker = Path(target_dir).resolve() / ".waystone"
     if marker.exists():
         existing = marker.read_text().strip()
         click.echo(f"Already marked as project '{existing}'. Overwrite? [y/N] ", nl=False)
@@ -1616,7 +1618,7 @@ def extract_turn_cmd(ctx, project, turn_file, context_k, context_hops):
     db_path = get_db_path(config, project)
 
     if not db_path.parent.exists():
-        click.echo(f"Error: Project '{project}' not found. Run 'engram init {project}' first.", err=True)
+        click.echo(f"Error: Project '{project}' not found. Run 'waystone init {project}' first.", err=True)
         sys.exit(1)
 
     inc_cfg = config.get("incremental", {})
@@ -1718,7 +1720,7 @@ def extract_replay_cmd(ctx, project, transcript_file, turn_size, context_k, cont
     db_path = get_db_path(config, project)
 
     if not db_path.parent.exists():
-        click.echo(f"Error: Project '{project}' not found. Run 'engram init {project}' first.", err=True)
+        click.echo(f"Error: Project '{project}' not found. Run 'waystone init {project}' first.", err=True)
         sys.exit(1)
 
     inc_cfg = config.get("incremental", {})
@@ -1866,13 +1868,13 @@ def last_context_cmd(ctx, raw):
     """Show the context most recently injected by the Claude Code hook.
 
     The hook writes last_context.md per project. Auto-detects the current
-    project from a .context-broker marker file.
+    project from a .waystone marker file.
     Also prints the retrieval metrics from the last hook invocation.
     """
     import json as _json
     import time as _time
 
-    state_dir = Path.home() / ".context-broker"
+    state_dir = Path.home() / ".waystone"
     state_path = state_dir / "state.json"
 
     # Detect project from CWD to find per-project last_context.md
@@ -1880,7 +1882,7 @@ def last_context_cmd(ctx, raw):
         cwd_path = Path.cwd().resolve()
         home = Path.home()
         for directory in [cwd_path, *cwd_path.parents]:
-            marker = directory / ".context-broker"
+            marker = directory / ".waystone"
             if marker.exists():
                 try:
                     name = marker.read_text().strip()
@@ -1950,28 +1952,28 @@ def last_context_cmd(ctx, raw):
 @click.option("--reload", is_flag=True, help="Auto-reload on code changes (dev mode)")
 @click.pass_context
 def serve_cmd(ctx, host, port, reload):
-    """Start the Engram HTTP API server.
+    """Start the Waystone HTTP API server.
 
     \b
     Clients configure api_url in config.yaml to route requests here:
         api_url: http://localhost:8000
-        api_key: my-secret   # optional; set ENGRAM_API_KEY on server to require it
+        api_key: my-secret   # optional; set WAYSTONE_API_KEY on server to require it
 
-    Requires the 'api' extra:  pip install 'context-broker[api]'
+    Requires the 'api' extra:  pip install 'waystone[api]'
     """
     try:
         import uvicorn
     except ImportError:
         click.echo(
             "Error: uvicorn not installed.\n"
-            "Install with:  pip install 'context-broker[api]'",
+            "Install with:  pip install 'waystone[api]'",
             err=True,
         )
         sys.exit(1)
 
-    click.echo(f"Engram API → http://{host}:{port}  (docs: /docs)")
+    click.echo(f"Waystone API → http://{host}:{port}  (docs: /docs)")
     uvicorn.run(
-        "engram.api_server:app",
+        "waystone.api_server:app",
         host=host,
         port=port,
         reload=reload,
@@ -1987,24 +1989,24 @@ def serve_cmd(ctx, host, port, reload):
     help="Transport protocol: 'stdio' for Claude Code, 'sse' for HTTP clients",
 )
 def mcp_serve_cmd(transport):
-    """Start the Engram MCP server.
+    """Start the Waystone MCP server.
 
     \b
     For Claude Code, add to ~/.claude/claude_desktop_config.json:
       {
         "mcpServers": {
-          "context-broker": {
-            "command": "engram",
+          "waystone": {
+            "command": "waystone",
             "args": ["mcp-serve"]
           }
         }
       }
 
     The server exposes four tools:
-      context_broker_query        — retrieve context for a task
-      context_broker_extract      — extract facts from text into graph
-      context_broker_stats        — show graph node/edge counts
-      context_broker_list_projects — list all available projects
+      waystone_query        — retrieve context for a task
+      waystone_extract      — extract facts from text into graph
+      waystone_stats        — show graph node/edge counts
+      waystone_list_projects — list all available projects
     """
     from .mcp_server import run_server
     run_server(transport=transport)
@@ -2096,8 +2098,8 @@ def onboard_cmd(ctx, project, limit, verify, chunk_size, timeout):
 
     \b
     Example:
-        engram onboard myproject
-        engram onboard myproject --verify --limit 5
+        waystone onboard myproject
+        waystone onboard myproject --verify --limit 5
     """
     config = _load_cfg(ctx.obj["config_path"])
 
@@ -2106,13 +2108,13 @@ def onboard_cmd(ctx, project, limit, verify, chunk_size, timeout):
         config["llm"] = dict(config.get("llm", {}))
         config["llm"]["timeout"] = timeout
 
-    # Auto-detect project from .context-broker marker if not given
+    # Auto-detect project from .waystone marker if not given
     if not project:
-        marker = Path.cwd() / ".context-broker"
+        marker = Path.cwd() / ".waystone"
         if marker.exists():
             project = marker.read_text().strip()
         if not project:
-            click.echo("Error: specify a project name or run 'engram hook-init <project>' first.", err=True)
+            click.echo("Error: specify a project name or run 'waystone hook-init <project>' first.", err=True)
             sys.exit(1)
 
     # Ensure project exists
@@ -2256,7 +2258,7 @@ def onboard_cmd(ctx, project, limit, verify, chunk_size, timeout):
     store.close()
     click.echo(result.markdown)
     click.echo("─" * 60)
-    click.echo(f"\nRun 'engram query {project} \"<your task>\"' to retrieve context anytime.")
+    click.echo(f"\nRun 'waystone query {project} \"<your task>\"' to retrieve context anytime.")
 
 
 @cli.command("import-claude-sessions")
@@ -2274,8 +2276,8 @@ def import_sessions_cmd(ctx, project, session_files, verify, chunk_size, timeout
 
     \b
     Examples:
-        engram import-claude-sessions myproject ~/.claude/projects/abc123/session.jsonl
-        engram import-claude-sessions myproject --list-only
+        waystone import-claude-sessions myproject ~/.claude/projects/abc123/session.jsonl
+        waystone import-claude-sessions myproject --list-only
     """
     config = _load_cfg(ctx.obj["config_path"])
 
@@ -2286,7 +2288,7 @@ def import_sessions_cmd(ctx, project, session_files, verify, chunk_size, timeout
 
     db_path = get_db_path(config, project)
     if not db_path.parent.exists():
-        click.echo(f"Error: Project '{project}' not found. Run 'engram init {project}' first.", err=True)
+        click.echo(f"Error: Project '{project}' not found. Run 'waystone init {project}' first.", err=True)
         sys.exit(1)
 
     if session_files:
@@ -2370,7 +2372,7 @@ def doctor_cmd(ctx):
     """Run a preflight check: config, LLM reachability, project marker, MCP.
 
     Prints a checklist of what's working and what needs attention.
-    Use this to diagnose setup issues before running engram extract or engram query.
+    Use this to diagnose setup issues before running waystone extract or waystone query.
     """
     import os as _os
 
@@ -2387,15 +2389,15 @@ def doctor_cmd(ctx):
         if not passed:
             ok = False
 
-    click.echo("Engram — Doctor\n")
+    click.echo("Waystone — Doctor\n")
 
     # --- Config file ---
     try:
         config = _load_cfg(config_path)
-        cfg_path = config_path or "~/.context-broker/config.yaml or ./config.yaml"
+        cfg_path = config_path or "~/.waystone/config.yaml or ./config.yaml"
         _check("Config file loaded", True, cfg_path)
     except SystemExit:
-        _check("Config file loaded", False, "run 'engram --help' for config path options")
+        _check("Config file loaded", False, "run 'waystone --help' for config path options")
         click.echo("\nCannot continue without a valid config.")
         sys.exit(1)
 
@@ -2435,15 +2437,15 @@ def doctor_cmd(ctx):
     marker_project = None
     path = Path.cwd().resolve()
     for candidate in [path, *path.parents]:
-        marker = candidate / ".context-broker"
+        marker = candidate / ".waystone"
         if marker.is_file():
             marker_found = True
             marker_project = marker.read_text().strip()
             break
     _check(
-        ".context-broker marker found",
+        ".waystone marker found",
         marker_found,
-        f"project='{marker_project}'" if marker_found else "run 'engram hook-init <project>' to create one",
+        f"project='{marker_project}'" if marker_found else "run 'waystone hook-init <project>' to create one",
     )
 
     # --- Project graph exists ---
@@ -2453,7 +2455,7 @@ def doctor_cmd(ctx):
         _check(
             f"Graph DB exists for '{marker_project}'",
             db_exists,
-            str(db_path) if db_exists else f"run 'engram init {marker_project}' or 'engram onboard {marker_project}'",
+            str(db_path) if db_exists else f"run 'waystone init {marker_project}' or 'waystone onboard {marker_project}'",
         )
         if db_exists:
             store = GraphStore(db_path)
@@ -2463,7 +2465,7 @@ def doctor_cmd(ctx):
             _check(
                 f"Graph populated ({stats['node_count']} nodes)",
                 has_nodes,
-                "" if has_nodes else f"run 'engram onboard {marker_project}' to import sessions",
+                "" if has_nodes else f"run 'waystone onboard {marker_project}' to import sessions",
             )
 
     # --- Claude Code hooks ---
@@ -2474,11 +2476,11 @@ def doctor_cmd(ctx):
             settings = _json.loads(settings_path.read_text())
             hooks = settings.get("hooks", {})
             has_submit = any(
-                "engram" in str(h)
+                "waystone" in str(h)
                 for h in hooks.get("UserPromptSubmit", [])
             )
             has_stop = any(
-                "engram" in str(h)
+                "waystone" in str(h)
                 for h in hooks.get("Stop", [])
             )
             _check("UserPromptSubmit hook installed", has_submit,
@@ -2493,7 +2495,7 @@ def doctor_cmd(ctx):
 
     click.echo()
     if ok:
-        click.echo("All checks passed. Engram is ready.")
+        click.echo("All checks passed. Waystone is ready.")
     else:
         click.echo("Some checks failed. See above for remediation steps.")
         sys.exit(1)
@@ -2503,27 +2505,27 @@ def doctor_cmd(ctx):
 def pause_cmd():
     """Pause background extraction (context injection continues from existing graph).
 
-    Creates ~/.context-broker/paused. Run 'engram resume' to re-enable.
+    Creates ~/.waystone/paused. Run 'waystone resume' to re-enable.
     Prompts continue to be buffered while paused so no turns are lost.
     """
-    pause_file = Path.home() / ".context-broker" / "paused"
+    pause_file = Path.home() / ".waystone" / "paused"
     pause_file.parent.mkdir(parents=True, exist_ok=True)
     if pause_file.exists():
         click.echo("Extraction already paused.")
     else:
         pause_file.touch()
         click.echo("Extraction paused. Context injection from existing graph continues.")
-        click.echo("Run 'engram resume' to re-enable.")
+        click.echo("Run 'waystone resume' to re-enable.")
 
 
 @cli.command("resume")
 def resume_cmd():
-    """Resume background extraction after 'engram pause'.
+    """Resume background extraction after 'waystone pause'.
 
-    Removes ~/.context-broker/paused. Buffered turns will be extracted
+    Removes ~/.waystone/paused. Buffered turns will be extracted
     on the next flush trigger.
     """
-    pause_file = Path.home() / ".context-broker" / "paused"
+    pause_file = Path.home() / ".waystone" / "paused"
     if pause_file.exists():
         pause_file.unlink()
         click.echo("Extraction resumed.")
@@ -2570,18 +2572,18 @@ def feedback_cmd(ctx, project, node_id, rating, comment, export_path, only_up, o
 
     \b
     Rate a specific node:
-        engram feedback myproject --node n_abc123 --rating up
+        waystone feedback myproject --node n_abc123 --rating up
 
     Auto-label nodes with LLM-as-judge:
-        engram feedback myproject --auto-label
-        engram feedback myproject --auto-label --dry-run
+        waystone feedback myproject --auto-label
+        waystone feedback myproject --auto-label --dry-run
 
     Export rated nodes to JSONL:
-        engram feedback myproject --export training.jsonl
-        engram feedback myproject --export good_only.jsonl --only-up
+        waystone feedback myproject --export training.jsonl
+        waystone feedback myproject --export good_only.jsonl --only-up
 
     Show statistics:
-        engram feedback myproject --stats
+        waystone feedback myproject --stats
     """
     from .feedback import export_jsonl, rate_node, review_loop, auto_label
 
@@ -2597,7 +2599,7 @@ def feedback_cmd(ctx, project, node_id, rating, comment, export_path, only_up, o
     # --auto-label: use LLM to rate unrated nodes
     if auto_label_mode:
         cfg = _load_cfg(ctx.obj["config_path"])
-        transcripts_dir = Path(os.environ.get("HOME", "~")).expanduser() / ".context-broker" / "transcripts" / project
+        transcripts_dir = Path(os.environ.get("HOME", "~")).expanduser() / ".waystone" / "transcripts" / project
         result = auto_label(store, project, transcripts_dir, cfg["llm"], limit=limit, dry_run=dry_run)
         store.close()
         if dry_run:
@@ -2655,7 +2657,7 @@ def feedback_cmd(ctx, project, node_id, rating, comment, export_path, only_up, o
 
     if summary["rated"] > 0:
         click.echo(f"\nTip: export your labels with:")
-        click.echo(f"  engram feedback {project} --export training.jsonl")
+        click.echo(f"  waystone feedback {project} --export training.jsonl")
 
 
 # ---------------------------------------------------------------------------
@@ -2681,7 +2683,7 @@ def bootstrap_domain_cmd(ctx, name, sample_files, output, print_yaml):
 
     \b
     Example:
-        engram bootstrap-domain --name medical \\
+        waystone bootstrap-domain --name medical \\
             --samples consult1.txt consult2.txt discharge_summary.txt \\
             --output medical_profile.py
     """
@@ -2714,9 +2716,9 @@ def bootstrap_domain_cmd(ctx, name, sample_files, output, print_yaml):
     if output:
         Path(output).write_text(py_code + "\n", encoding="utf-8")
         click.echo(f"\nPython source written to {output}")
-        click.echo("Add the variable to BUILTIN_PROFILES in engram/domain_profiles.py to register it.")
+        click.echo("Add the variable to BUILTIN_PROFILES in waystone/domain_profiles.py to register it.")
     else:
-        click.echo("\n--- Python source (paste into engram/domain_profiles.py) ---")
+        click.echo("\n--- Python source (paste into waystone/domain_profiles.py) ---")
         click.echo(py_code)
 
     if print_yaml:
@@ -2740,14 +2742,14 @@ def watch_cmd(ctx, project, paths, interval, verify, extensions):
     """Watch directories for new or changed docs and auto-extract them.
 
     Polls PATH(s) every INTERVAL seconds. Any file whose mtime has changed
-    since the last extraction is sent through `engram extract`. State is
+    since the last extraction is sent through `waystone extract`. State is
     persisted in the project directory so restarts don't re-extract unchanged
     files.
 
     \b
     Example:
-        engram watch Engram ~/Apps/ContextBroker/docs --interval 120 --verify
-        engram watch myproject ./docs ./notes --extensions md,txt
+        waystone watch Waystone ~/Apps/ContextBroker/docs --interval 120 --verify
+        waystone watch myproject ./docs ./notes --extensions md,txt
     """
     import time as _time
 
@@ -2755,7 +2757,7 @@ def watch_cmd(ctx, project, paths, interval, verify, extensions):
     db_path = get_db_path(config, project)
 
     if not db_path.parent.exists():
-        click.echo(f"Error: Project '{project}' not found. Run 'engram init {project}' first.", err=True)
+        click.echo(f"Error: Project '{project}' not found. Run 'waystone init {project}' first.", err=True)
         sys.exit(1)
 
     exts = {("." + e.lstrip(".").lower()) for e in extensions.split(",")}
@@ -2801,7 +2803,7 @@ def watch_cmd(ctx, project, paths, interval, verify, extensions):
                 continue
 
             click.echo(f"[{datetime.now().strftime('%H:%M:%S')}] Extracting {f.name}...", nl=False)
-            cmd = [sys.executable, "-m", "engram.cli", "--config", str(ctx.obj["config_path"] or ""),
+            cmd = [sys.executable, "-m", "waystone.cli", "--config", str(ctx.obj["config_path"] or ""),
                    "extract", project, str(f)]
             if verify:
                 cmd.append("--verify")
@@ -2846,9 +2848,9 @@ def auto_import_cmd(ctx, project, directory, verify, extensions, force, dry_run)
 
     \b
     Example:
-        engram auto-import Engram ~/Apps/ContextBroker --verify
-        engram auto-import myproject ./docs --dry-run
-        engram auto-import myproject ./docs --force --verify
+        waystone auto-import Waystone ~/Apps/ContextBroker --verify
+        waystone auto-import myproject ./docs --dry-run
+        waystone auto-import myproject ./docs --force --verify
     """
     import time as _time
 
@@ -2856,7 +2858,7 @@ def auto_import_cmd(ctx, project, directory, verify, extensions, force, dry_run)
     db_path = get_db_path(config, project)
 
     if not db_path.parent.exists():
-        click.echo(f"Error: Project '{project}' not found. Run 'engram init {project}' first.", err=True)
+        click.echo(f"Error: Project '{project}' not found. Run 'waystone init {project}' first.", err=True)
         sys.exit(1)
 
     exts = {("." + e.lstrip(".").lower()) for e in extensions.split(",")}
@@ -2902,11 +2904,11 @@ def auto_import_cmd(ctx, project, directory, verify, extensions, force, dry_run)
 
     for i, (f, mtime) in enumerate(to_import, 1):
         click.echo(f"[{i}/{len(to_import)}] {f.name}...", nl=False)
-        cmd = [sys.executable, "-m", "engram.cli", "extract", project, str(f)]
+        cmd = [sys.executable, "-m", "waystone.cli", "extract", project, str(f)]
         if verify:
             cmd.append("--verify")
         if ctx.obj["config_path"]:
-            cmd = [sys.executable, "-m", "engram.cli", "--config", ctx.obj["config_path"],
+            cmd = [sys.executable, "-m", "waystone.cli", "--config", ctx.obj["config_path"],
                    "extract", project, str(f)] + (["--verify"] if verify else [])
 
         try:

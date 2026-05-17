@@ -15,8 +15,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from engram.store import GraphStore
-from engram.billing import open_admin_db, create_key, init_admin_db
+from waystone.store import GraphStore
+from waystone.billing import open_admin_db, create_key, init_admin_db
 
 try:
     from fastapi.testclient import TestClient
@@ -58,8 +58,8 @@ class TestNodeLimitEnforcementOnExtract:
             "projects_dir": str(projects_dir),
         }
 
-        from engram.api_server import app
-        with patch("engram.api_server._cfg", return_value=config):
+        from waystone.api_server import app
+        with patch("waystone.api_server._cfg", return_value=config):
             with TestClient(app) as client:
                 yield client, admin_db_path, projects_dir, config
 
@@ -89,8 +89,8 @@ class TestNodeLimitEnforcementOnExtract:
         store.close()
 
         # Try to extract 1 more node → should get 402 Payment Required
-        from engram.api_server import app
-        with patch("engram.api_server._cfg", return_value=config):
+        from waystone.api_server import app
+        with patch("waystone.api_server._cfg", return_value=config):
             with TestClient(app) as c:
                 extract_result = {
                     "nodes": [{
@@ -103,7 +103,7 @@ class TestNodeLimitEnforcementOnExtract:
                     }],
                     "edges": [],
                 }
-                with patch("engram.api_server._extract", new=AsyncMock(return_value=extract_result)):
+                with patch("waystone.api_server._extract", new=AsyncMock(return_value=extract_result)):
                     r = c.post(
                         "/v1/projects/free-project/extract",
                         json={"text": "some text"},
@@ -149,10 +149,10 @@ class TestNodeLimitEnforcementOnExtract:
             "edges": [],
         }
 
-        from engram.api_server import app
-        with patch("engram.api_server._cfg", return_value=config):
+        from waystone.api_server import app
+        with patch("waystone.api_server._cfg", return_value=config):
             with TestClient(app) as c:
-                with patch("engram.api_server._extract", new=AsyncMock(return_value=extract_result)):
+                with patch("waystone.api_server._extract", new=AsyncMock(return_value=extract_result)):
                     r = c.post(
                         "/v1/projects/pro-project/extract",
                         json={"text": "some text"},
@@ -189,8 +189,8 @@ class TestWebhookSignatureBypasses:
             "projects_dir": str(tmp_path / "projects"),
         }
 
-        from engram.api_server import app
-        with patch("engram.api_server._cfg", return_value=config):
+        from waystone.api_server import app
+        with patch("waystone.api_server._cfg", return_value=config):
             with TestClient(app) as c:
                 yield c
 
@@ -262,7 +262,7 @@ class TestAPIAuthEdgeCases:
         """Simple API without admin DB (self-hosted mode)."""
         monkeypatch.delenv("CB_USE_ADMIN_DB", raising=False)
         monkeypatch.delenv("LS_WEBHOOK_SECRET", raising=False)
-        monkeypatch.setenv("ENGRAM_API_KEY", "self-hosted-secret")
+        monkeypatch.setenv("WAYSTONE_API_KEY", "self-hosted-secret")
 
         config = {
             "llm": {"base_url": "http://localhost:1234/v1", "model": "test"},
@@ -271,8 +271,8 @@ class TestAPIAuthEdgeCases:
             "projects_dir": str(tmp_path / "projects"),
         }
 
-        from engram.api_server import app
-        with patch("engram.api_server._cfg", return_value=config):
+        from waystone.api_server import app
+        with patch("waystone.api_server._cfg", return_value=config):
             with TestClient(app) as c:
                 yield c
 
@@ -321,7 +321,7 @@ class TestCLIErrorHandling:
     def test_extract_nonexistent_project_shows_helpful_error(self, tmp_path, monkeypatch):
         """Extracting from nonexistent project should show helpful error."""
         monkeypatch.chdir(tmp_path)
-        from engram.cli import cli
+        from waystone.cli import cli
         from click.testing import CliRunner
 
         runner = CliRunner()
@@ -332,7 +332,7 @@ class TestCLIErrorHandling:
     def test_query_nonexistent_project_shows_helpful_error(self, tmp_path, monkeypatch):
         """Querying from nonexistent project should show helpful error."""
         monkeypatch.chdir(tmp_path)
-        from engram.cli import cli
+        from waystone.cli import cli
         from click.testing import CliRunner
 
         runner = CliRunner()
@@ -423,8 +423,8 @@ class TestRateLimitingUnderAdminDB:
             "projects_dir": str(projects_dir),
         }
 
-        from engram.api_server import app
-        with patch("engram.api_server._cfg", return_value=config):
+        from waystone.api_server import app
+        with patch("waystone.api_server._cfg", return_value=config):
             with TestClient(app) as c:
                 yield c, admin_db_path
 
@@ -480,7 +480,7 @@ class TestMCPServerStartup:
     def test_mcp_server_loads_without_crash(self):
         """MCP server should import and initialize without errors."""
         try:
-            from engram.mcp_server import mcp
+            from waystone.mcp_server import mcp
             # mcp object should be created
             assert mcp is not None
         except Exception as e:
@@ -488,9 +488,9 @@ class TestMCPServerStartup:
 
     def test_mcp_tools_are_registered(self):
         """All 4 MCP tools should be registered."""
-        from engram.mcp_server import mcp
+        from waystone.mcp_server import mcp
         # FastMCP has tools attribute
-        # engram_query, engram_extract, engram_stats, engram_list_projects
+        # waystone_query, waystone_extract, waystone_stats, engram_list_projects
         tools_dict = getattr(mcp, '_request_handlers', {}) or {}
         # Just verify mcp object exists and is usable
         assert mcp is not None
@@ -504,7 +504,7 @@ class TestAPIEndpointConsistency:
     def api_strict_auth(self, tmp_path, monkeypatch):
         """API with strict auth enabled."""
         monkeypatch.delenv("CB_USE_ADMIN_DB", raising=False)
-        monkeypatch.setenv("ENGRAM_API_KEY", "required_key")
+        monkeypatch.setenv("WAYSTONE_API_KEY", "required_key")
 
         config = {
             "llm": {"base_url": "http://localhost:1234/v1", "model": "test"},
@@ -513,8 +513,8 @@ class TestAPIEndpointConsistency:
             "projects_dir": str(tmp_path / "projects"),
         }
 
-        from engram.api_server import app
-        with patch("engram.api_server._cfg", return_value=config):
+        from waystone.api_server import app
+        with patch("waystone.api_server._cfg", return_value=config):
             with TestClient(app) as c:
                 yield c
 
@@ -524,7 +524,7 @@ class TestAPIEndpointConsistency:
         assert r.status_code == 200
 
     def test_all_other_endpoints_require_auth(self, api_strict_auth):
-        """All other endpoints should require auth when ENGRAM_API_KEY is set."""
+        """All other endpoints should require auth when WAYSTONE_API_KEY is set."""
         endpoints = [
             ("GET", "/v1/projects"),
             ("POST", "/v1/projects/test"),

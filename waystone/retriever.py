@@ -292,7 +292,7 @@ def retrieve_with_stats(
     stats = store.get_stats()
     if stats["node_count"] == 0:
         return RetrievalResult(
-            markdown="Graph is empty — extract a transcript first: engram extract <project> <transcript_file>",
+            markdown="Graph is empty — extract a transcript first: waystone extract <project> <transcript_file>",
             nodes_before_strategies=0,
             nodes_after_strategies=0,
         )
@@ -360,7 +360,7 @@ def retrieve_with_stats(
     # Channel 3: Semantic embedding (cosine via sqlite-vec)
     sem_ranked: list[str] = []
     query_blob: bytes | None = None
-    from engram import embedder
+    from waystone import embedder
     if (strats["semantic"] or strats.get("semantic_rerank") or strats.get("semantic_retrieval") or strats.get("autosearch")) and embedder.is_available() and store._vec_available:
         query_blob = embedder.embed_text(task_description)
     if strats["semantic"] and query_blob is not None:
@@ -589,7 +589,7 @@ def retrieve_with_stats(
     # Auto-builds the hyperedge index on first call if ehrag=True but no index exists yet.
     if strats.get("ehrag"):
         if not store.has_hyperedges():
-            from engram.hyperedges import rebuild_hyperedges
+            from waystone.hyperedges import rebuild_hyperedges
             log.info("EHRAG: no hyperedge index found — building now (threshold=%.2f)", strats.get("ehrag_threshold", 0.80))
             rebuild_hyperedges(store, threshold=strats.get("ehrag_threshold", 0.80))
         if store.has_hyperedges():
@@ -1474,7 +1474,7 @@ def bfs_collect(
 
         # AutoSearch: check marginal relevance of this hop before continuing
         if _autosearch_active and next_layer_ids:
-            from engram import embedder
+            from waystone import embedder
             placeholders = ",".join("?" * len(next_layer_ids))
             emb_rows = store.conn.execute(
                 f"SELECT node_id, embedding FROM node_embeddings WHERE node_id IN ({placeholders})",

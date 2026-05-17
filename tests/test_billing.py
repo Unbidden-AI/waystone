@@ -1,4 +1,4 @@
-"""Unit tests for context_broker.billing."""
+"""Unit tests for waystone.billing."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from engram.billing import (
+from waystone.billing import (
     TIERS,
     KEY_PREFIX,
     _hash_key,

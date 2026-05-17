@@ -25,7 +25,7 @@ import sqlite3
 import time
 from pathlib import Path
 
-CACHE_ROOT = Path.home() / ".engram" / "longmemeval_cache"
+CACHE_ROOT = Path.home() / ".waystone" / "longmemeval_cache"
 
 _TAG_STOP = frozenset({
     "the", "and", "for", "with", "from", "that", "this", "are",
@@ -90,9 +90,9 @@ def reindex_db(db_path: Path, verbose: bool = False) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Re-index node_tags with word-split support")
     parser.add_argument("--dir", nargs="+", metavar="DIR",
-                        help="Checkpoint dir names under ~/.engram/longmemeval_cache/")
+                        help="Checkpoint dir names under ~/.waystone/longmemeval_cache/")
     parser.add_argument("--all", action="store_true",
-                        help="Re-index all DB dirs under ~/.engram/longmemeval_cache/")
+                        help="Re-index all DB dirs under ~/.waystone/longmemeval_cache/")
     parser.add_argument("--verbose", "-v", action="store_true")
     args = parser.parse_args()
 

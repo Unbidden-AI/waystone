@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Engram self-eval: run a curated question set against the local graph and score context quality.
+"""Waystone self-eval: run a curated question set against the local graph and score context quality.
 
 Usage:
     python benchmarks/engram_self_eval/run_eval.py [--project PROJECT] [--auto] [--category CAT]
     python benchmarks/engram_self_eval/run_eval.py --list
 
 Options:
-    --project PROJECT   Engram project to query (default: Engram)
+    --project PROJECT   Waystone project to query (default: Waystone)
     --auto              Auto-grade only (keyword check, no interactive prompts)
     --category CAT      Run only questions from this category
     --list              Print all questions and exit
@@ -27,7 +27,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-# Load .env before any engram imports
+# Load .env before any waystone imports
 try:
     from dotenv import load_dotenv
     load_dotenv(REPO_ROOT / ".env", override=False)
@@ -36,9 +36,9 @@ except ImportError:
 
 import yaml
 
-from engram.config import get_db_path, load_config
-from engram.retriever import retrieve_with_stats
-from engram.store import GraphStore
+from waystone.config import get_db_path, load_config
+from waystone.retriever import retrieve_with_stats
+from waystone.store import GraphStore
 
 QUESTIONS_FILE = Path(__file__).parent / "questions.yaml"
 RESULTS_DIR = Path(__file__).parent / "results"
@@ -251,8 +251,8 @@ def print_summary(results: list[dict]) -> None:
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Engram context quality eval")
-    parser.add_argument("--project",  default="Engram")
+    parser = argparse.ArgumentParser(description="Waystone context quality eval")
+    parser.add_argument("--project",  default="Waystone")
     parser.add_argument("--auto",     action="store_true", help="Auto-grade only (no interactive prompts)")
     parser.add_argument("--category", help="Filter to one category")
     parser.add_argument("--list",     action="store_true", help="Print all questions and exit")

@@ -1,4 +1,4 @@
-"""Shared data classes for the Context Broker orchestrator."""
+"""Shared data classes for the Waystone orchestrator."""
 
 from __future__ import annotations
 

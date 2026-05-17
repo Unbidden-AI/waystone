@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Context Broker Benchmark Runner
+"""Waystone Benchmark Runner
 
 Evaluates extraction quality and retrieval accuracy for a given model config.
 Only the extraction phase calls the LLM — retrieval is pure local computation.
@@ -27,15 +27,15 @@ import yaml
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
-from engram.config import get_db_path, get_project_dir, load_config
-from engram.extractor import ExtractionBuffer, extract, extract_targeted, extract_turn, split_transcript_into_turns, split_into_chunks, verify_extraction
-from engram.retriever import (
+from waystone.config import get_db_path, get_project_dir, load_config
+from waystone.extractor import ExtractionBuffer, extract, extract_targeted, extract_turn, split_transcript_into_turns, split_into_chunks, verify_extraction
+from waystone.retriever import (
     bfs_collect,
     extract_keywords,
     retrieve_with_stats,
     score_by_relevance,
 )
-from engram.store import GraphStore
+from waystone.store import GraphStore
 
 BENCHMARKS_DIR = Path(__file__).parent
 TRANSCRIPTS_DIR = BENCHMARKS_DIR / "transcripts"
@@ -685,7 +685,7 @@ def write_report(data: dict, output_dir: Path) -> tuple:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Run Context Broker extraction + retrieval benchmark",
+        description="Run Waystone extraction + retrieval benchmark",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
@@ -781,7 +781,7 @@ def main():
     presets = {k: STRATEGY_PRESETS[k] for k in args.presets}
 
     print(f"\n{'='*60}")
-    print(f"  Context Broker Benchmark")
+    print(f"  Waystone Benchmark")
     print(f"  Model:       {model_name}")
     print(f"  Config:      {config_path.name}")
     print(f"  Transcripts: {len(transcripts)}")
@@ -825,7 +825,7 @@ def main():
     # Embed all nodes so semantic search contributes to retrieval during evaluation.
     # This is a no-op when sentence-transformers / sqlite-vec is unavailable.
     try:
-        from engram import embedder
+        from waystone import embedder
         if embedder.is_available():
             _store = GraphStore(get_db_path(config, project_name))
             if _store._vec_available:

@@ -1,11 +1,11 @@
-# Engram
+# Waystone
 
 Persistent cross-session memory for LLM agents. A knowledge graph that stores decisions, constraints, and context across coding sessions — so your agent starts informed, not blank.
 
 ## Install
 
 ```bash
-pip install engram
+pip install waystone
 ```
 
 Requires Python 3.11+. An LLM API key is needed for extraction (Gemini Flash recommended — fast and cheap).
@@ -19,8 +19,8 @@ Add to your editor's MCP config:
 ```json
 {
   "mcpServers": {
-    "engram": {
-      "command": "engram",
+    "waystone": {
+      "command": "waystone",
       "args": ["mcp-serve"],
       "env": { "ENGRAM_PROJECT": "my-project" }
     }
@@ -37,8 +37,8 @@ Add to `~/.claude/settings.json`:
 ```json
 {
   "hooks": {
-    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "engram hook query my-project" }] }],
-    "Stop": [{ "hooks": [{ "type": "command", "command": "engram hook extract my-project" }] }]
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "waystone hook query my-project" }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "waystone hook extract my-project" }] }]
   }
 }
 ```
@@ -54,16 +54,16 @@ Full per-client setup: [unbidden.ai/docs/mcp-server/](https://unbidden.ai/docs/m
 ## Key CLI commands
 
 ```bash
-engram init <project>              # create a project
-engram extract <project> <file>    # extract facts from a transcript
-engram query <project> "<query>"   # retrieve relevant context
-engram onboard <project>           # import existing session history
-engram show <project>              # view project stats
+waystone init <project>              # create a project
+waystone extract <project> <file>    # extract facts from a transcript
+waystone query <project> "<query>"   # retrieve relevant context
+waystone onboard <project>           # import existing session history
+waystone show <project>              # view project stats
 ```
 
 ## How it works
 
-**At session end** — `engram extract` reads the conversation transcript and pulls structured facts: decisions, constraints, implementations, lessons learned, open questions. These are stored as nodes in a local SQLite knowledge graph (`~/.engram/`). Superseded facts are retired automatically — if a decision changes, the graph reflects the current state.
+**At session end** — `waystone extract` reads the conversation transcript and pulls structured facts: decisions, constraints, implementations, lessons learned, open questions. These are stored as nodes in a local SQLite knowledge graph (`~/.waystone/`). Superseded facts are retired automatically — if a decision changes, the graph reflects the current state.
 
 **At session start** — `engram_query` (or a hook) runs BFS traversal from the most relevant entry points and surfaces the top 10–25 facts. Only what's relevant to the current context, not everything ever stored.
 

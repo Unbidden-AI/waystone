@@ -2,7 +2,7 @@
 Ablation configurations for the LOCOMO benchmark.
 
 Each config maps to a named retrieval strategy preset. These drive the ablation
-study section of the arXiv paper — showing which components of Engram's
+study section of the arXiv paper — showing which components of Waystone's
 strategy pipeline contribute to accuracy and token efficiency.
 
 Config names mirror the STRATEGY_PRESETS in run_benchmark.py.
@@ -170,10 +170,10 @@ ABLATION_CONFIGS: dict[str, AblationConfig] = {
         recency_decay=False,
     ),
 
-    # ---- Engram ablations (pipeline component removal) ----
+    # ---- Waystone ablations (pipeline component removal) ----
     "engram_all_off": AblationConfig(
         name="engram_all_off",
-        description="Engram retrieval with ALL strategy pipeline components disabled. "
+        description="Waystone retrieval with ALL strategy pipeline components disabled. "
                     "Raw BFS graph traversal output.",
         superseded_pruning=False,
         confidence_threshold=None,
@@ -206,7 +206,7 @@ ABLATION_CONFIGS: dict[str, AblationConfig] = {
     ),
     "engram_default": AblationConfig(
         name="engram_default",
-        description="Default Engram pipeline: superseded_pruning + recency_decay + "
+        description="Default Waystone pipeline: superseded_pruning + recency_decay + "
                     "relevance scoring. No hard token budget. half_life=3650d tuned for "
                     "long-span episodic corpora where all events are years old.",
         superseded_pruning=True,

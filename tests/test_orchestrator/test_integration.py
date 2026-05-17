@@ -1,7 +1,7 @@
-"""End-to-end integration tests for the Context Broker Orchestrator.
+"""End-to-end integration tests for the Waystone Orchestrator.
 
 These tests use real instances of GraphStore, ContextManager, SystemPromptBuilder,
-and tool_executor. Only litellm.acompletion and context_broker.extractor.extract
+and tool_executor. Only litellm.acompletion and waystone.extractor.extract
 are mocked to avoid real API calls.
 """
 
@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from engram.store import GraphStore
+from waystone.store import GraphStore
 from orchestrator.conversation import Conversation
 from orchestrator.types import Message, ToolCall
 
@@ -209,7 +209,7 @@ async def test_compaction_triggers_on_token_budget(minimal_cfg, real_store):
     conversation = Conversation(cfg=cfg, store=real_store, project_name="test_project")
 
     with patch("orchestrator.llm_adapter.litellm.acompletion") as mock_acompletion, \
-         patch("engram.extractor.extract") as mock_extract:
+         patch("waystone.extractor.extract") as mock_extract:
 
         # Mock extract to return a simple result
         mock_extract.return_value = {

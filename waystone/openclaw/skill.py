@@ -1,4 +1,4 @@
-"""Engram OpenClaw skill — hook handlers and @claw commands.
+"""Waystone OpenClaw skill — hook handlers and @claw commands.
 
 Registered hooks (wired via SKILL.md):
   on_session_start(ctx)                            — bootstrap, context injection
@@ -54,11 +54,11 @@ class _SessionState:
         self.last_dream: datetime | None = None
         self.last_error: str | None = None
         self.error_lock = threading.Lock()
-        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="engram-oc")
+        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="waystone-oc")
 
     def open_store(self) -> bool:
         """Open the GraphStore. Returns False if DB doesn't exist yet."""
-        from engram.store import GraphStore
+        from waystone.store import GraphStore
         db_path = get_db_path(self.cfg)
         try:
             self.store = GraphStore(db_path)
@@ -107,7 +107,7 @@ async def on_session_start(ctx: Any) -> None:
     1. Load config and open GraphStore.
     2. If graph is empty and MEMORY.md exists → seed graph from MEMORY.md.
     3. Inject top-K relevant nodes into system prompt.
-    4. Bootstrap MEMORY.md Engram section from graph.
+    4. Bootstrap MEMORY.md Waystone section from graph.
     """
     session_id = _ctx_session_id(ctx)
     state = _get_or_create_session(session_id)
@@ -115,7 +115,7 @@ async def on_session_start(ctx: Any) -> None:
     try:
         has_store = state.open_store()
     except DBInitError as e:
-        log.warning("engram: on_session_start — %s", e)
+        log.warning("waystone: on_session_start — %s", e)
         state.record_error(str(e))
         return
 
@@ -130,9 +130,9 @@ async def on_session_start(ctx: Any) -> None:
                 try:
                     n = seed_from_memory_md(state.cfg)
                     if n > 0:
-                        log.info("engram: seeded graph with %d nodes from MEMORY.md", n)
+                        log.info("waystone: seeded graph with %d nodes from MEMORY.md", n)
                 except LLMExtractionError as e:
-                    log.warning("engram: MEMORY.md seeding failed: %s", e)
+                    log.warning("waystone: MEMORY.md seeding failed: %s", e)
                     state.record_error(f"MEMORY.md seed failed: {e}")
         else:
             # Inject top-K relevant nodes into the system prompt
@@ -145,7 +145,7 @@ async def on_session_start(ctx: Any) -> None:
             state.last_sync = datetime.now(timezone.utc)
 
     except Exception as e:
-        log.warning("engram: on_session_start error: %s", e)
+        log.warning("waystone: on_session_start error: %s", e)
         state.record_error(str(e))
 
 
@@ -169,7 +169,7 @@ async def on_turn_end(ctx: Any, user_content: str, assistant_content: str) -> No
 
     # If extract_on_session_end_only is False, flush when buffer is large
     if not state.cfg.get("extract_on_session_end_only", True):
-        max_turns = state.cfg.get("_engram", {}).get("incremental", {}).get("max_turns", 10)
+        max_turns = state.cfg.get("_waystone", {}).get("incremental", {}).get("max_turns", 10)
         if buffer_len >= max_turns:
             await _flush_and_extract(state)
 
@@ -199,7 +199,7 @@ async def on_dream(ctx: Any) -> None:
     boosting + tag co-occurrence clustering) and reconciliation (superseded pruning
     + conflict detection), then refreshes MEMORY.md.
 
-    This replaces OpenClaw's native LLM-based dreaming — Engram's passes are
+    This replaces OpenClaw's native LLM-based dreaming — Waystone's passes are
     deterministic and cost-free.
     """
     session_id = _ctx_session_id(ctx)
@@ -235,12 +235,12 @@ async def cmd_remember(ctx: Any, args: str = "") -> str:
         try:
             state.open_store()
         except DBInitError as e:
-            return f"Engram error: {e}"
+            return f"Waystone error: {e}"
 
     try:
-        from engram.extractor import extract
-        engram_cfg = state.cfg.get("_engram", {})
-        result = await extract(text, engram_cfg, source_transcript="claw_remember")
+        from waystone.extractor import extract
+        waystone_cfg = state.cfg.get("_waystone", {})
+        result = await extract(text, waystone_cfg, source_transcript="claw_remember")
         nodes = result.get("nodes", [])
         edges = result.get("edges", [])
         if nodes:
@@ -250,7 +250,7 @@ async def cmd_remember(ctx: Any, args: str = "") -> str:
         else:
             return "Noted, but no structured facts were extracted from that text."
     except Exception as e:
-        return f"Engram extraction failed: {e}"
+        return f"Waystone extraction failed: {e}"
 
 
 async def cmd_recall(ctx: Any, args: str = "") -> str:
@@ -266,12 +266,12 @@ async def cmd_recall(ctx: Any, args: str = "") -> str:
         try:
             state.open_store()
         except DBInitError as e:
-            return f"Engram error: {e}"
+            return f"Waystone error: {e}"
 
     try:
-        from engram.retriever import retrieve
-        engram_cfg = state.cfg.get("_engram", {})
-        strategies = engram_cfg.get("strategies", {})
+        from waystone.retriever import retrieve
+        waystone_cfg = state.cfg.get("_waystone", {})
+        strategies = waystone_cfg.get("strategies", {})
         result = retrieve(
             state.store,
             query or "general context",
@@ -281,7 +281,7 @@ async def cmd_recall(ctx: Any, args: str = "") -> str:
         )
         return result or "_No relevant facts found._"
     except Exception as e:
-        return f"Engram recall failed: {e}"
+        return f"Waystone recall failed: {e}"
 
 
 async def cmd_forget(ctx: Any, args: str = "") -> str:
@@ -300,7 +300,7 @@ async def cmd_forget(ctx: Any, args: str = "") -> str:
         try:
             state.open_store()
         except DBInitError as e:
-            return f"Engram error: {e}"
+            return f"Waystone error: {e}"
 
     try:
         tags = topic.lower().split()
@@ -315,9 +315,9 @@ async def cmd_forget(ctx: Any, args: str = "") -> str:
             except Exception:
                 pass
         write_back(state.store, state.cfg)
-        return f"Forgot {count} fact(s) about '{topic}'. (Recoverable via `engram show {state.project}`.)"
+        return f"Forgot {count} fact(s) about '{topic}'. (Recoverable via `waystone show {state.project}`.)"
     except Exception as e:
-        return f"Engram forget failed: {e}"
+        return f"Waystone forget failed: {e}"
 
 
 async def cmd_summarize(ctx: Any, args: str = "") -> str:
@@ -329,7 +329,7 @@ async def cmd_summarize(ctx: Any, args: str = "") -> str:
         try:
             state.open_store()
         except DBInitError as e:
-            return f"Engram error: {e}"
+            return f"Waystone error: {e}"
 
     try:
         from .memory_sync import _get_top_nodes, _render_nodes
@@ -338,7 +338,7 @@ async def cmd_summarize(ctx: Any, args: str = "") -> str:
             return f"Graph for '{state.project}' is empty."
         return _render_nodes(nodes, f"## {state.project} — Knowledge Graph Summary")
     except Exception as e:
-        return f"Engram summarize failed: {e}"
+        return f"Waystone summarize failed: {e}"
 
 
 async def cmd_sync_now(ctx: Any, args: str = "") -> str:
@@ -350,7 +350,7 @@ async def cmd_sync_now(ctx: Any, args: str = "") -> str:
         try:
             state.open_store()
         except DBInitError as e:
-            return f"Engram error: {e}"
+            return f"Waystone error: {e}"
 
     ok = write_back(state.store, state.cfg)
     if ok:
@@ -373,7 +373,7 @@ async def cmd_dream(ctx: Any, args: str = "") -> str:
         try:
             state.open_store()
         except DBInitError as e:
-            return f"Engram error: {e}"
+            return f"Waystone error: {e}"
 
     return await _run_dream_cycle(state)
 
@@ -381,7 +381,7 @@ async def cmd_dream(ctx: Any, args: str = "") -> str:
 async def cmd_export(ctx: Any, args: str = "") -> str:
     """@claw export [path] — dump full active graph to a markdown file.
 
-    If no path is given, writes to ~/.engram/<project>_export.md.
+    If no path is given, writes to ~/.waystone/<project>_export.md.
     Returns the path of the written file on success.
     """
     session_id = _ctx_session_id(ctx)
@@ -391,20 +391,20 @@ async def cmd_export(ctx: Any, args: str = "") -> str:
         try:
             state.open_store()
         except DBInitError as e:
-            return f"Engram error: {e}"
+            return f"Waystone error: {e}"
 
     # Resolve output path
     dest = args.strip()
     if dest:
         out_path = Path(dest).expanduser()
     else:
-        out_path = Path.home() / ".engram" / f"{state.project}_export.md"
+        out_path = Path.home() / ".waystone" / f"{state.project}_export.md"
 
     try:
         from .memory_sync import _get_top_nodes, _render_nodes
 
         nodes = _get_top_nodes(state.store, top_k=1000)  # all nodes
-        header = f"# {state.project} — Engram Full Export\n\n_Generated {datetime.now(timezone.utc).isoformat()}_"
+        header = f"# {state.project} — Waystone Full Export\n\n_Generated {datetime.now(timezone.utc).isoformat()}_"
 
         if not nodes:
             content = header + "\n\n_Graph is empty._"
@@ -416,7 +416,7 @@ async def cmd_export(ctx: Any, args: str = "") -> str:
         out_path.write_text(content, encoding="utf-8")
         return f"Exported {len(nodes)} node(s) to `{out_path}`."
     except Exception as e:
-        return f"Engram export failed: {e}"
+        return f"Waystone export failed: {e}"
 
 
 async def cmd_status(ctx: Any, args: str = "") -> str:
@@ -424,7 +424,7 @@ async def cmd_status(ctx: Any, args: str = "") -> str:
     session_id = _ctx_session_id(ctx)
     state = _get_or_create_session(session_id)
 
-    lines = [f"**Engram — {state.project}**"]
+    lines = [f"**Waystone — {state.project}**"]
 
     if not state.store:
         try:
@@ -464,9 +464,9 @@ async def cmd_status(ctx: Any, args: str = "") -> str:
 def _build_context_block(state: "_SessionState") -> str:
     """BFS retrieval → formatted context block for system prompt injection."""
     try:
-        from engram.retriever import retrieve
-        engram_cfg = state.cfg.get("_engram", {})
-        strategies = engram_cfg.get("strategies", {})
+        from waystone.retriever import retrieve
+        waystone_cfg = state.cfg.get("_waystone", {})
+        strategies = waystone_cfg.get("strategies", {})
         return retrieve(
             state.store,
             "",  # empty query = return highest-confidence nodes
@@ -475,13 +475,13 @@ def _build_context_block(state: "_SessionState") -> str:
             strategies=strategies,
         ) or ""
     except Exception as e:
-        log.warning("engram: context injection failed: %s", e)
+        log.warning("waystone: context injection failed: %s", e)
         return ""
 
 
 def _inject_context(ctx: Any, context_block: str) -> None:
     """Inject the context block into OpenClaw's system prompt."""
-    header = "[Engram Project Knowledge]\n"
+    header = "[Waystone Project Knowledge]\n"
     full_block = header + context_block
 
     # Try OpenClaw's documented injection methods (defensive — API may vary)
@@ -508,28 +508,28 @@ async def _flush_and_extract(state: "_SessionState") -> None:
         state.turn_buffer.clear()
 
     if state.cfg.get("dry_run"):
-        log.info("engram: dry_run — would extract %d chars", len(text))
+        log.info("waystone: dry_run — would extract %d chars", len(text))
         return
 
     try:
-        from engram.extractor import extract
-        from engram.store import GraphStore
+        from waystone.extractor import extract
+        from waystone.store import GraphStore
 
-        engram_cfg = state.cfg.get("_engram", {})
+        waystone_cfg = state.cfg.get("_waystone", {})
         db_path = get_db_path(state.cfg)
 
         # Open a fresh store in this coroutine (SQLite is not thread-safe across threads)
         store = GraphStore(db_path)
         try:
             result = await asyncio.wait_for(
-                extract(text, engram_cfg, source_transcript=f"session_{state.session_id}"),
+                extract(text, waystone_cfg, source_transcript=f"session_{state.session_id}"),
                 timeout=60.0,
             )
             nodes = result.get("nodes", [])
             edges = result.get("edges", [])
             if nodes:
                 store.merge_extraction(nodes, edges)
-                log.info("engram: extracted %d nodes from session buffer", len(nodes))
+                log.info("waystone: extracted %d nodes from session buffer", len(nodes))
             # Refresh MEMORY.md with the primary store (already has the new nodes)
             write_back(state.store or store, state.cfg)
             state.last_sync = datetime.now(timezone.utc)
@@ -538,10 +538,10 @@ async def _flush_and_extract(state: "_SessionState") -> None:
 
     except asyncio.TimeoutError:
         msg = "extraction timed out after 60s — buffer not stored"
-        log.warning("engram: %s", msg)
+        log.warning("waystone: %s", msg)
         state.record_error(msg)
     except Exception as e:
-        log.warning("engram: flush+extract failed: %s", e)
+        log.warning("waystone: flush+extract failed: %s", e)
         state.record_error(str(e)[:120])
 
 
@@ -556,6 +556,6 @@ async def _run_dream_cycle(state: "_SessionState") -> str:
         return format_dream_summary(result)
     except Exception as e:
         msg = f"dream failed: {e}"
-        log.warning("engram: %s", msg)
+        log.warning("waystone: %s", msg)
         state.record_error(msg)
         return f"Dream cycle error: {e}"

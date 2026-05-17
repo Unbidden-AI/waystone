@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Context Broker vs. Raw-Transcript Baseline comparison.
+"""Waystone vs. Raw-Transcript Baseline comparison.
 
 Runs a set of eval questions against two approaches:
 
@@ -38,10 +38,10 @@ import yaml
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
-from engram.config import get_db_path, get_project_dir, load_config
-from engram.extractor import extract, extract_targeted, verify_extraction
-from engram.retriever import retrieve_with_stats
-from engram.store import GraphStore
+from waystone.config import get_db_path, get_project_dir, load_config
+from waystone.extractor import extract, extract_targeted, verify_extraction
+from waystone.retriever import retrieve_with_stats
+from waystone.store import GraphStore
 from orchestrator.llm_adapter import call_llm, estimate_tokens
 from orchestrator.types import Message
 
@@ -272,7 +272,7 @@ def print_summary(rows: list[dict]) -> None:
     print("\n" + "=" * 72)
     print(f"{'SUMMARY':^72}")
     print("=" * 72)
-    print(f"{'':20s}  {'Context Broker':>18s}  {'Raw Baseline':>18s}")
+    print(f"{'':20s}  {'Waystone':>18s}  {'Raw Baseline':>18s}")
     print(f"{'─'*20}  {'─'*18}  {'─'*18}")
     print(f"{'Mean recall':20s}  {cb_mean:>17.0%}  {raw_mean:>17.0%}")
     print(f"{'≥80% questions':20s}  {sum(1 for r in cb_recalls if r>=0.8):>17d}  {sum(1 for r in raw_recalls if r>=0.8):>17d}  / {len(rows)}")
@@ -421,7 +421,7 @@ def main():
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     project_name = f"__compare_{stamp}__"
 
-    print(f"\nContext Broker vs. Raw Baseline")
+    print(f"\nWaystone vs. Raw Baseline")
     print(f"Model : {llm_cfg.get('model', '(from config)')}")
     print(f"Questions : {len(questions)} across {len(selected_transcripts)} transcript(s)")
     print()

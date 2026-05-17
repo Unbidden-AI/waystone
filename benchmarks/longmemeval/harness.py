@@ -1,5 +1,5 @@
 """
-LongMemEval benchmark harness for Engram.
+LongMemEval benchmark harness for Waystone.
 
 Usage:
     # Download data first (oracle + S split):
@@ -181,7 +181,7 @@ def _run_config(
     base_db_dir = (
         db_dir
         if db_dir
-        else str(Path.home() / ".engram" / "longmemeval_cache" / config.name)
+        else str(Path.home() / ".waystone" / "longmemeval_cache" / config.name)
     )
     Path(base_db_dir).mkdir(parents=True, exist_ok=True)
 
@@ -204,7 +204,7 @@ def _run_config(
 
         import shutil as _shutil
         import yaml as _yaml
-        from engram.store import GraphStore
+        from waystone.store import GraphStore
 
         checkpoint_path = str(Path(base_db_dir) / f"{conv.sample_id}.db")
         done_path = str(Path(base_db_dir) / f"{conv.sample_id}.done")
@@ -252,7 +252,7 @@ def _run_config(
                 print(f"  [{config.name}] {conv.sample_id}: checkpoint found, skipping extraction")
             store = GraphStore(checkpoint_path)
         elif config.checkpoint_source:
-            source_dir = str(Path.home() / ".engram" / "longmemeval_cache" / config.checkpoint_source)
+            source_dir = str(Path.home() / ".waystone" / "longmemeval_cache" / config.checkpoint_source)
             source_path = str(Path(source_dir) / f"{conv.sample_id}.db")
             if Path(source_path).exists():
                 Path(base_db_dir).mkdir(parents=True, exist_ok=True)
@@ -440,7 +440,7 @@ def _retrieve_context(conv, question: str, store, config: AblationConfig) -> str
     if store is None:
         return ""
 
-    from engram.retriever import retrieve_with_stats
+    from waystone.retriever import retrieve_with_stats
 
     strategies: dict[str, Any] = {
         "superseded_pruning": config.superseded_pruning,
@@ -496,7 +496,7 @@ def _preflight_check(
     limit: int | None,
     db_dir_override: str | None,
 ) -> None:
-    from engram.config import load_config
+    from waystone.config import load_config
     cfg = load_config()
     llm = cfg.get("llm", {})
     print("=" * 60)
@@ -518,7 +518,7 @@ def _preflight_check(
             continue
         config = LME_ABLATION_CONFIGS[config_name]
         db_dir = db_dir_override or str(
-            Path.home() / ".engram" / "longmemeval_cache" / config_name
+            Path.home() / ".waystone" / "longmemeval_cache" / config_name
         )
         will_extract = []
         will_reuse = []
@@ -528,7 +528,7 @@ def _preflight_check(
             if cp.exists():
                 will_reuse.append(s.sample_id)
             elif config.checkpoint_source and not db_dir_override:
-                src = (Path.home() / ".engram" / "longmemeval_cache"
+                src = (Path.home() / ".waystone" / "longmemeval_cache"
                        / config.checkpoint_source / f"{s.sample_id}.db")
                 if src.exists():
                     will_copy.append(s.sample_id)
@@ -561,7 +561,7 @@ def _preflight_check(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="LongMemEval benchmark harness for Engram",
+        description="LongMemEval benchmark harness for Waystone",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
@@ -603,7 +603,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--db-dir", default=None,
-        help="Directory for SQLite DBs. Defaults to ~/.engram/longmemeval_cache/<config>/",
+        help="Directory for SQLite DBs. Defaults to ~/.waystone/longmemeval_cache/<config>/",
     )
     parser.add_argument(
         "--quiet", action="store_true",

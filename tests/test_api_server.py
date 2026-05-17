@@ -1,4 +1,4 @@
-"""Tests for the Context Broker REST API server."""
+"""Tests for the Waystone REST API server."""
 
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -9,7 +9,7 @@ pytest.importorskip("fastapi", reason="fastapi not installed — skip API server
 
 from fastapi.testclient import TestClient  # noqa: E402 (after importorskip)
 
-from engram.store import GraphStore  # noqa: E402
+from waystone.store import GraphStore  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -49,8 +49,8 @@ def project_setup(tmp_path):
 def api_client(project_setup):
     """TestClient with config patched to use tmp project dir."""
     tmp_path, db_path, config = project_setup
-    from engram.api_server import app
-    with patch("engram.api_server._cfg", return_value=config):
+    from waystone.api_server import app
+    with patch("waystone.api_server._cfg", return_value=config):
         with TestClient(app) as c:
             yield c, config, tmp_path
 
@@ -68,11 +68,11 @@ class TestHealth:
         assert "version" in r.json()
 
     def test_health_no_auth_needed(self, project_setup, monkeypatch):
-        """Health endpoint is unauthenticated even when ENGRAM_API_KEY is set."""
+        """Health endpoint is unauthenticated even when WAYSTONE_API_KEY is set."""
         _, _, config = project_setup
-        monkeypatch.setenv("ENGRAM_API_KEY", "secret")
-        from engram.api_server import app
-        with patch("engram.api_server._cfg", return_value=config):
+        monkeypatch.setenv("WAYSTONE_API_KEY", "secret")
+        from waystone.api_server import app
+        with patch("waystone.api_server._cfg", return_value=config):
             with TestClient(app) as c:
                 r = c.get("/v1/health")
         assert r.status_code == 200
@@ -85,34 +85,34 @@ class TestHealth:
 class TestAuth:
     def test_401_when_key_set_and_missing(self, project_setup, monkeypatch):
         _, _, config = project_setup
-        monkeypatch.setenv("ENGRAM_API_KEY", "secret")
-        from engram.api_server import app
-        with patch("engram.api_server._cfg", return_value=config):
+        monkeypatch.setenv("WAYSTONE_API_KEY", "secret")
+        from waystone.api_server import app
+        with patch("waystone.api_server._cfg", return_value=config):
             with TestClient(app) as c:
                 r = c.get("/v1/projects")
         assert r.status_code == 401
 
     def test_401_with_wrong_key(self, project_setup, monkeypatch):
         _, _, config = project_setup
-        monkeypatch.setenv("ENGRAM_API_KEY", "secret")
-        from engram.api_server import app
-        with patch("engram.api_server._cfg", return_value=config):
+        monkeypatch.setenv("WAYSTONE_API_KEY", "secret")
+        from waystone.api_server import app
+        with patch("waystone.api_server._cfg", return_value=config):
             with TestClient(app) as c:
                 r = c.get("/v1/projects", headers={"Authorization": "Bearer wrong"})
         assert r.status_code == 401
 
     def test_200_with_correct_key(self, project_setup, monkeypatch):
         _, _, config = project_setup
-        monkeypatch.setenv("ENGRAM_API_KEY", "secret")
-        from engram.api_server import app
-        with patch("engram.api_server._cfg", return_value=config):
+        monkeypatch.setenv("WAYSTONE_API_KEY", "secret")
+        from waystone.api_server import app
+        with patch("waystone.api_server._cfg", return_value=config):
             with TestClient(app) as c:
                 r = c.get("/v1/projects", headers={"Authorization": "Bearer secret"})
         assert r.status_code == 200
 
     def test_open_when_no_key_set(self, api_client, monkeypatch):
-        """No auth required when ENGRAM_API_KEY is unset."""
-        monkeypatch.delenv("ENGRAM_API_KEY", raising=False)
+        """No auth required when WAYSTONE_API_KEY is unset."""
+        monkeypatch.delenv("WAYSTONE_API_KEY", raising=False)
         c, _, _ = api_client
         r = c.get("/v1/projects")
         assert r.status_code == 200
@@ -140,8 +140,8 @@ class TestListProjects:
 
     def test_empty_when_no_projects_dir(self, tmp_path):
         config = {"projects_dir": str(tmp_path / "nonexistent"), "llm": {}, "defaults": {}, "strategies": {}}
-        from engram.api_server import app
-        with patch("engram.api_server._cfg", return_value=config):
+        from waystone.api_server import app
+        with patch("waystone.api_server._cfg", return_value=config):
             with TestClient(app) as c:
                 r = c.get("/v1/projects")
         assert r.status_code == 200
@@ -211,8 +211,8 @@ class TestQuery:
         db = projects_dir / "empty" / "context.db"
         GraphStore(db).close()
         config = {"projects_dir": str(projects_dir), "llm": {}, "defaults": {}, "strategies": {}}
-        from engram.api_server import app
-        with patch("engram.api_server._cfg", return_value=config):
+        from waystone.api_server import app
+        with patch("waystone.api_server._cfg", return_value=config):
             with TestClient(app) as c:
                 r = c.post("/v1/projects/empty/query", json={"task": "anything"})
         assert r.status_code == 200
@@ -248,7 +248,7 @@ class TestExtract:
 
     def test_merges_nodes(self, api_client):
         c, config, tmp_path = api_client
-        with patch("engram.api_server._extract", new=AsyncMock(return_value=self._MOCK_RESULT)):
+        with patch("waystone.api_server._extract", new=AsyncMock(return_value=self._MOCK_RESULT)):
             r = c.post("/v1/projects/test-project/extract", json={"text": "We use Redis."})
         assert r.status_code == 200
         data = r.json()
@@ -259,7 +259,7 @@ class TestExtract:
     def test_node_persisted_to_db(self, api_client):
         c, config, tmp_path = api_client
         db_path = Path(config["projects_dir"]) / "test-project" / "context.db"
-        with patch("engram.api_server._extract", new=AsyncMock(return_value=self._MOCK_RESULT)):
+        with patch("waystone.api_server._extract", new=AsyncMock(return_value=self._MOCK_RESULT)):
             c.post("/v1/projects/test-project/extract", json={"text": "We use Redis."})
         store = GraphStore(db_path)
         node = store.get_node("n_new00001")
@@ -280,7 +280,7 @@ class TestExtract:
     def test_source_name_set_on_nodes(self, api_client):
         c, config, tmp_path = api_client
         db_path = Path(config["projects_dir"]) / "test-project" / "context.db"
-        with patch("engram.api_server._extract", new=AsyncMock(return_value=self._MOCK_RESULT)):
+        with patch("waystone.api_server._extract", new=AsyncMock(return_value=self._MOCK_RESULT)):
             c.post(
                 "/v1/projects/test-project/extract",
                 json={"text": "We use Redis.", "source_name": "my-session"},
@@ -293,8 +293,8 @@ class TestExtract:
     def test_verify_calls_verify_extraction(self, api_client):
         c, _, _ = api_client
         verify_result = {"nodes": [], "edges": []}
-        with patch("engram.api_server._extract", new=AsyncMock(return_value=self._MOCK_RESULT)):
-            with patch("engram.api_server.verify_extraction", new=AsyncMock(return_value=verify_result)) as mock_verify:
+        with patch("waystone.api_server._extract", new=AsyncMock(return_value=self._MOCK_RESULT)):
+            with patch("waystone.api_server.verify_extraction", new=AsyncMock(return_value=verify_result)) as mock_verify:
                 c.post(
                     "/v1/projects/test-project/extract",
                     json={"text": "text", "verify": True},
@@ -322,8 +322,8 @@ class TestExport:
         db = projects_dir / "empty" / "context.db"
         GraphStore(db).close()
         config = {"projects_dir": str(projects_dir), "llm": {}, "defaults": {}, "strategies": {}}
-        from engram.api_server import app
-        with patch("engram.api_server._cfg", return_value=config):
+        from waystone.api_server import app
+        with patch("waystone.api_server._cfg", return_value=config):
             with TestClient(app) as c:
                 r = c.get("/v1/projects/empty/export")
         assert r.status_code == 200

@@ -1,4 +1,4 @@
-"""Configuration loading for Engram."""
+"""Configuration loading for Waystone."""
 
 from __future__ import annotations
 
@@ -44,14 +44,14 @@ DEFAULTS = {
     "orchestrator": {
         "system_prompt": {
             "static": """\
-You are the Engram Orchestrator — an assistant for the Engram project (a DAG-based \
+You are the Waystone Orchestrator — an assistant for the Waystone project (a DAG-based \
 context intelligence layer for LLM workflows that extracts facts from transcripts into \
 a knowledge graph and retrieves relevant subgraphs per turn). Do not describe your \
 underlying model or training. The **Project Knowledge** section below is retrieved live \
 from the graph; use it to answer questions about this project accurately.""",
         },
     },
-    "projects_dir": "~/.engram/projects",
+    "projects_dir": "~/.waystone/projects",
     "incremental": {
         "context_k": 30,       # max context nodes to include per turn
         "context_hops": 2,     # BFS hops when gathering context nodes
@@ -80,7 +80,7 @@ from the graph; use it to answer questions about this project accurately.""",
 
 CONFIG_SEARCH_PATHS = [
     Path("config.yaml"),
-    Path.home() / ".engram" / "config.yaml",
+    Path.home() / ".waystone" / "config.yaml",
 ]
 
 
@@ -145,12 +145,12 @@ def get_api_url(config: dict) -> str:
 
 
 def get_api_key(config: dict) -> str | None:
-    """Return API key from ENGRAM_API_KEY env var or config file.
+    """Return API key from WAYSTONE_API_KEY env var or config file.
 
     Env var takes precedence over config file so container/CI secrets
     are never silently overridden by a stale config.yaml value.
     """
-    return os.environ.get("ENGRAM_API_KEY") or config.get("api_key") or None
+    return os.environ.get("WAYSTONE_API_KEY") or config.get("api_key") or None
 
 
 def make_remote_client(config: dict):

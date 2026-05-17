@@ -7,9 +7,9 @@ import logging
 import time
 from typing import TYPE_CHECKING
 
-from engram.extractor import extract
-from engram.retriever import retrieve_with_stats
-from engram.store import GraphStore
+from waystone.extractor import extract
+from waystone.retriever import retrieve_with_stats
+from waystone.store import GraphStore
 
 from .llm_adapter import estimate_tokens
 from .types import CompactionResult, CompactionTrigger, Message
@@ -42,7 +42,7 @@ class ContextManager:
         project_name:
             Used only for logging.
         extractor_config:
-            Full config dict passed to ``context_broker.extractor.extract()``.
+            Full config dict passed to ``waystone.extractor.extract()``.
             Should include the ``llm`` section from the top-level config.yaml.
         """
         self._cfg = cfg

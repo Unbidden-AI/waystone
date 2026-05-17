@@ -1,4 +1,4 @@
-"""LLM provider abstraction for Engram.
+"""LLM provider abstraction for Waystone.
 
 The default path is the existing OpenAI-compatible httpx client — no new
 dependencies, works with any model. The GeminiNativeProvider is an optional
@@ -345,7 +345,7 @@ class GeminiNativeProvider(LLMProvider):
             model=self._model,
             src=inline_requests,
             config=self._types.CreateBatchJobConfig(
-                display_name="engram-judge-batch",
+                display_name="waystone-judge-batch",
             ),
         )
         log.info("Submitted batch job: %s (%d requests)", batch_job.name, len(requests))

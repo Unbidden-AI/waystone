@@ -33,7 +33,7 @@ from benchmarks.locomo.loaders.locomo_dataset import LocomoDataset
 from benchmarks.locomo.ablation_configs import ABLATION_CONFIGS
 from benchmarks.locomo.evaluation.scoring import score_llm_judge
 from benchmarks.locomo.harness import _retrieve_context
-from engram.store import GraphStore
+from waystone.store import GraphStore
 
 
 def _judge_all(
@@ -147,7 +147,7 @@ def main():
     print(f"Conversation: {conv.sample_id} — {len(conv.qa_pairs)} QA pairs")
 
     # Open the checkpoint DB for this config
-    db_path = Path.home() / ".engram" / "locomo_cache" / config.name / f"{conv.sample_id}.db"
+    db_path = Path.home() / ".waystone" / "locomo_cache" / config.name / f"{conv.sample_id}.db"
     if not db_path.exists():
         print(f"No checkpoint found at {db_path}")
         print("Run the harness first to build the DB for this config/conversation.")

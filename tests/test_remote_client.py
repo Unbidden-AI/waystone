@@ -8,7 +8,7 @@ pytest.importorskip("httpx", reason="httpx not installed — skip remote client 
 
 import httpx
 
-from engram.remote_client import RemoteContextBroker
+from waystone.remote_client import RemoteContextBroker
 
 
 # ---------------------------------------------------------------------------

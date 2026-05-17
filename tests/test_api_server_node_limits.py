@@ -17,8 +17,8 @@ pytest.importorskip("fastapi", reason="fastapi not installed — skip API server
 
 from fastapi.testclient import TestClient  # noqa: E402 (after importorskip)
 
-from engram.store import GraphStore  # noqa: E402
-from engram.billing import open_admin_db, init_admin_db, create_key  # noqa: E402
+from waystone.store import GraphStore  # noqa: E402
+from waystone.billing import open_admin_db, init_admin_db, create_key  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -58,8 +58,8 @@ def project_setup(tmp_path):
 def api_client(project_setup):
     """TestClient with config patched to use tmp project dir."""
     tmp_path, db_path, config = project_setup
-    from engram.api_server import app
-    with patch("engram.api_server._cfg", return_value=config):
+    from waystone.api_server import app
+    with patch("waystone.api_server._cfg", return_value=config):
         with TestClient(app) as c:
             yield c, config, tmp_path
 
@@ -139,10 +139,10 @@ class TestNodeLimitFreeTier:
         monkeypatch.setenv("CB_USE_ADMIN_DB", "1")
         monkeypatch.setenv("CB_ADMIN_DB", str(admin_db_path))
 
-        from engram.api_server import app
-        with patch("engram.api_server._cfg", return_value=config):
+        from waystone.api_server import app
+        with patch("waystone.api_server._cfg", return_value=config):
             with TestClient(app) as c:
-                with patch("engram.api_server._extract", new=AsyncMock(return_value=_MOCK_EXTRACT_1_NODE)):
+                with patch("waystone.api_server._extract", new=AsyncMock(return_value=_MOCK_EXTRACT_1_NODE)):
                     r = c.post(
                         "/v1/projects/test-project/extract",
                         json={"text": "Add one node"},
@@ -188,10 +188,10 @@ class TestNodeLimitFreeTier:
         monkeypatch.setenv("CB_USE_ADMIN_DB", "1")
         monkeypatch.setenv("CB_ADMIN_DB", str(admin_db_path))
 
-        from engram.api_server import app
-        with patch("engram.api_server._cfg", return_value=config):
+        from waystone.api_server import app
+        with patch("waystone.api_server._cfg", return_value=config):
             with TestClient(app) as c:
-                with patch("engram.api_server._extract", new=AsyncMock(return_value=_MOCK_EXTRACT_1_NODE)):
+                with patch("waystone.api_server._extract", new=AsyncMock(return_value=_MOCK_EXTRACT_1_NODE)):
                     r = c.post(
                         "/v1/projects/test-project/extract",
                         json={"text": "Try to add one node"},
@@ -239,10 +239,10 @@ class TestNodeLimitFreeTier:
         monkeypatch.setenv("CB_USE_ADMIN_DB", "1")
         monkeypatch.setenv("CB_ADMIN_DB", str(admin_db_path))
 
-        from engram.api_server import app
-        with patch("engram.api_server._cfg", return_value=config):
+        from waystone.api_server import app
+        with patch("waystone.api_server._cfg", return_value=config):
             with TestClient(app) as c:
-                with patch("engram.api_server._extract", new=AsyncMock(return_value=_MOCK_EXTRACT_100_NODES)):
+                with patch("waystone.api_server._extract", new=AsyncMock(return_value=_MOCK_EXTRACT_100_NODES)):
                     r = c.post(
                         "/v1/projects/test-project/extract",
                         json={"text": "Try to add 100 nodes"},
@@ -293,10 +293,10 @@ class TestNodeLimitProTier:
         monkeypatch.setenv("CB_USE_ADMIN_DB", "1")
         monkeypatch.setenv("CB_ADMIN_DB", str(admin_db_path))
 
-        from engram.api_server import app
-        with patch("engram.api_server._cfg", return_value=config):
+        from waystone.api_server import app
+        with patch("waystone.api_server._cfg", return_value=config):
             with TestClient(app) as c:
-                with patch("engram.api_server._extract", new=AsyncMock(return_value=_MOCK_EXTRACT_1_NODE)):
+                with patch("waystone.api_server._extract", new=AsyncMock(return_value=_MOCK_EXTRACT_1_NODE)):
                     r = c.post(
                         "/v1/projects/test-project/extract",
                         json={"text": "Add one node"},
@@ -340,10 +340,10 @@ class TestNodeLimitProTier:
         monkeypatch.setenv("CB_USE_ADMIN_DB", "1")
         monkeypatch.setenv("CB_ADMIN_DB", str(admin_db_path))
 
-        from engram.api_server import app
-        with patch("engram.api_server._cfg", return_value=config):
+        from waystone.api_server import app
+        with patch("waystone.api_server._cfg", return_value=config):
             with TestClient(app) as c:
-                with patch("engram.api_server._extract", new=AsyncMock(return_value=_MOCK_EXTRACT_1_NODE)):
+                with patch("waystone.api_server._extract", new=AsyncMock(return_value=_MOCK_EXTRACT_1_NODE)):
                     r = c.post(
                         "/v1/projects/test-project/extract",
                         json={"text": "Try to add one node"},
@@ -392,8 +392,8 @@ class TestNodeLimitAuthentication:
         # Ensure CB_USE_ADMIN_DB is set so auth is required
         os.environ["CB_USE_ADMIN_DB"] = "1"
         try:
-            from engram.api_server import app
-            with patch("engram.api_server._cfg", return_value=config):
+            from waystone.api_server import app
+            with patch("waystone.api_server._cfg", return_value=config):
                 with TestClient(app) as c:
                     r = c.post(
                         "/v1/projects/test-project/extract",
@@ -407,7 +407,7 @@ class TestNodeLimitAuthentication:
     def test_local_tier_bypasses_limit_check(self, api_client):
         """Local tier (dev mode) bypasses node limit checks."""
         c, config, tmp_path = api_client
-        with patch("engram.api_server._extract", new=AsyncMock(return_value=_MOCK_EXTRACT_1_NODE)):
+        with patch("waystone.api_server._extract", new=AsyncMock(return_value=_MOCK_EXTRACT_1_NODE)):
             r = c.post(
                 "/v1/projects/test-project/extract",
                 json={"text": "Add one node"},
@@ -457,10 +457,10 @@ class TestNodeLimitTransactionality:
         monkeypatch.setenv("CB_USE_ADMIN_DB", "1")
         monkeypatch.setenv("CB_ADMIN_DB", str(admin_db_path))
 
-        from engram.api_server import app
-        with patch("engram.api_server._cfg", return_value=config):
+        from waystone.api_server import app
+        with patch("waystone.api_server._cfg", return_value=config):
             with TestClient(app) as c:
-                with patch("engram.api_server._extract", new=AsyncMock(return_value=_MOCK_EXTRACT_1_NODE)):
+                with patch("waystone.api_server._extract", new=AsyncMock(return_value=_MOCK_EXTRACT_1_NODE)):
                     r = c.post(
                         "/v1/projects/test-project/extract",
                         json={"text": "Try to add one node"},

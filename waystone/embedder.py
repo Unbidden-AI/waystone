@@ -1,6 +1,6 @@
 """Embedding support for semantic search.
 
-Optional dependency: sentence-transformers (pip install engram[semantic])
+Optional dependency: sentence-transformers (pip install waystone[semantic])
 When unavailable, all functions degrade gracefully — callers check is_available().
 """
 

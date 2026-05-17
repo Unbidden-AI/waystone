@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install Context Broker hooks and status line into ~/.claude/settings.json.
+"""Install Waystone hooks and status line into ~/.claude/settings.json.
 
 Run once per machine:
   python hooks/install.py
@@ -8,18 +8,18 @@ What it does:
   1. Adds a UserPromptSubmit hook that queries your project graph and injects
      relevant context into each Claude prompt.
   2. Adds a Stop hook that records each session transcript to
-     ~/.context-broker/transcripts/<project>/.
+     ~/.waystone/transcripts/<project>/.
   3. Configures the status line to show CB retrieval metrics.
   4. Backs up your existing settings.json before modifying it.
 
 After installing:
   1. Mark your project directory:
-       echo 'myproject' > /path/to/your/project/.context-broker
+       echo 'myproject' > /path/to/your/project/.waystone
   2. Start a Claude Code session — transcripts are recorded automatically.
   3. Extract a recorded transcript:
-       engram extract myproject ~/.context-broker/transcripts/myproject/latest.md
+       waystone extract myproject ~/.waystone/transcripts/myproject/latest.md
   4. View what was injected last:
-       engram last-context
+       waystone last-context
 """
 
 import json
@@ -37,7 +37,7 @@ STATUSLINE_CMD = f"python {HOOK_DIR / 'statusline.py'}"
 
 
 def main():
-    print("Context Broker Hook Installer")
+    print("Waystone Hook Installer")
     print("=" * 40)
 
     # Load existing settings
@@ -98,12 +98,12 @@ def main():
     if "statusLine" in settings:
         existing = settings["statusLine"]
         existing_cmd = existing.get("command", "") if isinstance(existing, dict) else ""
-        if "statusline" in existing_cmd.lower() and "engram" in existing_cmd.lower():
+        if "statusline" in existing_cmd.lower() and "waystone" in existing_cmd.lower():
             print("\nStatus line: already configured (skipping)")
         else:
             print(f"\nStatus line: already set to another command:")
             print(f"  {existing_cmd or existing}")
-            print(f"  To use Context Broker status line instead, set:")
+            print(f"  To use Waystone status line instead, set:")
             print(f"    statusLine.command = \"{STATUSLINE_CMD}\"")
     else:
         settings["statusLine"] = {"type": "command", "command": STATUSLINE_CMD}
@@ -121,12 +121,12 @@ def main():
 
     print("\nNext steps:")
     print("  1. Mark your project directory:")
-    print("       echo 'myproject' > /path/to/project/.context-broker")
+    print("       echo 'myproject' > /path/to/project/.waystone")
     print("  2. Start a Claude Code session — transcripts are recorded automatically.")
     print("  3. Extract a recorded transcript:")
-    print("       engram extract myproject ~/.context-broker/transcripts/myproject/latest.md")
+    print("       waystone extract myproject ~/.waystone/transcripts/myproject/latest.md")
     print("  4. Future sessions will auto-inject context. View what was injected:")
-    print("       engram last-context")
+    print("       waystone last-context")
 
 
 if __name__ == "__main__":

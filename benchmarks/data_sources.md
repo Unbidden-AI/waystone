@@ -1,6 +1,6 @@
 # Conversation / Transcript Data Sources
 
-Public datasets and synthetic generation guidance for each Engram domain profile.
+Public datasets and synthetic generation guidance for each Waystone domain profile.
 Compiled March 2026.
 
 ---

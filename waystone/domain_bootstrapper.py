@@ -1,4 +1,4 @@
-"""Domain profile bootstrapper for Engram.
+"""Domain profile bootstrapper for Waystone.
 
 Automatically derives a DomainProfile from sample documents by running a
 two-pass schema discovery:
@@ -9,17 +9,17 @@ two-pass schema discovery:
      the LLM to consolidate into a clean, non-redundant schema.
 
 Usage (Python):
-    from engram.domain_bootstrapper import bootstrap_domain
-    from engram.config import load_config
+    from waystone.domain_bootstrapper import bootstrap_domain
+    from waystone.config import load_config
 
     config = load_config()
     samples = [open("sample1.txt").read(), open("sample2.txt").read()]
     profile = await bootstrap_domain("medical", samples, config)
     print(profile)
 
-Usage (CLI via `engram`):
-    engram bootstrap-domain --name medical --samples s1.txt s2.txt s3.txt
-    engram bootstrap-domain --name legal --samples *.txt --output legal_profile.py
+Usage (CLI via `waystone`):
+    waystone bootstrap-domain --name medical --samples s1.txt s2.txt s3.txt
+    waystone bootstrap-domain --name legal --samples *.txt --output legal_profile.py
 """
 
 from __future__ import annotations
@@ -139,7 +139,7 @@ async def bootstrap_domain(
     Args:
         domain_name: Short snake_case name for the new domain (e.g. "medical").
         sample_documents: List of raw text samples representative of the domain.
-        config: Engram config dict (must have llm settings).
+        config: Waystone config dict (must have llm settings).
         verbose: Print progress to stdout.
 
     Returns:

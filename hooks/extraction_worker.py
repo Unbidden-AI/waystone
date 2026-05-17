@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Background extraction worker for Context Broker.
+"""Background extraction worker for Waystone.
 
-Spawned by context_broker_submit.py as a detached subprocess so extraction
+Spawned by waystone_submit.py as a detached subprocess so extraction
 never blocks prompt submission. Reads text from stdin, runs the LLM extraction,
 merges results into the project graph, and updates state.json throughout.
 
@@ -9,7 +9,7 @@ State transitions written to state.json:
   extracting  — worker started, includes started_at timestamp
   ok / error  — written after completion (same fields as normal retrieval state)
 
-Usage (internal — called by context_broker_submit.py):
+Usage (internal — called by waystone_submit.py):
   python extraction_worker.py --project <name> --source <live|assistant>
 """
 
@@ -24,7 +24,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-STATE_DIR = Path.home() / ".engram"
+STATE_DIR = Path.home() / ".waystone"
 PAUSE_FILE = STATE_DIR / "paused"
 
 
@@ -53,10 +53,10 @@ def main():
     }, session_id=args.session_id)
 
     try:
-        from engram.config import load_config
-        from engram.extractor import extract_turn, verify_extraction
-        from engram.retriever import bfs_collect, extract_keywords, score_by_relevance
-        from engram.store import GraphStore
+        from waystone.config import load_config
+        from waystone.extractor import extract_turn, verify_extraction
+        from waystone.retriever import bfs_collect, extract_keywords, score_by_relevance
+        from waystone.store import GraphStore
 
         config = load_config()
         db_path = Path(args.db_path)

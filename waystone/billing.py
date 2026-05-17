@@ -1,11 +1,11 @@
-"""Billing and API key management for Engram hosted service.
+"""Billing and API key management for Waystone hosted service.
 
 Admin DB schema (separate from per-project graph DBs):
   api_keys  — key_hash, tier, email, org_id, created_at, last_used, is_revoked
   usage_log — key_hash, project, action, input_chars, timestamp
 
 Environment variables:
-  CB_ADMIN_DB       — path to admin.db (default: ~/.context-broker/admin.db)
+  CB_ADMIN_DB       — path to admin.db (default: ~/.waystone/admin.db)
   LS_WEBHOOK_SECRET         — LemonSqueezy webhook signing secret
   LS_PRO_VARIANT_ID         — LemonSqueezy variant ID for Pro monthly
   LS_PRO_ANNUAL_VARIANT_ID  — LemonSqueezy variant ID for Pro annual
@@ -70,7 +70,7 @@ RATE_LIMITS: dict[str, dict] = {
     },
 }
 
-KEY_PREFIX = "engram_"
+KEY_PREFIX = "waystone_"
 
 
 # ---------------------------------------------------------------------------
@@ -81,7 +81,7 @@ def get_admin_db_path() -> Path:
     custom = os.environ.get("CB_ADMIN_DB", "")
     if custom:
         return Path(custom)
-    return Path("~/.context-broker/admin.db").expanduser()
+    return Path("~/.waystone/admin.db").expanduser()
 
 
 def open_admin_db(db_path: Path | None = None) -> sqlite3.Connection:
@@ -287,24 +287,25 @@ def send_key_email(email: str, raw_key: str, tier: str, admin_conn: sqlite3.Conn
     resend_key = os.environ.get("RESEND_API_KEY", "")
     tier_label = TIERS.get(tier, {}).get("label", tier.title())
 
-    subject = f"Your Engram {tier_label} API Key"
+    subject = f"Your Waystone {tier_label} API Key"
     body = (
         f"Hi,\n\n"
-        f"Thanks for subscribing to Engram {tier_label}!\n\n"
+        f"Thanks for subscribing to Waystone {tier_label}!\n\n"
         f"Your API key:\n\n"
         f"  {raw_key}\n\n"
         f"Add it to your environment:\n\n"
-        f"  export ENGRAM_API_KEY={raw_key}\n\n"
+        f"  export WAYSTONE_API_KEY={raw_key}\n\n"
         f"Or in your config:\n\n"
         f"  Authorization: Bearer {raw_key}\n\n"
         f"Keep this key secret — it cannot be recovered if lost. "
         f"Contact support to rotate it.\n\n"
-        f"— Engram Team\n"
+        f"— Waystone Team\n"
     )
 
     if not resend_key:
         # Dev mode: print to stdout so tests/local runs can see the key
         log.info("[DEV] Would send email to %r: Subject: %s", email, subject)
+        print(f"[DEV] Email to {email}\n{subject}\n\n{body}")
         return
 
     try:
@@ -313,7 +314,7 @@ def send_key_email(email: str, raw_key: str, tier: str, admin_conn: sqlite3.Conn
             "https://api.resend.com/emails",
             headers={"Authorization": f"Bearer {resend_key}"},
             json={
-                "from": "Engram <noreply@engram.unbidden.ai>",
+                "from": "Waystone <noreply@engram.unbidden.ai>",
                 "to": [email],
                 "subject": subject,
                 "text": body,
@@ -325,6 +326,7 @@ def send_key_email(email: str, raw_key: str, tier: str, admin_conn: sqlite3.Conn
         # Non-fatal: key was already created; queue for retry if we have a connection
         error_msg = str(exc)
         log.error("Email delivery failed for %r: %s", email, error_msg)
+        print(f"[WARN] Email delivery failed for {email!r}: {error_msg}")
 
         if admin_conn:
             now = time.time()
@@ -373,26 +375,26 @@ def retry_dead_letter_emails(admin_conn: sqlite3.Connection, max_retries: int = 
 
             import httpx
             tier_label = TIERS.get(tier, {}).get("label", tier.title())
-            subject = f"Your Engram {tier_label} API Key"
+            subject = f"Your Waystone {tier_label} API Key"
             body = (
                 f"Hi,\n\n"
-                f"Thanks for subscribing to Engram {tier_label}!\n\n"
+                f"Thanks for subscribing to Waystone {tier_label}!\n\n"
                 f"Your API key:\n\n"
                 f"  {raw_key}\n\n"
                 f"Add it to your environment:\n\n"
-                f"  export ENGRAM_API_KEY={raw_key}\n\n"
+                f"  export WAYSTONE_API_KEY={raw_key}\n\n"
                 f"Or in your config:\n\n"
                 f"  Authorization: Bearer {raw_key}\n\n"
                 f"Keep this key secret — it cannot be recovered if lost. "
                 f"Contact support to rotate it.\n\n"
-                f"— Engram Team\n"
+                f"— Waystone Team\n"
             )
 
             resp = httpx.post(
                 "https://api.resend.com/emails",
                 headers={"Authorization": f"Bearer {resend_key}"},
                 json={
-                    "from": "Engram <noreply@engram.unbidden.ai>",
+                    "from": "Waystone <noreply@engram.unbidden.ai>",
                     "to": [email],
                     "subject": subject,
                     "text": body,

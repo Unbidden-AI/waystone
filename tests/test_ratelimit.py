@@ -1,4 +1,4 @@
-"""Tests for per-tier rate limiting in the Context Broker API."""
+"""Tests for per-tier rate limiting in the Waystone API."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ pytest.importorskip("fastapi", reason="fastapi not installed — skip rate limit
 
 from fastapi.testclient import TestClient
 
-from engram.billing import (
+from waystone.billing import (
     RateLimiter,
     _hash_key,
     create_key,
@@ -72,7 +72,7 @@ class TestRateLimiterUnit:
         # spaced 61+ seconds apart to stay under minute limit, then
         # verify day window accumulates correctly
 
-        with patch("engram.billing.time.time") as mock_time:
+        with patch("waystone.billing.time.time") as mock_time:
             now = 1000.0
 
             # Make 10 requests, each in a separate minute (advance 61 seconds)
@@ -124,7 +124,7 @@ class TestRateLimiterUnit:
 
     def test_free_tier_lower_limit_than_pro(self):
         """Free tier has lower limit than pro."""
-        from engram.billing import RATE_LIMITS
+        from waystone.billing import RATE_LIMITS
 
         free_limit = RATE_LIMITS["free"]["requests_per_minute"]
         pro_limit = RATE_LIMITS["pro"]["requests_per_minute"]
@@ -138,7 +138,7 @@ class TestRateLimiterUnit:
         key = "test_key_sliding"
         tier = "free"
 
-        with patch("engram.billing.time.time") as mock_time:
+        with patch("waystone.billing.time.time") as mock_time:
             now = 1000.0
             mock_time.return_value = now
 
@@ -214,9 +214,9 @@ def client_with_db(tmp_path, admin_db_path):
         "strategies": {},
         "projects_dir": str(tmp_path / "projects"),
     }
-    from engram.api_server import app
+    from waystone.api_server import app
 
-    with patch("engram.api_server._cfg", return_value=config):
+    with patch("waystone.api_server._cfg", return_value=config):
         with TestClient(app) as c:
             yield c, admin_db_path
 
@@ -405,7 +405,7 @@ class TestRateLimitIntegration:
         assert r.status_code == 201
 
         # Mock the LLM extraction call to avoid network errors
-        with patch("engram.extractor._call_llm") as mock_llm:
+        with patch("waystone.extractor._call_llm") as mock_llm:
             mock_llm.return_value = json.dumps({
                 "nodes": [{"id": "n1", "fact": "test fact", "type": "transition", "confidence": 0.9, "tags": []}],
                 "edges": []

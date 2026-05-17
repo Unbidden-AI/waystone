@@ -1,17 +1,17 @@
-"""Engram REST API server.
+"""Waystone REST API server.
 
 Exposes extraction and retrieval as HTTP endpoints so remote clients
 (CLI, MCP server, SDKs) can share a single graph store across machines.
 
 Usage:
-    engram serve                           # default port 8000
-    engram serve --port 9000
-    uvicorn context_broker.api_server:app --reload   # dev
+    waystone serve                           # default port 8000
+    waystone serve --port 9000
+    uvicorn waystone.api_server:app --reload   # dev
 
 Auth:
-    Set ENGRAM_API_KEY env var on the server.  Clients pass it as:
+    Set WAYSTONE_API_KEY env var on the server.  Clients pass it as:
         Authorization: Bearer <key>
-    When ENGRAM_API_KEY is not set, auth is skipped (local dev mode).
+    When WAYSTONE_API_KEY is not set, auth is skipped (local dev mode).
 """
 
 from __future__ import annotations
@@ -71,7 +71,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Engram API",
+    title="Waystone API",
     version="0.1.0",
     description="DAG-based context intelligence layer for LLM workflows",
     lifespan=lifespan,
@@ -178,7 +178,7 @@ def _check_auth(
 
     Priority:
       1. If CB_USE_ADMIN_DB=1 — look up key in admin.db, return key row dict.
-      2. If ENGRAM_API_KEY is set — simple env-var comparison (self-hosted mode).
+      2. If WAYSTONE_API_KEY is set — simple env-var comparison (self-hosted mode).
          Returns a synthetic dict with tier="local".
       3. Otherwise — open access (local dev). Returns {"tier": "local"}.
 
@@ -211,7 +211,7 @@ def _check_auth(
 
         return key_info
 
-    required = os.environ.get("ENGRAM_API_KEY", "")
+    required = os.environ.get("WAYSTONE_API_KEY", "")
     if not required:
         return {"tier": "local"}  # open access — local dev mode
     if not creds or creds.credentials != required:
@@ -235,7 +235,7 @@ def _cfg() -> dict:
 
 def _get_project_dir(config: dict, key_info: dict, project: str) -> Path:
     """Return the project directory, scoped by API key in multi-tenant mode."""
-    base = Path(config.get("projects_dir", "~/.engram/projects")).expanduser()
+    base = Path(config.get("projects_dir", "~/.waystone/projects")).expanduser()
     if _USE_ADMIN_DB and key_info.get("key_hash"):
         key_prefix = key_info["key_hash"][:12]
         return base / key_prefix / project
@@ -248,7 +248,7 @@ def _get_db_path(config: dict, key_info: dict, project: str) -> Path:
 
 def _add_rate_limit_headers(key_info: dict, response: Response) -> None:
     """Add rate limit headers to response if key_info contains rate limit info."""
-    from engram.billing import RATE_LIMITS
+    from waystone.billing import RATE_LIMITS
 
     tier = key_info.get("tier", "free")
     limits = RATE_LIMITS.get(tier, RATE_LIMITS["free"])
@@ -348,7 +348,7 @@ def get_account(key_info: AuthDep, response: Response) -> AccountResponse:
 
     # Count nodes and projects across user's scoped projects
     config = _cfg()
-    projects_base = Path(config.get("projects_dir", "~/.engram/projects")).expanduser()
+    projects_base = Path(config.get("projects_dir", "~/.waystone/projects")).expanduser()
 
     if _USE_ADMIN_DB and key_info.get("key_hash"):
         key_prefix = key_info["key_hash"][:12]
@@ -371,7 +371,7 @@ def get_account(key_info: AuthDep, response: Response) -> AccountResponse:
                 except Exception as _proj_exc:
                     log.warning("Could not open project stats for %s: %s", d.name, _proj_exc)
 
-    from engram.billing import RATE_LIMITS
+    from waystone.billing import RATE_LIMITS
     limits = RATE_LIMITS.get(tier, RATE_LIMITS.get("free", {}))
 
     return AccountResponse(
@@ -391,7 +391,7 @@ def list_projects(key_info: AuthDep, response: Response) -> list[ProjectInfo]:
     _add_rate_limit_headers(key_info, response)
 
     config = _cfg()
-    projects_base = Path(config.get("projects_dir", "~/.engram/projects")).expanduser()
+    projects_base = Path(config.get("projects_dir", "~/.waystone/projects")).expanduser()
 
     if _USE_ADMIN_DB and key_info.get("key_hash"):
         key_prefix = key_info["key_hash"][:12]
@@ -428,7 +428,7 @@ def init_project(project: str, key_info: AuthDep, response: Response) -> dict:
     # Enforce project limit for admin-DB-managed keys
     if _USE_ADMIN_DB and key_info.get("key_hash"):
         key_prefix = key_info["key_hash"][:12]
-        projects_base = Path(config.get("projects_dir", "~/.engram/projects")).expanduser()
+        projects_base = Path(config.get("projects_dir", "~/.waystone/projects")).expanduser()
         user_projects_dir = projects_base / key_prefix
         current_count = sum(
             1 for d in user_projects_dir.iterdir()
@@ -589,7 +589,7 @@ def export_project(project: str, key_info: AuthDep, response: Response) -> dict:
     for n in all_nodes:
         by_type.setdefault(n["type"], []).append(n)
 
-    lines = [f"# Engram Export — {project}\n"]
+    lines = [f"# Waystone Export — {project}\n"]
     for type_name, nodes in sorted(by_type.items()):
         lines.append(f"## {type_name.replace('_', ' ').title()}\n")
         for n in sorted(nodes, key=lambda x: x.get("confidence", 0), reverse=True):
@@ -607,15 +607,15 @@ def export_project(project: str, key_info: AuthDep, response: Response) -> dict:
 #
 #   client = openai.OpenAI(
 #       base_url="http://localhost:8000/v1",
-#       api_key="any",          # Engram auth uses ENGRAM_API_KEY header, not this
+#       api_key="any",          # Waystone auth uses WAYSTONE_API_KEY header, not this
 #   )
 #   client.chat.completions.create(
 #       model="gemini-2.5-flash",
 #       messages=[{"role": "user", "content": "..."}],
-#       extra_headers={"X-Engram-Project": "MyProject"},
+#       extra_headers={"X-Waystone-Project": "MyProject"},
 #   )
 #
-# Engram injects retrieved graph context as a system message, then forwards
+# Waystone injects retrieved graph context as a system message, then forwards
 # the augmented request to the configured LLM endpoint (llm.base_url in
 # config.yaml).  The response is passed through unchanged so it is fully
 # compatible with any downstream OpenAI SDK parser.
@@ -639,11 +639,11 @@ async def chat_completions(
     req: ChatCompletionRequest,
     key_info: AuthDep,
     raw_response: Response,
-    x_engram_project: str | None = Header(default=None, alias="X-Engram-Project"),
+    x_engram_project: str | None = Header(default=None, alias="X-Waystone-Project"),
 ) -> Response:
-    """OpenAI-compatible chat completions proxy with Engram context injection.
+    """OpenAI-compatible chat completions proxy with Waystone context injection.
 
-    Pass ``X-Engram-Project: <name>`` to inject graph context for that project.
+    Pass ``X-Waystone-Project: <name>`` to inject graph context for that project.
     The last user message is used as the retrieval query.  Context is prepended
     as a system message (or merged into an existing system message).
 
@@ -677,7 +677,7 @@ async def chat_completions(
                     )
                     if result.markdown:
                         context_block = (
-                            f"## Engram Project Knowledge ({x_engram_project})\n\n"
+                            f"## Waystone Project Knowledge ({x_engram_project})\n\n"
                             f"{result.markdown}"
                         )
                         if messages and messages[0]["role"] == "system":
@@ -811,7 +811,7 @@ async def lemonsqueezy_webhook(request: Request) -> dict:
 
 @app.get("/account/key")
 async def get_account_key(request: Request):
-    """Return the caller's Engram API key, authenticated via Clerk session JWT.
+    """Return the caller's Waystone API key, authenticated via Clerk session JWT.
 
     The browser calls this with: Authorization: Bearer <clerk-session-token>
     The endpoint validates the JWT against Clerk's JWKS, extracts the user's

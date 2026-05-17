@@ -1,4 +1,4 @@
-app = "engram-api"
+app = "waystone-api"
 primary_region = "ord"
 
 [build]
@@ -14,7 +14,7 @@ primary_region = "ord"
 #   SMTP_HOST=...   (if email delivery is configured)
 
 [mounts]
-  source = "engram_data"
+  source = "waystone_data"
   destination = "/data"
 
 [[services]]

@@ -1,5 +1,5 @@
 """
-Ingestion pipeline: convert a LOCOMO Conversation into an Engram GraphStore.
+Ingestion pipeline: convert a LOCOMO Conversation into an Waystone GraphStore.
 
 Each session is processed as a self-contained transcript — one extraction call
 per session, matching how the Stop hook works in real-time use. If a session is
@@ -26,10 +26,10 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from engram.extractor import extract_turn
-from engram.retriever import bfs_collect, score_by_relevance, extract_keywords
-from engram.store import GraphStore
-from engram.config import load_config, get_domain_profile
+from waystone.extractor import extract_turn
+from waystone.retriever import bfs_collect, score_by_relevance, extract_keywords
+from waystone.store import GraphStore
+from waystone.config import load_config, get_domain_profile
 
 from benchmarks.locomo.loaders.locomo_dataset import Conversation, Session
 
@@ -95,7 +95,7 @@ def ingest_conversation(
     domain_profile = get_domain_profile(config)
     store = GraphStore(db_path, dedup_threshold=dedup_threshold)
 
-    from engram.llm import get_provider as _get_llm_provider
+    from waystone.llm import get_provider as _get_llm_provider
     _provider = _get_llm_provider(config)
 
     t0 = time.perf_counter()
@@ -400,7 +400,7 @@ def ingest_conversation(
     # semantic dedup is skipped, causing paraphrase variants to accumulate as
     # separate nodes.  Run a post-ingest brute-force dedup pass to recover.
     if not store._vec_available:
-        from engram import embedder as _emb
+        from waystone import embedder as _emb
         if _emb.is_available():
             dedup_removed = store.dedup_nodes_brute_force()
             if verbose and dedup_removed:

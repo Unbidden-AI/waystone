@@ -20,10 +20,18 @@ def init_sentry(dsn: str | None = None) -> bool:
 
     try:
         import sentry_sdk
+        integrations: list = []
+        try:
+            from sentry_sdk.integrations.fastapi import FastApiIntegration
+            from sentry_sdk.integrations.starlette import StarletteIntegration
+            integrations = [StarletteIntegration(), FastApiIntegration()]
+        except ImportError:
+            pass
         sentry_sdk.init(
             dsn=sentry_dsn,
             traces_sample_rate=0.1,
             send_default_pii=False,
+            integrations=integrations,
         )
         return True
     except ImportError:

@@ -11,7 +11,7 @@ handle LME's '2023/05/20 (Sat) 02:21' format.
 Usage:
     python3.13 benchmarks/longmemeval/backfill_occurred_at.py \\
         --dataset benchmarks/longmemeval/data/longmemeval_s_cleaned.json \\
-        --checkpoint-dir ~/.engram/longmemeval_cache/engram_lme_gemini_s_user_patched \\
+        --checkpoint-dir ~/.waystone/longmemeval_cache/engram_lme_gemini_s_user_patched \\
         [--dry-run] [--verbose]
 """
 
@@ -113,7 +113,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--checkpoint-dir",
-        default=str(Path.home() / ".engram" / "longmemeval_cache" / "engram_lme_gemini_s_user_patched"),
+        default=str(Path.home() / ".waystone" / "longmemeval_cache" / "engram_lme_gemini_s_user_patched"),
     )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--verbose", action="store_true")

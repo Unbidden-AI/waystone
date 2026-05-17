@@ -10,8 +10,8 @@ from unittest.mock import patch
 import pytest
 from click.testing import CliRunner
 
-from engram.store import GraphStore
-from engram.cli import cli
+from waystone.store import GraphStore
+from waystone.cli import cli
 
 
 # ---------------------------------------------------------------------------
@@ -195,7 +195,7 @@ class TestGetFeedbackStats:
 
 class TestExportJsonl:
     def test_exports_rated_nodes(self, tmp_path):
-        from engram.feedback import export_jsonl
+        from waystone.feedback import export_jsonl
         store = _make_store(tmp_path)
         nid = _add_node(store, fact="JWT is stateless")
         store.add_feedback(nid, rating=1, comment="accurate")
@@ -212,7 +212,7 @@ class TestExportJsonl:
         store.close()
 
     def test_filter_thumbs_up_only(self, tmp_path):
-        from engram.feedback import export_jsonl
+        from waystone.feedback import export_jsonl
         store = _make_store(tmp_path)
         nid1 = _add_node(store, fact="good")
         nid2 = _add_node(store, fact="bad")
@@ -227,7 +227,7 @@ class TestExportJsonl:
         store.close()
 
     def test_empty_export_returns_zero(self, tmp_path):
-        from engram.feedback import export_jsonl
+        from waystone.feedback import export_jsonl
         store = _make_store(tmp_path)
         _add_node(store)  # unrated
         out = tmp_path / "empty.jsonl"
@@ -236,7 +236,7 @@ class TestExportJsonl:
         store.close()
 
     def test_jsonl_format_has_messages_field(self, tmp_path):
-        from engram.feedback import export_jsonl
+        from waystone.feedback import export_jsonl
         store = _make_store(tmp_path)
         nid = _add_node(store, fact="Redis chosen for caching")
         store.add_feedback(nid, rating=1)
@@ -257,7 +257,7 @@ class TestExportJsonl:
 
 class TestRateNode:
     def test_valid_node(self, tmp_path):
-        from engram.feedback import rate_node
+        from waystone.feedback import rate_node
         store = _make_store(tmp_path)
         nid = _add_node(store)
         assert rate_node(store, nid, 1) is True
@@ -265,7 +265,7 @@ class TestRateNode:
         store.close()
 
     def test_unknown_node(self, tmp_path):
-        from engram.feedback import rate_node
+        from waystone.feedback import rate_node
         store = _make_store(tmp_path)
         assert rate_node(store, "n_ghost", -1) is False
         store.close()
@@ -400,7 +400,7 @@ class TestFeedbackCLI:
 class TestAutoLabel:
     def test_auto_label_rates_nodes(self, tmp_path):
         """Test that auto_label calls LLM and writes ratings to DB."""
-        from engram.feedback import auto_label
+        from waystone.feedback import auto_label
 
         store = _make_store(tmp_path)
         nid1 = _add_node(store, fact="PostgreSQL is used for persistence")
@@ -410,7 +410,7 @@ class TestAutoLabel:
         transcripts_dir.mkdir()
 
         # Mock LLM to return "1" for each call
-        with patch("engram.feedback._call_llm_judge") as mock_llm:
+        with patch("waystone.feedback._call_llm_judge") as mock_llm:
             mock_llm.return_value = "1"
             result = auto_label(store, "testproject", transcripts_dir, {"model": "test", "base_url": "http://localhost:1234/v1"}, limit=10, dry_run=False)
 
@@ -428,7 +428,7 @@ class TestAutoLabel:
 
     def test_auto_label_dry_run(self, tmp_path):
         """Test that dry_run prevents writing ratings to DB."""
-        from engram.feedback import auto_label
+        from waystone.feedback import auto_label
 
         store = _make_store(tmp_path)
         nid = _add_node(store, fact="Redis caches frequently accessed data")
@@ -436,7 +436,7 @@ class TestAutoLabel:
         transcripts_dir = tmp_path / "transcripts"
         transcripts_dir.mkdir()
 
-        with patch("engram.feedback._call_llm_judge") as mock_llm:
+        with patch("waystone.feedback._call_llm_judge") as mock_llm:
             mock_llm.return_value = "1"
             result = auto_label(store, "testproject", transcripts_dir, {"model": "test", "base_url": "http://localhost:1234/v1"}, limit=10, dry_run=True)
 
@@ -451,7 +451,7 @@ class TestAutoLabel:
 
     def test_auto_label_skips_on_bad_response(self, tmp_path):
         """Test that unparseable responses are skipped (node not rated)."""
-        from engram.feedback import auto_label
+        from waystone.feedback import auto_label
 
         store = _make_store(tmp_path)
         nid1 = _add_node(store, fact="Fact 1")
@@ -464,7 +464,7 @@ class TestAutoLabel:
         unrated_order = store.get_unrated_nodes(limit=10)
         unrated_ids = [n["id"] for n in unrated_order]
 
-        with patch("engram.feedback._call_llm_judge") as mock_llm:
+        with patch("waystone.feedback._call_llm_judge") as mock_llm:
             # First call returns unparseable, second returns valid "1"
             mock_llm.side_effect = ["maybe", "1"]
             result = auto_label(store, "testproject", transcripts_dir, {"model": "test", "base_url": "http://localhost:1234/v1"}, limit=10, dry_run=False)
@@ -485,7 +485,7 @@ class TestAutoLabel:
 
     def test_auto_label_returns_stats(self, tmp_path):
         """Test that returned dict has correct keys."""
-        from engram.feedback import auto_label
+        from waystone.feedback import auto_label
 
         store = _make_store(tmp_path)
         nid = _add_node(store, fact="Test fact")
@@ -493,7 +493,7 @@ class TestAutoLabel:
         transcripts_dir = tmp_path / "transcripts"
         transcripts_dir.mkdir()
 
-        with patch("engram.feedback._call_llm_judge") as mock_llm:
+        with patch("waystone.feedback._call_llm_judge") as mock_llm:
             mock_llm.return_value = "1"
             result = auto_label(store, "testproject", transcripts_dir, {"model": "test", "base_url": "http://localhost:1234/v1"}, limit=10, dry_run=False)
 
@@ -511,7 +511,7 @@ class TestAutoLabel:
 
     def test_auto_label_empty_when_all_rated(self, tmp_path):
         """Test that auto_label returns empty stats when no unrated nodes."""
-        from engram.feedback import auto_label
+        from waystone.feedback import auto_label
 
         store = _make_store(tmp_path)
         nid = _add_node(store, fact="Already rated")
@@ -520,7 +520,7 @@ class TestAutoLabel:
         transcripts_dir = tmp_path / "transcripts"
         transcripts_dir.mkdir()
 
-        with patch("engram.feedback._call_llm_judge") as mock_llm:
+        with patch("waystone.feedback._call_llm_judge") as mock_llm:
             result = auto_label(store, "testproject", transcripts_dir, {"model": "test", "base_url": "http://localhost:1234/v1"}, limit=10, dry_run=False)
 
         store.close()

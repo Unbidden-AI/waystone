@@ -19,7 +19,7 @@ strategies:
   token_budget: 0                # Max tokens in output (0 = unlimited, e.g. 500)
   relevance_scoring: true        # Rank entry nodes by tag overlap count
 
-projects_dir: "~/.engram/projects"
+projects_dir: "~/.waystone/projects"
 
 orchestrator:
   llm:

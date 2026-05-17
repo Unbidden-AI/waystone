@@ -1,4 +1,4 @@
-"""Graceful-degradation error hierarchy for the Engram OpenClaw skill.
+"""Graceful-degradation error hierarchy for the Waystone OpenClaw skill.
 
 All errors degrade gracefully — the skill catches these and logs/returns
 user-friendly messages rather than crashing OpenClaw.
@@ -8,7 +8,7 @@ from __future__ import annotations
 
 
 class EngramOpenClawError(Exception):
-    """Base class for all Engram OpenClaw errors."""
+    """Base class for all Waystone OpenClaw errors."""
 
 
 class DBInitError(EngramOpenClawError):
@@ -38,5 +38,5 @@ class MemoryMDCorruptError(EngramOpenClawError):
 class ConfigError(EngramOpenClawError):
     """Raised when required configuration is missing or invalid.
 
-    Common cause: ENGRAM_PROJECT not set, config.yaml not found.
+    Common cause: WAYSTONE_PROJECT not set, config.yaml not found.
     """

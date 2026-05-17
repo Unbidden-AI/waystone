@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""Claude Code UserPromptSubmit hook for Context Broker.
+"""Claude Code UserPromptSubmit hook for Waystone.
 
 Buffers each user prompt as a conversation turn. When enough text has
 accumulated, spawns a background extraction worker (non-blocking) so prompt
 submission is never delayed. Then queries the existing graph for context
 relevant to the current prompt and injects it via additionalContext.
 
-Extraction is skipped if ~/.context-broker/paused exists. Use:
-  engram pause    # disable extraction
-  engram resume   # re-enable extraction
+Extraction is skipped if ~/.waystone/paused exists. Use:
+  waystone pause    # disable extraction
+  waystone resume   # re-enable extraction
 
 Project detection:
-  Looks for a .context-broker file in the cwd (or any parent directory up
+  Looks for a .waystone file in the cwd (or any parent directory up
   to home). Falls back to the cwd basename.
 
 Install:
@@ -30,14 +30,14 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 WORKER = Path(__file__).resolve().parent / "extraction_worker.py"
 sys.path.insert(0, str(REPO_ROOT))
 
-# Load project-local .env (e.g. GEMINI_API_KEY) before any Engram imports.
+# Load project-local .env (e.g. GEMINI_API_KEY) before any Waystone imports.
 try:
     from dotenv import load_dotenv as _load_dotenv
     _load_dotenv(dotenv_path=REPO_ROOT / ".env", override=False)
 except ImportError:
     pass
 
-STATE_DIR = Path.home() / ".engram"
+STATE_DIR = Path.home() / ".waystone"
 PAUSE_FILE = STATE_DIR / "paused"
 SESSION_STATE_MAX_CHARS = 2400  # ~600 tokens
 SESSION_STATE_TTL_SECONDS = 600  # fallback expiry: 10 minutes
@@ -213,10 +213,10 @@ def main():
     STATE_DIR.mkdir(parents=True, exist_ok=True)
 
     try:
-        from engram.config import get_db_path, load_config
-        from engram.extractor import ExtractionBuffer
-        from engram.retriever import retrieve_with_stats
-        from engram.store import GraphStore
+        from waystone.config import get_db_path, load_config
+        from waystone.extractor import ExtractionBuffer
+        from waystone.retriever import retrieve_with_stats
+        from waystone.store import GraphStore
 
         config = load_config()
         project = _detect_project(cwd)
@@ -356,7 +356,7 @@ def main():
             sys.exit(0)
 
         preamble = (
-            f"[Context Broker: retrieved {retrieval.nodes_after_strategies} of {total_nodes} "
+            f"[Waystone: retrieved {retrieval.nodes_after_strategies} of {total_nodes} "
             f"graph nodes for project '{project}' (~{retrieval.tokens_estimated} tokens). "
             f"Full context: {last_context_path}]\n\n"
         )
@@ -501,7 +501,7 @@ def _detect_project(cwd: str) -> str:
     cwd_path = Path(cwd).resolve()
     home = Path.home()
     for directory in [cwd_path, *cwd_path.parents]:
-        marker = directory / ".context-broker"
+        marker = directory / ".waystone"
         if marker.exists():
             try:
                 name = marker.read_text().strip()
@@ -611,7 +611,7 @@ def _spawn_reflect(project: str, transcript_path: str, since_turn: int) -> None:
         log_file = STATE_DIR / f"reflect_{project}_{timestamp}.log"
 
         cmd = [
-            sys.executable, "-m", "engram.cli",
+            sys.executable, "-m", "waystone.cli",
             "reflect",
             project,
             transcript_path,

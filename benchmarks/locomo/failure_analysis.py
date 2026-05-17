@@ -60,11 +60,11 @@ def run_failure_analysis(
     verbose: bool = True,
 ) -> list[dict[str, Any]]:
     """Run retrieval for every QA pair, classify failures."""
-    from engram.store import GraphStore
-    from engram.retriever import retrieve_with_stats
+    from waystone.store import GraphStore
+    from waystone.retriever import retrieve_with_stats
 
     config = ABLATION_CONFIGS[config_name]
-    db_dir = Path.home() / ".engram" / "locomo_cache" / config_name
+    db_dir = Path.home() / ".waystone" / "locomo_cache" / config_name
     checkpoint_path = db_dir / f"{conv_id}.db"
 
     if not checkpoint_path.exists():
