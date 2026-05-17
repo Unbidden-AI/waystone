@@ -10,6 +10,10 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
+# Increment when any schema change is made (new table, column, index, trigger).
+# init_db() checks PRAGMA user_version and skips all DDL if already current.
+SCHEMA_VERSION = 16
+
 
 def _normalize_fact(fact: str) -> str:
     """Normalize fact text for deduplication hashing.
@@ -67,7 +71,7 @@ def _chunk(lst: list, size: int):
 class GraphStore:
     """DAG storage using SQLite with nodes and edges tables."""
 
-    def __init__(self, db_path: str | Path, dedup_threshold: float = 0.95):
+    def __init__(self, db_path: str | Path, dedup_threshold: float = 0.95, vec_enabled: bool = True):
         self.db_path = Path(db_path)
         try:
             self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -90,7 +94,8 @@ class GraphStore:
             PRAGMA temp_store=MEMORY;
             PRAGMA mmap_size=268435456;
         """)
-        self._vec_available = self._load_sqlite_vec()
+        # Skip extension load when semantic search is disabled — saves ~49ms per open.
+        self._vec_available = self._load_sqlite_vec() if vec_enabled else False
         self._dedup_threshold = dedup_threshold
         self.init_db()
 
@@ -109,6 +114,13 @@ class GraphStore:
 
     def init_db(self):
         """Create tables if they don't exist."""
+        # Fast path: if schema is already at SCHEMA_VERSION, skip all DDL.
+        # PRAGMA user_version is a free integer stored in the DB header —
+        # reading it costs ~0.1ms vs ~300ms for re-running all CREATE IF NOT EXISTS.
+        current_version = self.conn.execute("PRAGMA user_version").fetchone()[0]
+        if current_version >= SCHEMA_VERSION:
+            return
+
         # WAL mode allows concurrent readers + one writer without blocking
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA synchronous=NORMAL")
@@ -374,6 +386,10 @@ class GraphStore:
                 f"sentence_id INTEGER PRIMARY KEY, embedding float[{EMBEDDING_DIM}])"
             )
             self.conn.commit()
+
+        # Stamp schema version so future opens skip all DDL above.
+        self.conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+        self.conn.commit()
 
     def add_node(self, node: dict) -> str:
         """Insert a node, deduplicating by fact text hash.

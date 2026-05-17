@@ -223,8 +223,9 @@ def main():
         db_path = get_db_path(config, project)
         paused = PAUSE_FILE.exists()
 
-        # Auto-create the project on first use
-        store = GraphStore(db_path)
+        # Auto-create the project on first use.
+        # vec not needed for buffer/watermark/stats — skip the 49ms extension load.
+        store = GraphStore(db_path, vec_enabled=False)
         inc_cfg = config.get("incremental", {})
 
         if not paused:
@@ -282,9 +283,15 @@ def main():
         # --- Context retrieval (always synchronous — must inject before Claude sees prompt) ---
         graph_stats = store.get_stats()
         total_nodes = graph_stats["node_count"]
-        store.close()
+        # Token estimate: use cached value from previous state when the DB hasn't changed
+        # (avoids a 9ms SUM(LENGTH(fact)) scan on every prompt).
+        # Falls back to a full scan if the state is missing or the DB is newer.
+        _tokens_in_graph = _read_cached_tokens(session_id, db_path)
+        if _tokens_in_graph is None:
+            _tokens_in_graph = _estimate_graph_tokens_from_store(store)
 
         if total_nodes == 0:
+            store.close()
             _write_state({
                 "project": project,
                 "status": "buffering" if not paused else "paused",
@@ -294,49 +301,22 @@ def main():
 
         t0 = time.time()
         defaults = config.get("defaults", {})
-        retrieval_timeout = config.get("hook", {}).get("retrieval_timeout_seconds", 5.0)
         _strategies = config.get("strategies", {})
         _hops = defaults.get("hops", 3)
         _top_k = defaults.get("top_k", 25)
 
-        # Run retrieval in a thread with a hard timeout so a large/slow graph
-        # never blocks Claude from receiving the prompt.
-        # IMPORTANT: GraphStore (SQLite connection) must be created INSIDE the
-        # thread that uses it — SQLite prohibits cross-thread connection sharing.
-        import concurrent.futures as _cf
-
-        def _do_retrieve():
-            _store = GraphStore(db_path)
-            try:
-                return retrieve_with_stats(
-                    _store, prompt,
-                    hops=_hops, top_k=_top_k, strategies=_strategies,
-                )
-            finally:
-                _store.close()
-
-        retrieval = None
-        _pool = _cf.ThreadPoolExecutor(max_workers=1)
-        _fut = _pool.submit(_do_retrieve)
-        try:
-            retrieval = _fut.result(timeout=retrieval_timeout)
-        except _cf.TimeoutError:
-            _write_state({
-                "project": project,
-                "status": "timeout",
-                "nodes_total": total_nodes,
-                "elapsed_ms": int((time.time() - t0) * 1000),
-                "timestamp": time.time(),
-            }, session_id=session_id)
-            # Don't join the pool — the thread may be stuck in SQLite and will
-            # outlive this process, but the hook returns promptly.
-            _pool.shutdown(wait=False, cancel_futures=True)
-            sys.exit(0)
-        _pool.shutdown(wait=False)
+        # Retrieval runs inline (no thread) — semantic is always False in hook mode,
+        # so there's no 3.5s cold-load risk. The existing store connection is reused
+        # directly, avoiding a second GraphStore open and ~25ms thread overhead.
+        retrieval = retrieve_with_stats(
+            store, prompt,
+            hops=_hops, top_k=_top_k, strategies=_strategies,
+        )
+        store.close()
 
         elapsed_ms = int((time.time() - t0) * 1000)
 
-        tokens_in_graph = _estimate_graph_tokens(db_path)
+        tokens_in_graph = _tokens_in_graph
         _write_state({
             "project": project,
             "status": "paused" if paused else "ok",
@@ -534,6 +514,39 @@ def _write_state(state: dict, session_id: str = "") -> None:
         p.write_text(json.dumps(state))
     except Exception:
         pass
+
+
+def _read_cached_tokens(session_id: str, db_path) -> int | None:
+    """Return cached tokens_in_graph from the previous state file if still valid.
+
+    Valid means: the state file is newer than context.db (no extraction ran since
+    the last hook invocation). Returns None on any cache miss so the caller falls
+    back to the full SUM(LENGTH(fact)) scan.
+    """
+    try:
+        if session_id:
+            p = STATE_DIR / "state" / f"{session_id}.json"
+        else:
+            p = STATE_DIR / "state.json"
+        if not p.exists():
+            return None
+        state_mtime = p.stat().st_mtime
+        db_mtime = db_path.stat().st_mtime
+        if db_mtime > state_mtime:
+            return None  # DB was modified (extraction ran) — must recompute
+        cached = json.loads(p.read_text()).get("tokens_in_graph")
+        return int(cached) if cached else None
+    except Exception:
+        return None
+
+
+def _estimate_graph_tokens_from_store(store) -> int:
+    """Estimate total tokens using an already-open GraphStore connection."""
+    try:
+        total_chars = store.conn.execute("SELECT SUM(LENGTH(fact)) FROM nodes").fetchone()[0] or 0
+        return max(1, total_chars // 4)
+    except Exception:
+        return 0
 
 
 def _estimate_graph_tokens(db_path: Path) -> int:

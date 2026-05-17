@@ -84,14 +84,24 @@ class SystemPromptBuilder:
 
     def build(
         self,
+        layer0_markdown: str = "",
         context_markdown: str = "",
         task_description: str = "",
         recent_turns: str = "",
     ) -> str:
         """Assemble and return the full system prompt string.
 
+        Order of sections:
+        1. Static instructions
+        2. Layer 0 standing world state (if enabled)
+        3. Dynamic per-turn context
+        4. Recent turns (hot cache)
+
         Parameters
         ----------
+        layer0_markdown:
+            Layer 0 standing world state (pre-fetched at session start).
+            May be empty or None.
         context_markdown:
             Graph context string returned by ``ContextManager.retrieve_context()``.
             May be empty or None — treated as no context available.
@@ -111,6 +121,12 @@ class SystemPromptBuilder:
 
         if self._static:
             parts.append(self._static)
+
+        # Layer 0: standing world state (pinned, static per session)
+        if layer0_markdown and layer0_markdown.strip():
+            layer0_section = "## Standing World State\n\n" + layer0_markdown + "\n"
+            parts.append(layer0_section)
+            log.debug("SystemPromptBuilder: layer0_tokens=%d", estimate_tokens(layer0_markdown))
 
         if self._include_context:
             ctx = self._trim_context(context_markdown or "")

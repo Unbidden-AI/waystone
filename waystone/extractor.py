@@ -1,13 +1,10 @@
 """LLM-based extraction service for Waystone."""
 
-import asyncio
 import json
 import logging
 import os
 import re
 import uuid
-
-import httpx
 
 from .prompts import (
     build_extraction_json_schema,
@@ -46,8 +43,8 @@ def _classify_llm_error(exc: Exception, status_code: int | None = None) -> str:
     if any(term in exc_str for term in ("quota", "billing", "insufficient quota")):
         return "quota"
 
-    # Timeout errors
-    if isinstance(exc, (asyncio.TimeoutError, TimeoutError)) or "timeout" in exc_str:
+    # Timeout errors (asyncio.TimeoutError is a subclass of TimeoutError in Python 3.11+)
+    if isinstance(exc, TimeoutError) or "timeout" in exc_str:
         return "timeout"
 
     # Everything else
@@ -108,6 +105,8 @@ class ExtractionBuffer:
 
 async def _call_llm(prompt: str, config: dict, domain_profile=None) -> str:
     """Make an LLM API call and return the raw response content."""
+    import asyncio  # lazy — costs ~20ms cold; only needed during extraction, not retrieval
+    import httpx  # lazy — costs 97ms cold; only needed during extraction, not retrieval
     llm_cfg = config["llm"]
 
     thinking_enabled = llm_cfg.get("enable_thinking", True)
@@ -270,6 +269,7 @@ async def _call_llm(prompt: str, config: dict, domain_profile=None) -> str:
 
 async def _llm_stream(url: str, headers: dict, request_body: dict, timeout: float) -> tuple[str, str | None]:
     """Stream a chat completion response, returning (content, finish_reason)."""
+    import httpx  # lazy — shares the cold-load cost with _call_llm when streaming
     content_parts: list[str] = []
     finish_reason: str | None = None
     # Use a long read timeout but short connect timeout for streaming
@@ -789,7 +789,7 @@ def _extract_balanced_object(text: str, start: int) -> str | None:
 
 
 VALID_TYPES = {"decision", "constraint", "implementation", "question", "resolved", "preference", "lesson_learned", "transition"}
-VALID_RELATIONS = {"depends_on", "flows_to", "relates_to", "supersedes"}
+VALID_RELATIONS = {"depends_on", "flows_to", "relates_to", "supersedes", "conflicts_with"}
 
 # Some models return edges with "source"/"target" or "from_id"/"to_id" instead of "from"/"to"
 _EDGE_FROM_KEYS = ("from", "source", "from_id", "from_node")
@@ -1129,6 +1129,7 @@ async def extract_chunked(
                 log.warning("verify_extraction failed for chunk (continuing): %s", exc)
         return nodes, edges
 
+    import asyncio
     results = await asyncio.gather(*[_one_chunk(c, i) for i, c in enumerate(chunks)], return_exceptions=True)
 
     all_nodes: list[dict] = []

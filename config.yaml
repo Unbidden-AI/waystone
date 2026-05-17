@@ -18,6 +18,9 @@ strategies:
   recency_half_life_days: 30     # Half-life for recency decay
   token_budget: 0                # Max tokens in output (0 = unlimited, e.g. 500)
   relevance_scoring: true        # Rank entry nodes by tag overlap count
+  semantic: false                # Disabled in hook mode — BGE model cold-load costs 3.5s per prompt
+  conflict_detection: true       # Surface prior decisions that contradict the current query
+  conflict_min_tag_overlap: 2    # Min shared tags to flag a conflict candidate
 
 projects_dir: "~/.waystone/projects"
 
@@ -50,7 +53,7 @@ orchestrator:
 
   system_prompt:
     static: |
-      You are the Engram Orchestrator — a context-aware coding assistant for the Engram
+      You are the Waystone Orchestrator — a context-aware coding assistant for the Waystone
       project (a DAG-based context intelligence layer for LLM workflows). Do not describe
       your underlying model or training. Use the project knowledge below to maintain
       consistency with prior decisions, constraints, and context.
@@ -96,6 +99,16 @@ orchestrator:
     group_by_type: true
     context_token_limit: 2000    # max tokens for graph context portion of system prompt
 
+    # Layer 0: standing world state injected at conversation start
+    layer0:
+      enabled: false                # disabled by default; enable when ready
+      token_budget: 1000            # soft limit on Layer 0 section tokens
+      confidence_threshold: 0.7     # min confidence to include decisions
+      recency_days: 30              # include decisions from last N days (0 = all)
+      question_limit: 5             # max open questions to show
+      constraint_limit: 10          # max active constraints to show
+      decision_limit: 8             # max recent/high-confidence decisions to show
+
   tools:
     enabled:
       - bash
@@ -117,5 +130,25 @@ orchestrator:
     max_retries: 4
     backoff_seconds: [1, 2, 4, 8]
     friendly_delay_threshold: 5  # surface "retrying..." message if delay exceeds this
+
+  routing:
+    enabled: false                  # set to true to enable per-turn model routing
+    rules:
+      # Fast tier — lightweight lookups and simple questions
+      - name: fast
+        patterns:
+          - "^list "
+          - "^show "
+          - "^what is "
+          - "^who is "
+        model: "gemini/gemini-2.5-flash-lite"
+        max_tokens: 2048
+        temperature: 0.0
+      # Deep tier — architecture, design, and analysis queries
+      - name: deep
+        patterns:
+          - "design|architect|tradeoff|impact analysis|compare|analyse|analyze"
+        model: "gemini/gemini-2.5-flash"
+        max_tokens: 8192
 
   log_level: "INFO"

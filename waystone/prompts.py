@@ -586,16 +586,19 @@ HUNT ONLY for these patterns — emit a node for EVERY instance found:
 
 1. EXPLICIT CHOICES: "we chose X", "we went with X", "we decided on X", "X was selected"
 2. TRADEOFF DECISIONS: "X over Y because", "X instead of Y", "X rather than Y"
-3. REJECTED ALTERNATIVES: For any decision, if the transcript mentions what was considered and rejected, embed it directly in the decision fact. Format: "Chose [X] over [Y] because [reason]; [Y] was ruled out because [rejected_reason]". Do NOT create separate nodes for rejected paths.
+3. REJECTED ALTERNATIVES: For EVERY decision that mentions rejected alternatives, create a SEPARATE node for each rejected path with type "lesson_learned". Link it to the decision node with a "relates_to" edge. Do NOT embed the rejection into the decision fact.
+   - Decision node: "Chose JWT for authentication"
+   - Rationale node (lesson_learned): "Sessions rejected for auth because they don't scale horizontally across stateless instances"
+   - Rationale node (lesson_learned): "Cookies rejected for auth API because CORS complexity with mobile clients"
 4. MISLABELED DECISIONS: Any node already in EXISTING CONTEXT labeled "implementation" that actually describes a non-obvious choice — do NOT re-extract the node, but if new rationale or rejected alternatives are found, emit a new decision node that supersedes it.
 5. IMPLICIT DECISIONS: Approaches described without explicit alternatives mentioned, but where the choice was non-obvious or contested.
 6. EVOLUTION/TRAJECTORY: Things that were ADDED or MODIFIED over time — "started with X roles, later added Y", "originally used X, then added Z on top". Use type "transition" for these, not "decision". Fact must capture BOTH the original state AND the changed/added state AND why it happened.
 
 RULES:
-- Use type: "decision" for choices between alternatives. Use type: "transition" for additive evolution and trajectories. Do NOT emit separate rationale nodes.
-- Embed the WHY and any rejected alternatives directly in the fact text of the decision node itself.
+- Use type: "decision" for choices between alternatives. Use type: "transition" for additive evolution and trajectories. Use type: "lesson_learned" for rejected alternatives and rationale.
+- Decision node fact: state WHAT was chosen and for what purpose. Keep it short and retrieval-friendly.
+- Rationale/rejected nodes: each must name WHAT was rejected AND WHY in a single self-contained sentence.
 - Use short IDs like n1, n2, n3. Reference existing nodes with their exact IDs in edges.
-- Each fact must be self-contained: what was decided + why + what was rejected (if known).
 - Tag richly (6-12 tags): the chosen technology/approach, the rejected alternative(s), the problem domain, synonyms. Include tags for both sides of the tradeoff so the node is retrievable from either direction. For "transition" nodes, include tags for BOTH the old and new state.
 - If nothing new is found, return {"nodes": [], "edges": []}.
 
@@ -843,7 +846,7 @@ HUNT ONLY for these patterns — emit a node for EVERY instance found:
 **DECISIONS:**
 1. EXPLICIT CHOICES: "we chose X", "we went with X", "we decided on X", "X was selected"
 2. TRADEOFF DECISIONS: "X over Y because", "X instead of Y", "X rather than Y"
-3. REJECTED ALTERNATIVES: For any decision, if the transcript mentions what was considered and rejected, embed it directly in the decision fact.
+3. REJECTED ALTERNATIVES: For EVERY decision with a mentioned rejected path, create a SEPARATE "lesson_learned" node for each rejection — state WHAT was rejected AND WHY. Link to the decision node via "relates_to". Do NOT embed the rejection into the decision fact.
 4. IMPLICIT DECISIONS: Approaches described without explicit alternatives mentioned, but where the choice was non-obvious or contested.
 
 **CONSTRAINTS:**
@@ -858,10 +861,10 @@ HUNT ONLY for these patterns — emit a node for EVERY instance found:
 3. GENERALITY-VS-SPECIALIZATION: Broad vs. narrow design choices and why
 
 RULES:
-- Use type: "decision" for choices between alternatives. Use type: "constraint" for hard requirements.
-- For tradeoffs, use type: "decision" and embed the comparative analysis directly in the fact text.
-- Each fact must be self-contained: what was decided/required + why + what was rejected or traded off (if known).
-- Tag richly (6-12 tags): the chosen option, the rejected alternative(s), the problem domain, synonyms.
+- Use type: "decision" for choices between alternatives. Use type: "constraint" for hard requirements. Use type: "lesson_learned" for rejected alternatives and rationale.
+- Decision node fact: state WHAT was chosen and for what purpose — keep it short and retrieval-friendly.
+- Each rejected alternative and its reason gets its own "lesson_learned" node, linked to the decision via "relates_to".
+- Tag richly (6-12 tags): the chosen option, the rejected alternative(s), the problem domain, synonyms. Tag both sides of every tradeoff so the node is findable from either direction.
 - Use short IDs like n1, n2, n3. Reference existing nodes with their exact IDs in edges.
 - If nothing new is found, return {"nodes": [], "edges": []}.
 

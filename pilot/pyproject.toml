@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "waystone-pilot"
+version = "0.2.0"
+description = "Agentic orchestration layer for Waystone — per-turn model routing, headless mode, and tool execution"
+readme = "../README.md"
+requires-python = ">=3.13,<3.14"
+license = { text = "MIT" }
+authors = [{ name = "Unbidden AI", email = "hello@unbidden.ai" }]
+keywords = ["waystone", "llm", "orchestration", "agent", "routing"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries",
+]
+dependencies = [
+    "waystone>=0.2.0",
+    "click>=8.0",
+    "litellm>=1.40",
+    "tiktoken>=0.7",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "pytest-asyncio>=0.21", "ruff>=0.4"]
+
+[project.scripts]
+waystone-pilot = "orchestrator.cli:main"
+
+[project.urls]
+Homepage = "https://unbidden.ai/waystone"
+Repository = "https://github.com/Unbidden-AI/waystone"
+
+[tool.setuptools]
+package-dir = {"" = ".."}
+
+[tool.setuptools.packages.find]
+where = [".."]
+include = ["orchestrator*"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]

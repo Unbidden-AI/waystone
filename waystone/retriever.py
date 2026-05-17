@@ -199,6 +199,11 @@ DEFAULT_STRATEGIES = {
     # recall (deep-hop expansion only halts when the new layer is clearly irrelevant).
     "autosearch": False,
     "autosearch_threshold": 0.15,  # avg cosine sim floor below which BFS halts early
+    # Conflict detection: surface prior decision/transition nodes that contradict the current query.
+    # When enabled, find_conflicts() runs after BFS and prepends a ⚠ section to the output.
+    # Default off — enable in config.yaml for interactive use; leave off for benchmarks.
+    "conflict_detection": False,
+    "conflict_min_tag_overlap": 2,  # Min shared tags to flag a candidate conflict
 }
 
 # Verbs that indicate a preference/recommendation query — used by preference_fanout to
@@ -214,6 +219,118 @@ _PREFERENCE_SIGNAL_VERBS: frozenset[str] = frozenset([
     # Question patterns that imply preference-seeking ("what should I serve/make/use/try")
     "serve", "cook", "prepare", "make", "try", "choose", "pick", "use", "wear", "watch",
 ])
+
+# Words that indicate a decision went *against* something. Used by find_conflicts() to
+# estimate polarity and distinguish "decided against Redis" from "decided to use Redis".
+_NEGATIVE_POLARITY: frozenset[str] = frozenset([
+    "against", "rejected", "reject", "dropped", "drop", "removed", "remove",
+    "decided not", "chose not", "avoid", "avoided", "avoiding", "abandoned",
+    "abandon", "deprecated", "deprecate", "replaced", "replace", "away from",
+    "ruled out", "not use", "don't use", "won't use", "cannot use", "can't use",
+])
+
+_POSITIVE_POLARITY: frozenset[str] = frozenset([
+    "decided to", "chose", "chosen", "adopted", "adopt", "selected", "use",
+    "using", "switched to", "migrated to", "moved to", "implemented", "added",
+])
+
+
+def find_conflicts(
+    store: "GraphStore",
+    candidate_tags: list[str],
+    exclude_ids: set[str] | None = None,
+    min_tag_overlap: int = 2,
+) -> list[dict]:
+    """Find decision/transition nodes that potentially conflict with candidate_tags.
+
+    Returns active nodes whose tags overlap with candidate_tags by at least
+    min_tag_overlap, excluding exclude_ids. These are *candidates* — the caller
+    or the LLM decides whether they actually contradict. No NLP required at this layer.
+
+    Nodes with an explicit ``conflicts_with`` edge to/from any node in exclude_ids
+    are annotated with ``_is_known_conflict: True``.
+
+    Results are sorted: known conflicts first, then by overlap count descending,
+    then confidence descending.
+    """
+    if not candidate_tags:
+        return []
+
+    exclude_ids = exclude_ids or set()
+    candidate_set = {t.lower() for t in candidate_tags if t}
+
+    # Pull all decision and transition nodes whose tags overlap with candidate_tags.
+    # get_nodes_by_tags() does tag-index lookup; we then count overlap.
+    candidates = store.get_nodes_by_tags(list(candidate_set))
+    candidates = [
+        n for n in candidates
+        if n["type"] in ("decision", "transition")
+        and n["id"] not in exclude_ids
+        and n.get("is_active", True)
+    ]
+
+    # Find any candidates with an explicit conflicts_with edge to/from the context nodes.
+    known_conflict_ids: set[str] = set()
+    if exclude_ids:
+        edges = store.get_edges_for_nodes(list(exclude_ids))
+        for edge in edges:
+            if edge.get("relation") == "conflicts_with":
+                known_conflict_ids.add(edge["from_id"])
+                known_conflict_ids.add(edge["to_id"])
+        known_conflict_ids -= exclude_ids  # only the *other* side matters
+
+    scored: list[tuple[bool, int, float, dict]] = []
+    for node in candidates:
+        node_tags = {t.lower() for t in (node.get("tags") or [])}
+        overlap = len(candidate_set & node_tags)
+        if overlap >= min_tag_overlap:
+            is_known = node["id"] in known_conflict_ids
+            node = dict(node)
+            node["_is_known_conflict"] = is_known
+            scored.append((is_known, overlap, node.get("confidence", 0.5), node))
+
+    # Known conflicts first, then by overlap count, then confidence — all descending.
+    scored.sort(key=lambda x: (x[0], x[1], x[2]), reverse=True)
+    return [n for _, _, _, n in scored]
+
+
+def _polarity(fact: str) -> str:
+    """Rough polarity of a fact: 'negative', 'positive', or 'unknown'."""
+    lower = fact.lower()
+    for phrase in _NEGATIVE_POLARITY:
+        if phrase in lower:
+            return "negative"
+    for phrase in _POSITIVE_POLARITY:
+        if phrase in lower:
+            return "positive"
+    return "unknown"
+
+
+def _format_conflict_section(conflicts: list[dict]) -> str:
+    """Format conflict candidates into a warning block for prepending to context."""
+    has_known = any(n.get("_is_known_conflict") for n in conflicts)
+    header = "## ⚠ Known & Potential Conflicts" if has_known else "## ⚠ Potential Conflicts"
+    lines = [
+        header,
+        "",
+        "The following prior decisions may conflict with this query context.",
+        "Verify before proceeding.",
+        "",
+    ]
+    for node in conflicts:
+        created = (node.get("created_at") or "")[:10]
+        conf = node.get("confidence", 0.5)
+        tags = node.get("tags") or []
+        tag_str = ", ".join(tags[:6]) if tags else "—"
+        polarity = _polarity(node["fact"])
+        polarity_label = f" [{polarity} polarity]" if polarity != "unknown" else ""
+        known_label = " **[KNOWN CONFLICT]**" if node.get("_is_known_conflict") else ""
+        lines.append(f"**[{node['type']}]**{known_label}{polarity_label} {node['fact']} (confidence: {conf:.2f})")
+        if created:
+            lines.append(f"  Recorded: {created}")
+        lines.append(f"  Tags: {tag_str}")
+        lines.append("")
+    return "\n".join(lines).rstrip()
 
 
 @dataclass
@@ -941,6 +1058,18 @@ def retrieve_with_stats(
     )
     if raw_sentence_snippets:
         markdown = markdown + "\n\n" + _format_raw_sentence_snippets(raw_sentence_snippets)
+
+    # Conflict detection: find prior decision/transition nodes that may contradict
+    # the current query. Prepend a warning block so the LLM sees it before responding.
+    if strats.get("conflict_detection") and keywords:
+        min_overlap = int(strats.get("conflict_min_tag_overlap", 2))
+        collected_ids = {n["id"] for n in collected_nodes} | pinned_ids
+        conflicts = find_conflicts(store, keywords, exclude_ids=collected_ids, min_tag_overlap=min_overlap)
+        if conflicts:
+            conflict_block = _format_conflict_section(conflicts)
+            markdown = conflict_block + "\n\n---\n\n" + markdown
+            log.debug("Conflict detection: %d candidate(s) found", len(conflicts))
+
     tokens_est = estimate_tokens(markdown)
 
     return RetrievalResult(
@@ -1969,5 +2098,483 @@ def assemble_markdown(
             )
             lines.append(f"- {resolved_fact}{confidence_str}{date_str}{source}")
         lines.append("")
+
+    return "\n".join(lines)
+
+
+def assemble_briefing(
+    nodes: list[dict],
+    edges: list[dict],
+    project: str,
+    fmt: str = "briefing",
+    include_superseded: bool = True,
+) -> str:
+    """Assemble a structured briefing document from a full graph export.
+
+    Args:
+        nodes: All nodes from the graph
+        edges: All edges from the graph (as dicts with from_id, to_id, relation)
+        project: Project name for the header
+        fmt: "briefing" or "handoff" format
+        include_superseded: Whether to include superseded decision nodes
+
+    Returns:
+        Formatted markdown document
+    """
+    if not nodes:
+        return f"# Project Briefing: {project}\n\nNo nodes in graph."
+
+    # Separate nodes by type
+    by_type = defaultdict(list)
+    for node in nodes:
+        by_type[node["type"]].append(node)
+
+    decisions = by_type.get("decision", [])
+    constraints = by_type.get("constraint", [])
+    implementations = by_type.get("implementation", [])
+    transitions = by_type.get("transition", [])
+    questions = by_type.get("question", [])
+    resolved_nodes = by_type.get("resolved", [])
+
+    # Build edge lookup: supersedes edges by target node
+    superseded_by: dict[str, list[dict]] = defaultdict(list)
+    supersedes_edges: dict[str, list[str]] = defaultdict(list)
+    for edge in edges:
+        if edge.get("relation") == "supersedes":
+            superseded_by[edge["to_id"]].append(edge)
+            supersedes_edges[edge["from_id"]].append(edge["to_id"])
+
+    # Build primary tag lookup: for each node, pick its highest-frequency tag
+    tag_freq: Counter[str] = Counter()
+    for node in nodes:
+        for tag in node.get("tags", []):
+            tag_freq[tag] += 1
+
+    def get_primary_tag(node: dict) -> str:
+        """Get the highest-frequency tag for this node, or '(untagged)'."""
+        tags = node.get("tags", [])
+        if not tags:
+            return "(untagged)"
+        # Return the tag with highest global frequency
+        primary = max(tags, key=lambda t: tag_freq.get(t, 0))
+        return primary
+
+    # Build supersedes chains: for each decision that supersedes something, record the full chain
+    def build_supersedes_chain(node_id: str) -> list[dict]:
+        """Recursively build the full chain of superseded nodes leading to this one."""
+        chain = []
+        # Start with all nodes that this node supersedes
+        for superseded_id in supersedes_edges.get(node_id, []):
+            superseded_node = next((n for n in nodes if n["id"] == superseded_id), None)
+            if superseded_node:
+                chain.append(superseded_node)
+                # Recursively add nodes superseded by the superseded node
+                chain.extend(build_supersedes_chain(superseded_id))
+        return chain
+
+    # Group nodes by primary tag
+    def group_by_tag(node_list: list[dict]) -> dict[str, list[dict]]:
+        grouped = defaultdict(list)
+        for node in node_list:
+            tag = get_primary_tag(node)
+            grouped[tag].append(node)
+        return grouped
+
+    # Format date from ISO 8601
+    def format_date(iso_str: str | None) -> str:
+        if not iso_str:
+            return ""
+        try:
+            dt = datetime.fromisoformat(iso_str)
+            return dt.strftime("%Y-%m-%d")
+        except (ValueError, TypeError):
+            return ""
+
+    lines = []
+
+    # Section 1: Project Header
+    date_range = ""
+    if nodes:
+        dated_nodes = [n for n in nodes if n.get("occurred_at")]
+        if dated_nodes:
+            oldest = min(dated_nodes, key=lambda n: n["occurred_at"])
+            newest = max(dated_nodes, key=lambda n: n["occurred_at"])
+            date_range = f" | Active since: {format_date(oldest['occurred_at'])}"
+
+    export_ts = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    lines.append(f"# Project Briefing: {project}")
+    lines.append(f"Generated: {export_ts} | {len(nodes)} nodes | {len(edges)} edges{date_range}")
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+
+    # Section 2: Executive Summary (briefing only, top 5 decisions by confidence)
+    if fmt == "briefing" and decisions:
+        lines.append("## Executive Summary")
+        lines.append("")
+        lines.append("The most important decisions in this project:")
+        lines.append("")
+        top_decisions = sorted(decisions, key=lambda d: d.get("confidence", 0), reverse=True)
+        count = min(5, len(top_decisions))
+        for i, dec in enumerate(top_decisions[:count], 1):
+            confidence = dec.get("confidence", 0)
+            lines.append(f"{i}. {dec['fact']} ({confidence:.2f})")
+        lines.append("")
+        lines.append("---")
+        lines.append("")
+
+    # Section 3: Executive Summary (handoff format, top 3 decisions)
+    if fmt == "handoff" and decisions:
+        lines.append("## Executive Summary")
+        lines.append("")
+        top_decisions = sorted(decisions, key=lambda d: d.get("confidence", 0), reverse=True)
+        count = min(3, len(top_decisions))
+        for dec in top_decisions[:count]:
+            lines.append(f"- {dec['fact']}")
+        lines.append("")
+        lines.append("---")
+        lines.append("")
+
+    # Section 4: Architecture Decisions
+    if decisions:
+        lines.append("## Architecture Decisions")
+        lines.append("")
+        grouped = group_by_tag(decisions)
+
+        for tag in sorted(grouped.keys()):
+            tag_nodes = grouped[tag]
+            lines.append(f"### {tag}")
+            lines.append("")
+
+            # Sort by occurred_at (handle None values)
+            tag_nodes_sorted = sorted(
+                tag_nodes,
+                key=lambda n: n.get("occurred_at") or "",
+            )
+
+            # Build set of superseded node IDs
+            superseded_ids = set()
+            for edges_list in superseded_by.values():
+                for edge in edges_list:
+                    superseded_ids.add(edge["to_id"])
+
+            active_nodes = [n for n in tag_nodes_sorted if n["id"] not in superseded_ids]
+            superseded_nodes = [n for n in tag_nodes_sorted if n["id"] in superseded_ids]
+
+            # Active decisions
+            for node in active_nodes:
+                confidence = node.get("confidence", 0)
+                occurred_at = format_date(node.get("occurred_at"))
+                date_str = f" | {occurred_at}" if occurred_at else ""
+
+                if fmt == "briefing":
+                    lines.append(f"- **{node['fact']}** ({confidence:.2f}{date_str})")
+                    # Add supersedes chain if this node supersedes something
+                    superseded_list = supersedes_edges.get(node["id"], [])
+                    if superseded_list:
+                        for superseded_id in superseded_list:
+                            superseded_node = next((n for n in nodes if n["id"] == superseded_id), None)
+                            if superseded_node:
+                                sup_conf = superseded_node.get("confidence", 0)
+                                sup_date = format_date(superseded_node.get("occurred_at"))
+                                lines.append(f"  → supersedes: \"{superseded_node['fact']}\" ({sup_conf:.2f}, {sup_date})")
+                else:  # handoff
+                    lines.append(f"- {node['fact']}")
+
+            # Superseded decisions (if include_superseded)
+            if include_superseded and superseded_nodes and fmt == "briefing":
+                lines.append("")
+                lines.append("#### Superseded")
+                lines.append("")
+                for node in superseded_nodes:
+                    confidence = node.get("confidence", 0)
+                    occurred_at = format_date(node.get("occurred_at"))
+                    date_str = f" | {occurred_at}" if occurred_at else ""
+                    lines.append(f"- ~~{node['fact']}~~ ({confidence:.2f}{date_str}) [SUPERSEDED]")
+
+            lines.append("")
+
+    # Section 5: Active Constraints
+    if constraints:
+        lines.append("## Active Constraints")
+        lines.append("")
+        grouped = group_by_tag(constraints)
+
+        for tag in sorted(grouped.keys()):
+            tag_nodes = grouped[tag]
+            lines.append(f"### {tag}")
+            lines.append("")
+            for node in tag_nodes:
+                confidence = node.get("confidence", 0)
+                if fmt == "briefing":
+                    lines.append(f"- {node['fact']} ({confidence:.2f})")
+                else:  # handoff
+                    lines.append(f"- {node['fact']}")
+            lines.append("")
+
+    # Section 6: Implementation Notes
+    if implementations:
+        lines.append("## Implementation Notes")
+        lines.append("")
+        grouped = group_by_tag(implementations)
+
+        for tag in sorted(grouped.keys()):
+            tag_nodes = grouped[tag]
+            lines.append(f"### {tag}")
+            lines.append("")
+            # Sort chronologically
+            tag_nodes_sorted = sorted(
+                tag_nodes,
+                key=lambda n: n.get("occurred_at", ""),
+            )
+            for node in tag_nodes_sorted:
+                confidence = node.get("confidence", 0)
+                if fmt == "briefing":
+                    lines.append(f"- {node['fact']} ({confidence:.2f})")
+                else:  # handoff
+                    lines.append(f"- {node['fact']}")
+            lines.append("")
+
+    # Section 7: Transitions (What Changed and Why)
+    if transitions:
+        lines.append("## Transitions")
+        lines.append("")
+        if fmt == "briefing":
+            lines.append("| Date | Change | Component |")
+            lines.append("|------|--------|-----------|")
+            for node in transitions:
+                date_str = format_date(node.get("occurred_at", ""))
+                fact = node["fact"]
+                component = get_primary_tag(node)
+                # Truncate fact to fit table width
+                fact_short = fact[:60] + "..." if len(fact) > 60 else fact
+                lines.append(f"| {date_str} | {fact_short} | {component} |")
+        else:  # handoff — simple list
+            for node in transitions:
+                lines.append(f"- {node['fact']}")
+        lines.append("")
+
+    # Section 8: Open Questions
+    unresolved_questions = [q for q in questions if not any(r["id"] == q["id"] for r in resolved_nodes)]
+    if unresolved_questions:
+        lines.append("## Open Questions")
+        lines.append("")
+        grouped = group_by_tag(unresolved_questions)
+
+        for tag in sorted(grouped.keys()):
+            tag_nodes = grouped[tag]
+            lines.append(f"### {tag}")
+            lines.append("")
+            for node in tag_nodes:
+                confidence = node.get("confidence", 0)
+                if fmt == "briefing":
+                    lines.append(f"- {node['fact']} ({confidence:.2f})")
+                else:  # handoff
+                    lines.append(f"- {node['fact']}")
+            lines.append("")
+
+    # Section 9: Decision History (Supersedes Chains) — briefing only
+    if fmt == "briefing":
+        # Find all decisions that supersede at least one prior node and are not themselves superseded
+        active_decisions_with_history = [
+            d for d in decisions
+            if supersedes_edges.get(d["id"]) and d["id"] not in superseded_ids
+        ]
+
+        if active_decisions_with_history:
+            lines.append("## Decision Evolution")
+            lines.append("")
+
+            for decision in sorted(
+                active_decisions_with_history,
+                key=lambda d: d.get("occurred_at", ""),
+            ):
+                # Build the chain of superseded nodes
+                chain = build_supersedes_chain(decision["id"])
+                if not chain:
+                    continue
+
+                # Use primary tag as section header
+                primary_tag = get_primary_tag(decision)
+                lines.append(f"### {primary_tag}-evolution")
+                lines.append("")
+
+                # Show the chain in reverse order (oldest first)
+                chain_sorted = sorted(chain, key=lambda n: n.get("occurred_at") or "")
+                for i, node in enumerate(chain_sorted, 1):
+                    date_str = format_date(node.get("occurred_at", ""))
+                    confidence = node.get("confidence", 0)
+                    lines.append(f"{i}. {date_str} — {node['fact']} (confidence: {confidence:.2f}) [SUPERSEDED]")
+
+                # Add the current decision at the end
+                date_str = format_date(decision.get("occurred_at", ""))
+                confidence = decision.get("confidence", 0)
+                lines.append(f"{len(chain_sorted) + 1}. {date_str} — {decision['fact']} (confidence: {confidence:.2f}) [ACTIVE]")
+                lines.append("")
+
+    # Apply token budget for handoff format
+    if fmt == "handoff":
+        full_text = "\n".join(lines)
+        # Apply 4000 token budget
+        tokens = estimate_tokens(full_text)
+        if tokens > 4000:
+            # Need to truncate; keep critical sections and drop less critical ones
+            # For now, assemble without budget and let apply_token_budget handle post-processing
+            pass
+
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Decision Impact Analysis
+# ---------------------------------------------------------------------------
+
+IMPACT_RELATIONS = frozenset({"depends_on", "flows_to"})
+IMPACT_DEFAULT_TYPES = frozenset({"decision", "constraint", "implementation"})
+
+
+def compute_impact(
+    store: "GraphStore",
+    node_ids: list[str],
+    hops: int = 3,
+    reverse: bool = False,
+    node_types: frozenset[str] | set[str] | None = None,
+) -> dict[int, list[tuple[dict, list[str]]]]:
+    """Traverse the dependency graph from node_ids and return an impact map.
+
+    Follows only ``depends_on`` and ``flows_to`` edges (outgoing by default,
+    incoming when ``reverse=True``).
+
+    Returns a dict keyed by hop depth (1-based) → list of (node, edge_path) tuples,
+    where edge_path is the sequence of relation names traversed to reach the node.
+    """
+    if node_types is None:
+        node_types = IMPACT_DEFAULT_TYPES
+
+    visited: set[str] = set(node_ids)
+
+    # frontier: list of (node_id, edge_path_so_far)
+    frontier: list[tuple[str, list[str]]] = [(nid, []) for nid in node_ids]
+
+    result: dict[int, list[tuple[dict, list[str]]]] = {}
+
+    for depth in range(1, hops + 1):
+        if not frontier:
+            break
+
+        path_map: dict[str, list[str]] = {nid: path for nid, path in frontier}
+        current_ids = list(path_map.keys())
+
+        all_edges = store.get_edges_for_nodes(current_ids)
+
+        # Filter to impact relations only; direction depends on reverse flag
+        next_candidates: list[tuple[str, list[str]]] = []
+        for edge in all_edges:
+            relation = edge.get("relation", "")
+            if relation not in IMPACT_RELATIONS:
+                continue
+
+            from_id = edge["from_id"]
+            to_id = edge["to_id"]
+
+            if reverse:
+                # Traverse incoming edges: to_id is in our frontier → follow from_id
+                if to_id in path_map and from_id not in visited:
+                    next_candidates.append((from_id, path_map[to_id] + [relation]))
+            else:
+                # Traverse outgoing edges: from_id is in our frontier → follow to_id
+                if from_id in path_map and to_id not in visited:
+                    next_candidates.append((to_id, path_map[from_id] + [relation]))
+
+        if not next_candidates:
+            break
+
+        # Deduplicate by node_id, keeping shortest path
+        best_path: dict[str, list[str]] = {}
+        for nid, path in next_candidates:
+            if nid not in best_path or len(path) < len(best_path[nid]):
+                best_path[nid] = path
+
+        # Mark all as visited before fetching (even those we filter by type)
+        for nid in best_path:
+            visited.add(nid)
+
+        # Batch-fetch the neighbor nodes
+        nodes_by_id = {n["id"]: n for n in store.get_nodes_by_ids(list(best_path.keys()))}
+
+        hop_results: list[tuple[dict, list[str]]] = []
+        for nid, path in best_path.items():
+            node = nodes_by_id.get(nid)
+            if node is None:
+                continue
+            if node.get("type") in node_types:
+                hop_results.append((node, path))
+
+        if hop_results:
+            result[depth] = hop_results
+
+        # Continue traversal from all newly visited nodes (even type-filtered ones)
+        frontier = list(best_path.items())
+
+    return result
+
+
+def format_impact_report(
+    seed_nodes: list[dict],
+    impact: dict[int, list[tuple[dict, list[str]]]],
+    reverse: bool = False,
+) -> str:
+    """Render an impact map as markdown."""
+    lines: list[str] = []
+
+    direction = "upstream from" if reverse else "downstream of"
+    total = sum(len(v) for v in impact.values())
+
+    if not seed_nodes:
+        return "No seed nodes provided."
+
+    # Header
+    if len(seed_nodes) == 1:
+        n = seed_nodes[0]
+        conf = n.get("confidence", 0)
+        tags_str = ", ".join(n.get("tags") or [])
+        lines.append(f"## Impact Analysis: {n['id']}")
+        lines.append(f"**{n['fact']}**")
+        lines.append(
+            f"Type: `{n['type']}` | Confidence: {conf:.2f}"
+            + (f" | Tags: {tags_str}" if tags_str else "")
+        )
+    else:
+        lines.append(f"## Impact Analysis: {len(seed_nodes)} seed nodes")
+        for n in seed_nodes:
+            lines.append(f"- **[{n['type']}]** {n['fact']} ({n['id']})")
+    lines.append("")
+
+    if not impact:
+        lines.append(f"No nodes {direction} this decision within the traversal depth.")
+        return "\n".join(lines)
+
+    lines.append(f"**{total} node(s) {direction} this decision:**")
+    lines.append("")
+
+    type_counts: dict[str, int] = {}
+    for depth in sorted(impact.keys()):
+        hop_nodes = impact[depth]
+        label = "Directly connected" if depth == 1 else f"Reachable at depth {depth}"
+        lines.append(f"### {label} (hop {depth})")
+        lines.append("")
+        for node, path in hop_nodes:
+            path_str = " → ".join(path) if path else "direct"
+            conf = node.get("confidence", 0)
+            node_type = node["type"]
+            type_counts[node_type] = type_counts.get(node_type, 0) + 1
+            lines.append(f"- **[{node_type}]** {node['fact']} (confidence: {conf:.2f})")
+            lines.append(f"  *via: {path_str}* | `{node['id']}`")
+        lines.append("")
+
+    # Summary line
+    summary_parts = [f"{count} {t}" for t, count in sorted(type_counts.items())]
+    lines.append(f"**Summary:** {total} node(s) intersected — {', '.join(summary_parts)}.")
+    lines.append("Review the constraints and decisions above before proceeding.")
 
     return "\n".join(lines)

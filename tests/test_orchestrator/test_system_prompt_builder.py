@@ -183,7 +183,7 @@ class TestBuildWithContextDisabled:
         """build() does not append context section when include_context=False."""
         builder = SystemPromptBuilder(no_context_config)
         context_markdown = "Important context about the system"
-        result = builder.build(context_markdown)
+        result = builder.build(context_markdown=context_markdown)
 
         # Should only contain static
         assert "You are a helpful assistant" in result
@@ -203,7 +203,7 @@ class TestBuildWithContextDisabled:
     def test_build_static_only_with_context_disabled(self, no_context_config):
         """build() returns only static when include_context=False."""
         builder = SystemPromptBuilder(no_context_config)
-        result = builder.build("some context")
+        result = builder.build(context_markdown="some context")
 
         # Result should be just the static text (after stripping)
         expected = "You are a helpful assistant."
@@ -539,7 +539,7 @@ class TestBuildAndTrimIntegration:
         builder = SystemPromptBuilder(limited_context_config)
         oversized_context = "\n".join([f"Line {i}: content here" for i in range(30)])
 
-        result = builder.build(oversized_context)
+        result = builder.build(context_markdown=oversized_context)
 
         # Result should contain the trim notice (since context exceeds limit)
         assert "_[context trimmed to fit token budget]_" in result
@@ -549,7 +549,7 @@ class TestBuildAndTrimIntegration:
         builder = SystemPromptBuilder(no_context_config)
         long_context = "\n".join([f"Line {i}: content" for i in range(100)])
 
-        result = builder.build(long_context)
+        result = builder.build(context_markdown=long_context)
 
         # Should not contain any context
         assert "Line 0" not in result

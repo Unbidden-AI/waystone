@@ -10,6 +10,7 @@ from waystone.store import GraphStore
 
 from .context_manager import ContextManager
 from .llm_adapter import build_tool_schemas, call_llm, stream_llm
+from .router import route
 from .system_prompt_builder import SystemPromptBuilder
 from .tool_executor import execute_tools
 from .types import CompactionResult, Message, ToolCall
@@ -67,6 +68,7 @@ class Conversation:
             **orch_cfg.get("llm", {}),
             "_retry": retry_cfg,
         }
+        self._routing_cfg: dict = orch_cfg.get("routing", {})
         self._tools_cfg: dict = tools_cfg
         self._enabled_tools: list[str] = tools_cfg.get("enabled", [])
         self._project_name = project_name
@@ -80,6 +82,49 @@ class Conversation:
             extractor_config=cfg,
         )
         self._prompt_builder = SystemPromptBuilder(sp_cfg, project_root=Path(project_root) if project_root else None)
+        self._sp_cfg = sp_cfg
+
+        # Layer 0: lazy initialization (computed on first build(), cached for session)
+        self._layer0_markdown: str | None = None
+        self._layer0_computed = False
+
+    # ------------------------------------------------------------------
+    # Layer 0 (standing world state)
+    # ------------------------------------------------------------------
+
+    def _build_layer0(self) -> str:
+        """Build standing world state block.
+
+        Returns markdown string suitable for injecting into system prompt.
+        Called lazily on first prompt build and on reset().
+        """
+        from .layer0_builder import build_layer0
+
+        cfg = self._sp_cfg.get("layer0", {})
+        if not cfg.get("enabled", False):
+            return ""
+
+        return build_layer0(
+            store=self._store,
+            token_budget=cfg.get("token_budget", 1000),
+            confidence_threshold=cfg.get("confidence_threshold", 0.7),
+            recency_days=cfg.get("recency_days", 30),
+            question_limit=cfg.get("question_limit", 5),
+            constraint_limit=cfg.get("constraint_limit", 10),
+            decision_limit=cfg.get("decision_limit", 8),
+        )
+
+    def _ensure_layer0(self) -> None:
+        """Ensure Layer 0 is computed (lazy evaluation).
+
+        On first call, computes and caches Layer 0. Subsequent calls return cached value.
+        Called by build() and reset().
+        """
+        if not self._layer0_computed:
+            self._layer0_markdown = self._build_layer0()
+            self._layer0_computed = True
+            if self._layer0_markdown:
+                log.info("Layer 0 pre-fetched (%d tokens)", len(self._layer0_markdown.split()))
 
     # ------------------------------------------------------------------
     # Public API
@@ -102,8 +147,12 @@ class Conversation:
         context_md = self._context_mgr.retrieve_context(user_message)
         recent_turns = self._context_mgr.get_recent_turns_markdown()
 
-        # 2. Build system prompt
+        # 2. Ensure Layer 0 is computed (lazy)
+        self._ensure_layer0()
+
+        # 3. Build system prompt
         system = self._prompt_builder.build(
+            layer0_markdown=self._layer0_markdown or "",
             context_markdown=context_md,
             task_description=user_message,
             recent_turns=recent_turns,
@@ -113,7 +162,10 @@ class Conversation:
         user_msg = Message(role="user", content=user_message)
         self._context_mgr.add_message(user_msg)
 
-        # 4. Proactive compaction — history is pruned synchronously; extraction runs in background
+        # 4. Route: select model config for this turn
+        llm_cfg = route(user_message, self._routing_cfg, self._llm_cfg)
+
+        # 5. Proactive compaction — history is pruned synchronously; extraction runs in background
         compaction = await self._context_mgr.compact_if_needed()
         if compaction:
             log.info(
@@ -124,8 +176,8 @@ class Conversation:
                 compaction.trigger.value,
             )
 
-        # 5–6. LLM call loop (handles tool use rounds)
-        reply = await self._llm_loop(system)
+        # 6. LLM call loop (handles tool use rounds)
+        reply = await self._llm_loop(system, llm_cfg)
 
         # 7. Append assistant reply to history
         self._context_mgr.add_message(Message(role="assistant", content=reply))
@@ -144,18 +196,25 @@ class Conversation:
         context_md = self._context_mgr.retrieve_context(user_message)
         recent_turns = self._context_mgr.get_recent_turns_markdown()
 
-        # 2. Build system prompt
+        # 2. Ensure Layer 0 is computed (lazy)
+        self._ensure_layer0()
+
+        # 3. Build system prompt
         system = self._prompt_builder.build(
+            layer0_markdown=self._layer0_markdown or "",
             context_markdown=context_md,
             task_description=user_message,
             recent_turns=recent_turns,
         )
 
-        # 3. Add user message to history
+        # 4. Add user message to history
         user_msg = Message(role="user", content=user_message)
         self._context_mgr.add_message(user_msg)
 
-        # 4. Proactive compaction — history pruned synchronously; extraction runs in background
+        # 5. Route: select model config for this turn
+        llm_cfg = route(user_message, self._routing_cfg, self._llm_cfg)
+
+        # 6. Proactive compaction — history pruned synchronously; extraction runs in background
         compaction = await self._context_mgr.compact_if_needed()
         if compaction:
             log.info(
@@ -166,13 +225,13 @@ class Conversation:
                 compaction.trigger.value,
             )
 
-        # 5–6. Stream tool rounds then final reply
+        # 7. Stream tool rounds then final reply
         reply_parts: list[str] = []
-        async for chunk in self._llm_loop_stream(system):
+        async for chunk in self._llm_loop_stream(system, llm_cfg):
             reply_parts.append(chunk)
             yield chunk
 
-        # 7. Append assembled reply to history
+        # 8. Append assembled reply to history
         reply = "".join(reply_parts)
         self._context_mgr.add_message(Message(role="assistant", content=reply))
         self._context_mgr.touch()
@@ -180,6 +239,8 @@ class Conversation:
     def reset(self) -> None:
         """Clear history (start a new logical session, keep the graph store)."""
         self._context_mgr.reset()
+        # Reset Layer 0 so it recomputes on the next turn
+        self._layer0_computed = False
         log.info("Conversation reset for project %r", self._project_name)
 
     def stats(self) -> dict:
@@ -190,8 +251,13 @@ class Conversation:
     # Internal: LLM call loop
     # ------------------------------------------------------------------
 
-    async def _llm_loop(self, system: str) -> str:
+    async def _llm_loop(self, system: str, llm_cfg: dict) -> str:
         """Run the LLM → tool-call → result loop until a text reply is produced.
+
+        Parameters
+        ----------
+        llm_cfg:
+            The (possibly routed) LLM config to use for all rounds of this turn.
 
         Returns the final text reply string.
         """
@@ -202,7 +268,7 @@ class Conversation:
             text, tool_calls, finish_reason = await call_llm(
                 messages=history,
                 system=system,
-                cfg=self._llm_cfg,
+                cfg=llm_cfg,
                 tools=tools,
             )
 
@@ -233,12 +299,12 @@ class Conversation:
         text, _, _ = await call_llm(
             messages=history + [Message(role="user", content="Please summarize your findings.")],
             system=system,
-            cfg=self._llm_cfg,
+            cfg=llm_cfg,
             tools=None,  # no tools on final round
         )
         return text or ""
 
-    async def _llm_loop_stream(self, system: str) -> AsyncIterator[str]:
+    async def _llm_loop_stream(self, system: str, llm_cfg: dict) -> AsyncIterator[str]:
         """Run tool rounds then stream the final reply.
 
         If no tools are configured, streams immediately for best TTFT.
@@ -253,7 +319,7 @@ class Conversation:
 
         # No tools configured — stream directly for best TTFT
         if not tools:
-            async for chunk in stream_llm(history, system, self._llm_cfg):
+            async for chunk in stream_llm(history, system, llm_cfg):
                 yield chunk
             return
 
@@ -262,7 +328,7 @@ class Conversation:
             text, tool_calls, finish_reason = await call_llm(
                 messages=history,
                 system=system,
-                cfg=self._llm_cfg,
+                cfg=llm_cfg,
                 tools=tools,
             )
 
@@ -293,7 +359,7 @@ class Conversation:
         text, _, _ = await call_llm(
             messages=history + [Message(role="user", content="Please summarize your findings.")],
             system=system,
-            cfg=self._llm_cfg,
+            cfg=llm_cfg,
             tools=None,
         )
         if text:

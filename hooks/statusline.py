@@ -49,7 +49,7 @@ def main():
         parts.append(model)
 
     if used_pct:
-        parts.append(f"ctx {_pct_bar(used_pct)} {used_pct:.0f}%")
+        parts.append(f"ws {_pct_bar(used_pct)} {used_pct:.0f}%")
 
     if total_cost:
         parts.append(f"${total_cost:.4f}")
@@ -91,18 +91,18 @@ def _format_cb(state: dict, ctx_size: int) -> str:
         extract_str = ""
 
     if status in ("no_graph", "empty"):
-        return f"CB({project}): building graph…{extract_str}"
+        return f"WS({project}): building graph…{extract_str}"
     if status == "buffering":
         turns = state.get("buffered_turns", "?")
-        return f"CB({project}): buffering ({turns} turns){extract_str}"
+        return f"WS({project}): buffering ({turns} turns){extract_str}"
     if status == "paused":
         nodes_total = state.get("nodes_total", 0)
         if nodes_total:
-            return f"CB({project}): paused ({nodes_total} nodes)"
-        return f"CB({project}): paused"
+            return f"WS({project}): paused ({nodes_total} nodes)"
+        return f"WS({project}): paused"
     if status == "error":
         err = state.get("error", "")
-        return f"CB({project}): error{(' — ' + err[:40]) if err else ''}"
+        return f"WS({project}): error{(' — ' + err[:40]) if err else ''}"
     if status != "ok":
         return ""
 
@@ -113,7 +113,7 @@ def _format_cb(state: dict, ctx_size: int) -> str:
     elapsed = state.get("elapsed_ms", 0)
 
     if nodes_ret == 0:
-        return f"CB({project}): no match{extract_str}"
+        return f"WS({project}): no match{extract_str}"
 
     if ctx_size and tokens_inj:
         inj_pct = tokens_inj / ctx_size * 100
@@ -131,7 +131,7 @@ def _format_cb(state: dict, ctx_size: int) -> str:
         saved_str = ""
 
     return (
-        f"CB({project}): {nodes_ret}/{nodes_total} nodes"
+        f"WS({project}): {nodes_ret}/{nodes_total} nodes"
         f" {inj_str}{saved_str}"
         f" [{elapsed}ms]{extract_str}"
     )

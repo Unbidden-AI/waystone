@@ -67,6 +67,7 @@ SOFTWARE_DEV = DomainProfile(
         "flows_to": "data or control flows from source to target",
         "relates_to": "loosely related — use this for decision→rationale links",
         "supersedes": "source replaces or overrides target",
+        "conflicts_with": "source and target decisions are in active unresolved tension — neither has won yet",
     },
     node_types_note=(
         'When a "decision" or "transition" node supersedes a prior approach, its tags MUST include '
@@ -987,6 +988,7 @@ AGENTIC_WORKFLOW = DomainProfile(
         "uses": "source workflow step or agent decision uses the target prompt template or model config",
         "decomposes_into": "source goal or task_decomposition breaks the target complex goal into subtasks",
         "supersedes": "source prompt template or model config replaces the target earlier version",
+        "conflicts_with": "source and target decisions or configs are in active unresolved tension",
     },
     node_types_note=(
         "Always tag nodes with the agent name, workflow name, or task identifier so all "
@@ -1115,6 +1117,7 @@ PRODUCT_MANAGEMENT = DomainProfile(
         "validates": "source shipped feature or experiment validates or invalidates the target hypothesis",
         "supersedes": "source decision or priority replaces the target earlier direction",
         "relates_to": "source and target are connected without a more specific structural link",
+        "conflicts_with": "source and target priorities or decisions are in active unresolved tension",
     },
     node_types_note=(
         "Always tag features and decisions with the product area, team, and any associated "

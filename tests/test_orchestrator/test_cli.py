@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from click.testing import CliRunner
 
-from orchestrator.cli import main, _setup_logging, _load_cfg, _repl
+from orchestrator.cli import main, _setup_logging, _load_cfg, _repl, _headless
 
 
 # ===========================================================================
@@ -592,3 +592,204 @@ async def test_repl_whitespace_handling():
         await _repl(conversation, stream=False)
 
     conversation.reset.assert_called_once()
+
+
+# ===========================================================================
+# Tests: headless mode (_headless + --print flag)
+# ===========================================================================
+
+
+@pytest.mark.asyncio
+async def test_headless_calls_chat_once():
+    """_headless() calls conversation.chat() exactly once with the prompt."""
+    conversation = MagicMock()
+    conversation.chat = AsyncMock(return_value="The answer is 42.")
+
+    with patch("orchestrator.cli.click.echo") as mock_echo:
+        await _headless(conversation, "what is the answer?", fmt="text")
+
+    conversation.chat.assert_called_once_with("what is the answer?")
+    mock_echo.assert_called_once_with("The answer is 42.")
+
+
+@pytest.mark.asyncio
+async def test_headless_text_format_prints_reply():
+    """_headless() with fmt='text' prints the raw reply string."""
+    conversation = MagicMock()
+    conversation.chat = AsyncMock(return_value="hello world")
+
+    with patch("orchestrator.cli.click.echo") as mock_echo:
+        await _headless(conversation, "say hi", fmt="text")
+
+    mock_echo.assert_called_once_with("hello world")
+
+
+@pytest.mark.asyncio
+async def test_headless_json_format_wraps_reply():
+    """_headless() with fmt='json' prints {\"reply\": ...} JSON."""
+    import json
+    conversation = MagicMock()
+    conversation.chat = AsyncMock(return_value="structured answer")
+
+    with patch("orchestrator.cli.click.echo") as mock_echo:
+        await _headless(conversation, "query", fmt="json")
+
+    printed = mock_echo.call_args[0][0]
+    parsed = json.loads(printed)
+    assert parsed == {"reply": "structured answer"}
+
+
+@pytest.mark.asyncio
+async def test_headless_json_format_handles_special_chars():
+    """_headless() JSON output correctly escapes special characters."""
+    import json
+    conversation = MagicMock()
+    reply = 'Line 1\nLine 2 with "quotes" and \\backslash'
+    conversation.chat = AsyncMock(return_value=reply)
+
+    with patch("orchestrator.cli.click.echo") as mock_echo:
+        await _headless(conversation, "query", fmt="json")
+
+    printed = mock_echo.call_args[0][0]
+    parsed = json.loads(printed)
+    assert parsed["reply"] == reply
+
+
+def test_main_print_flag_headless_mode(cli_runner, mock_db_path):
+    """--print flag invokes _headless() instead of _repl()."""
+    with patch("orchestrator.cli.load_config") as mock_load_cfg, \
+         patch("orchestrator.cli.get_db_path") as mock_get_db, \
+         patch("orchestrator.cli.GraphStore") as mock_store_cls, \
+         patch("orchestrator.cli.Conversation") as mock_conv_cls, \
+         patch("orchestrator.cli.asyncio.run") as mock_async_run, \
+         patch("orchestrator.cli._headless") as mock_headless, \
+         patch("orchestrator.cli._repl") as mock_repl:
+
+        mock_load_cfg.return_value = {}
+        mock_get_db.return_value = mock_db_path
+        mock_store = MagicMock()
+        mock_store_cls.return_value = mock_store
+        mock_conv_cls.return_value = MagicMock()
+
+        result = cli_runner.invoke(main, ["my_project", "--print", "summarise decisions"])
+
+        assert result.exit_code == 0
+        # asyncio.run must be called (wraps _headless coroutine)
+        mock_async_run.assert_called_once()
+        # _repl must NOT be called
+        mock_repl.assert_not_called()
+
+
+def test_main_print_flag_empty_prompt_exits(cli_runner, mock_db_path):
+    """--print '' (empty prompt) exits with code 1."""
+    with patch("orchestrator.cli.load_config") as mock_load_cfg, \
+         patch("orchestrator.cli.get_db_path") as mock_get_db, \
+         patch("orchestrator.cli.GraphStore") as mock_store_cls, \
+         patch("orchestrator.cli.Conversation") as mock_conv_cls:
+
+        mock_load_cfg.return_value = {}
+        mock_get_db.return_value = mock_db_path
+        mock_store_cls.return_value = MagicMock()
+        mock_conv_cls.return_value = MagicMock()
+
+        result = cli_runner.invoke(main, ["my_project", "--print", ""])
+
+        assert result.exit_code == 1
+        assert "empty" in result.output.lower()
+
+
+def test_main_print_stdin_reads_stdin(cli_runner, mock_db_path):
+    """--print - reads the prompt from stdin."""
+    with patch("orchestrator.cli.load_config") as mock_load_cfg, \
+         patch("orchestrator.cli.get_db_path") as mock_get_db, \
+         patch("orchestrator.cli.GraphStore") as mock_store_cls, \
+         patch("orchestrator.cli.Conversation") as mock_conv_cls, \
+         patch("orchestrator.cli.asyncio.run") as mock_async_run:
+
+        mock_load_cfg.return_value = {}
+        mock_get_db.return_value = mock_db_path
+        mock_store_cls.return_value = MagicMock()
+        mock_conv_cls.return_value = MagicMock()
+
+        result = cli_runner.invoke(
+            main,
+            ["my_project", "--print", "-"],
+            input="stdin prompt text\n",
+        )
+
+        assert result.exit_code == 0
+        mock_async_run.assert_called_once()
+
+
+def test_main_print_stdin_empty_exits(cli_runner, mock_db_path):
+    """--print - with empty stdin exits with code 1."""
+    with patch("orchestrator.cli.load_config") as mock_load_cfg, \
+         patch("orchestrator.cli.get_db_path") as mock_get_db, \
+         patch("orchestrator.cli.GraphStore") as mock_store_cls, \
+         patch("orchestrator.cli.Conversation") as mock_conv_cls:
+
+        mock_load_cfg.return_value = {}
+        mock_get_db.return_value = mock_db_path
+        mock_store_cls.return_value = MagicMock()
+        mock_conv_cls.return_value = MagicMock()
+
+        result = cli_runner.invoke(
+            main,
+            ["my_project", "--print", "-"],
+            input="",
+        )
+
+        assert result.exit_code == 1
+        assert "empty" in result.output.lower()
+
+
+def test_main_print_json_format(cli_runner, mock_db_path):
+    """--print with --format json passes fmt='json' to _headless."""
+    with patch("orchestrator.cli.load_config") as mock_load_cfg, \
+         patch("orchestrator.cli.get_db_path") as mock_get_db, \
+         patch("orchestrator.cli.GraphStore") as mock_store_cls, \
+         patch("orchestrator.cli.Conversation") as mock_conv_cls, \
+         patch("orchestrator.cli.asyncio.run") as mock_async_run:
+
+        mock_load_cfg.return_value = {}
+        mock_get_db.return_value = mock_db_path
+        mock_store_cls.return_value = MagicMock()
+        mock_conv_cls.return_value = MagicMock()
+
+        result = cli_runner.invoke(
+            main,
+            ["my_project", "--print", "list nodes", "--format", "json"],
+        )
+
+        assert result.exit_code == 0
+        mock_async_run.assert_called_once()
+
+
+def test_main_without_print_flag_calls_repl(cli_runner, mock_db_path):
+    """Without --print, main() invokes the REPL (not _headless)."""
+    with patch("orchestrator.cli.load_config") as mock_load_cfg, \
+         patch("orchestrator.cli.get_db_path") as mock_get_db, \
+         patch("orchestrator.cli.GraphStore") as mock_store_cls, \
+         patch("orchestrator.cli.Conversation") as mock_conv_cls, \
+         patch("orchestrator.cli.asyncio.run") as mock_async_run, \
+         patch("orchestrator.cli._headless") as mock_headless:
+
+        mock_load_cfg.return_value = {}
+        mock_get_db.return_value = mock_db_path
+        mock_store_cls.return_value = MagicMock()
+        mock_conv_cls.return_value = MagicMock()
+
+        result = cli_runner.invoke(main, ["my_project"])
+
+        assert result.exit_code == 0
+        mock_async_run.assert_called_once()
+        mock_headless.assert_not_called()
+
+
+def test_main_help_includes_print_option(cli_runner):
+    """--help output includes --print option documentation."""
+    result = cli_runner.invoke(main, ["--help"])
+
+    assert result.exit_code == 0
+    assert "--print" in result.output
+    assert "headless" in result.output.lower()

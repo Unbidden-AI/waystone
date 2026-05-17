@@ -26,7 +26,7 @@ from .extractor import (
     synthesize_extraction,
     verify_extraction,
 )
-from .retriever import bfs_collect, cluster_by_tags, extract_keywords, retrieve_with_stats, score_by_relevance
+from .retriever import bfs_collect, cluster_by_tags, extract_keywords, find_conflicts, retrieve_with_stats, score_by_relevance
 from .store import GraphStore
 
 
@@ -865,6 +865,226 @@ def query(ctx, project, task, hops, top_k, enable, disable, confidence, token_bu
         click.echo(f"Estimated tokens:        {result.tokens_estimated}")
 
 
+@cli.command("conflicts")
+@click.argument("project")
+@click.option("--min-overlap", default=2, show_default=True, type=int,
+              help="Min shared tags to flag a conflict candidate")
+@click.option("--tags", "-t", multiple=True,
+              help="Restrict conflict scan to nodes sharing these tags (repeatable). "
+                   "Default: scan all decision/transition nodes against each other.")
+@click.option("-o", "--output", default=None, help="Write report to this file instead of stdout")
+@click.pass_context
+def conflicts_cmd(ctx, project, min_overlap, tags, output):
+    """Audit the graph for potentially contradictory decisions.
+
+    Scans all decision and transition nodes. For each node, finds others with
+    overlapping tags and reports them as conflict candidates. Useful for
+    reviewing accumulated decisions before a big architectural change.
+
+    Examples:
+
+        waystone conflicts myproject
+        waystone conflicts myproject --min-overlap 3
+        waystone conflicts myproject --tags redis --tags auth-service
+        waystone conflicts myproject -o conflicts.md
+    """
+    config = _load_cfg(ctx.obj["config_path"])
+    db_path = get_db_path(config, project)
+
+    if not db_path.parent.exists():
+        click.echo(f"Error: Project '{project}' not found.", err=True)
+        sys.exit(1)
+
+    store = GraphStore(db_path, vec_enabled=False)
+    all_nodes = store.get_all_nodes()
+    decision_nodes = [
+        n for n in all_nodes
+        if n["type"] in ("decision", "transition") and n.get("is_active", True)
+    ]
+
+    if not decision_nodes:
+        click.echo("No decision or transition nodes found in this project.")
+        store.close()
+        return
+
+    # Build edge index: supersedes pairs (already resolved) and conflicts_with pairs (known).
+    all_edges = store.get_all_edges()
+    supersedes_pairs: set[frozenset] = set()
+    known_conflict_pairs: set[frozenset] = set()
+    for edge in all_edges:
+        pair = frozenset({edge["from_id"], edge["to_id"]})
+        if edge["relation"] == "supersedes":
+            supersedes_pairs.add(pair)
+        elif edge["relation"] == "conflicts_with":
+            known_conflict_pairs.add(pair)
+
+    # If --tags provided, use them as the candidate set; otherwise scan every
+    # decision node against the full tag universe for that node.
+    report_lines = [f"# Conflict Audit: {project}", ""]
+    total_pairs: list[tuple[dict, list[dict]]] = []
+
+    for node in decision_nodes:
+        node_tags = node.get("tags") or []
+        if not node_tags:
+            continue
+        # Use provided --tags filter if given, else use this node's own tags
+        scan_tags = list(tags) if tags else node_tags
+        candidates = find_conflicts(
+            store,
+            scan_tags,
+            exclude_ids={node["id"]},
+            min_tag_overlap=min_overlap,
+        )
+        if candidates:
+            total_pairs.append((node, candidates))
+
+    # Deduplicate: (A conflicts with B) and (B conflicts with A) are the same pair.
+    # Skip pairs that are already resolved via supersedes.
+    seen_pairs: set[frozenset] = set()
+    unique_pairs: list[tuple[dict, dict]] = []
+    for node, candidates in total_pairs:
+        for cand in candidates:
+            pair_key = frozenset({node["id"], cand["id"]})
+            if pair_key not in seen_pairs and pair_key not in supersedes_pairs:
+                seen_pairs.add(pair_key)
+                unique_pairs.append((node, cand))
+
+    if not unique_pairs:
+        click.echo(f"No conflict candidates found (min_overlap={min_overlap}).")
+        store.close()
+        return
+
+    # Group by shared tags
+    from .retriever import _polarity
+    report_lines.append(f"Found **{len(unique_pairs)}** potential conflict pair(s) (min_overlap={min_overlap}).")
+    report_lines.append("")
+
+    for i, (a, b) in enumerate(unique_pairs, 1):
+        a_tags = {t.lower() for t in (a.get("tags") or [])}
+        b_tags = {t.lower() for t in (b.get("tags") or [])}
+        shared = sorted(a_tags & b_tags)
+        a_pol = _polarity(a["fact"])
+        b_pol = _polarity(b["fact"])
+        pair_key = frozenset({a["id"], b["id"]})
+        if pair_key in known_conflict_pairs:
+            confidence = "KNOWN"
+        elif a_pol != b_pol and a_pol != "unknown" and b_pol != "unknown":
+            confidence = "HIGH"
+        else:
+            confidence = "POSSIBLE"
+        a_date = (a.get("created_at") or "")[:10]
+        b_date = (b.get("created_at") or "")[:10]
+
+        report_lines.append(f"## Pair {i} [{confidence} CONFLICT]")
+        report_lines.append(f"**Shared tags:** {', '.join(shared)}")
+        report_lines.append("")
+        report_lines.append(f"**A** [{a['type']}] ({a_date}, confidence {a.get('confidence', 0.5):.2f})")
+        report_lines.append(f"> {a['fact']}")
+        report_lines.append("")
+        report_lines.append(f"**B** [{b['type']}] ({b_date}, confidence {b.get('confidence', 0.5):.2f})")
+        report_lines.append(f"> {b['fact']}")
+        report_lines.append("")
+
+    store.close()
+
+    report = "\n".join(report_lines)
+    if output:
+        from pathlib import Path
+        Path(output).write_text(report)
+        click.echo(f"Conflict report written to {output} ({len(unique_pairs)} pair(s)).")
+    else:
+        click.echo(report)
+
+
+@cli.command("impact")
+@click.argument("project")
+@click.argument("node_id", required=False, default=None)
+@click.option("--query", "query_text", default=None, metavar="TEXT",
+              help="Find seed nodes by tag-matching this text instead of a node ID")
+@click.option("--hops", default=3, type=int, show_default=True,
+              help="Traversal depth")
+@click.option("--reverse", is_flag=True, default=False,
+              help="Traverse incoming edges (what does this node depend on?) instead of outgoing")
+@click.option("--types", "node_types", default="decision,constraint,implementation",
+              show_default=True, help="Comma-separated node types to include in results")
+@click.option("--format", "fmt", type=click.Choice(["markdown", "json"]),
+              default="markdown", show_default=True)
+@click.option("-o", "--output", default=None, help="Write report to this file path")
+@click.pass_context
+def impact_cmd(ctx, project, node_id, query_text, hops, reverse, node_types, fmt, output):
+    """Trace the blast radius of a decision — show what it touches in the graph.
+
+    \b
+    Examples:
+      waystone impact myproject n_abc12345
+      waystone impact myproject --query "auth token format" --hops 4
+      waystone impact myproject n_abc12345 --reverse
+    """
+    if not node_id and not query_text:
+        raise click.UsageError("Provide either NODE_ID or --query TEXT.")
+    if node_id and query_text:
+        raise click.UsageError("Provide either NODE_ID or --query TEXT, not both.")
+
+    config = _load_cfg(ctx.obj["config_path"])
+    db_path = get_db_path(config, project)
+
+    if not db_path.parent.exists():
+        click.echo(f"Error: Project '{project}' not found.", err=True)
+        sys.exit(1)
+
+    store = GraphStore(db_path)
+    types_set = frozenset(t.strip() for t in node_types.split(",") if t.strip())
+
+    from .retriever import compute_impact, extract_keywords, format_impact_report, score_by_relevance
+
+    if node_id:
+        seed_nodes = store.get_nodes_by_ids([node_id])
+        if not seed_nodes:
+            click.echo(f"Error: Node '{node_id}' not found in project '{project}'.", err=True)
+            store.close()
+            sys.exit(1)
+    else:
+        keywords = extract_keywords(query_text)
+        if not keywords:
+            click.echo("Error: Could not extract keywords from query text.", err=True)
+            store.close()
+            sys.exit(1)
+        candidates = store.get_nodes_by_tags(keywords)
+        if not candidates:
+            click.echo("No nodes matched the query — impact map is empty.")
+            store.close()
+            return
+        seed_nodes = score_by_relevance(candidates, keywords)[:5]
+
+    seed_ids = [n["id"] for n in seed_nodes]
+    impact = compute_impact(store, seed_ids, hops=hops, reverse=reverse, node_types=types_set)
+    store.close()
+
+    if fmt == "json":
+        import json
+        result = {
+            "seed_nodes": seed_nodes,
+            "impact": {
+                str(depth): [
+                    {"node": node, "path": path}
+                    for node, path in hop_nodes
+                ]
+                for depth, hop_nodes in impact.items()
+            },
+        }
+        report = json.dumps(result, indent=2)
+    else:
+        report = format_impact_report(seed_nodes, impact, reverse=reverse)
+
+    if output:
+        from pathlib import Path
+        Path(output).write_text(report)
+        total = sum(len(v) for v in impact.values())
+        click.echo(f"Impact report written to {output} ({total} node(s) found).")
+    else:
+        click.echo(report)
+
+
 @cli.command()
 @click.argument("project")
 @click.option("--failures", is_flag=True, help="Show recent extraction failures instead of nodes")
@@ -1143,12 +1363,16 @@ def pinned_cmd(ctx, project):
 @cli.command()
 @click.argument("project")
 @click.option("--output", "-o", default=None, help="Output file path")
+@click.option("--format", "fmt", type=click.Choice(["dump", "briefing", "handoff"]),
+              default="dump", help="Output format")
+@click.option("--include-superseded", is_flag=True, default=True,
+              help="Include superseded nodes in briefing (default: true)")
 @click.option("--enable", "-e", multiple=True, help="Enable a strategy")
 @click.option("--disable", "-d", multiple=True, help="Disable a strategy")
 @click.option("--confidence", type=float, default=None, help="Min confidence threshold")
 @click.option("--token-budget", type=int, default=None, help="Max tokens in output")
 @click.pass_context
-def export(ctx, project, output, enable, disable, confidence, token_budget):
+def export(ctx, project, output, fmt, include_superseded, enable, disable, confidence, token_budget):
     """Export the full graph as markdown, with optional strategy filtering."""
     config = _load_cfg(ctx.obj["config_path"])
     db_path = get_db_path(config, project)
@@ -1165,34 +1389,43 @@ def export(ctx, project, output, enable, disable, confidence, token_budget):
         store.close()
         return
 
-    overrides = _parse_strategy_overrides(enable, disable, confidence, token_budget)
-    strategies = _resolve_strategies(config, overrides)
+    # If using briefing or handoff format, fetch edges and assemble directly
+    if fmt in ("briefing", "handoff"):
+        from .retriever import assemble_briefing
+        all_edges = store.get_all_edges()
+        markdown = assemble_briefing(all_nodes, all_edges, project, fmt=fmt, include_superseded=include_superseded)
+        store.close()
+    else:
+        # Original dump format with strategy filtering
+        overrides = _parse_strategy_overrides(enable, disable, confidence, token_budget)
+        strategies = _resolve_strategies(config, overrides)
 
-    # Apply post-retrieval strategies to all nodes
-    from .retriever import (
-        apply_recency_decay,
-        apply_token_budget,
-        assemble_markdown,
-        filter_by_confidence,
-        prune_superseded,
-    )
+        # Apply post-retrieval strategies to all nodes
+        from .retriever import (
+            apply_recency_decay,
+            apply_token_budget,
+            assemble_markdown,
+            filter_by_confidence,
+            prune_superseded,
+        )
 
-    applied = []
-    if strategies.get("superseded_pruning"):
-        all_nodes = prune_superseded(all_nodes, store)
-        applied.append("superseded_pruning")
-    if strategies.get("confidence_threshold", 0) > 0:
-        all_nodes = filter_by_confidence(all_nodes, strategies["confidence_threshold"])
-        applied.append(f"confidence_threshold({strategies['confidence_threshold']})")
-    if strategies.get("recency_decay"):
-        all_nodes = apply_recency_decay(all_nodes, strategies.get("recency_half_life_days", 30))
-        applied.append("recency_decay")
-        all_nodes.sort(key=lambda n: n.get("_score", n.get("confidence", 0)), reverse=True)
-    if strategies.get("token_budget", 0) > 0:
-        all_nodes = apply_token_budget(all_nodes, strategies["token_budget"])
-        applied.append(f"token_budget({strategies['token_budget']})")
+        applied = []
+        if strategies.get("superseded_pruning"):
+            all_nodes = prune_superseded(all_nodes, store)
+            applied.append("superseded_pruning")
+        if strategies.get("confidence_threshold", 0) > 0:
+            all_nodes = filter_by_confidence(all_nodes, strategies["confidence_threshold"])
+            applied.append(f"confidence_threshold({strategies['confidence_threshold']})")
+        if strategies.get("recency_decay"):
+            all_nodes = apply_recency_decay(all_nodes, strategies.get("recency_half_life_days", 30))
+            applied.append("recency_decay")
+            all_nodes.sort(key=lambda n: n.get("_score", n.get("confidence", 0)), reverse=True)
+        if strategies.get("token_budget", 0) > 0:
+            all_nodes = apply_token_budget(all_nodes, strategies["token_budget"])
+            applied.append(f"token_budget({strategies['token_budget']})")
 
-    markdown = assemble_markdown(all_nodes, f"Full export of {project}", applied)
+        markdown = assemble_markdown(all_nodes, f"Full export of {project}", applied)
+        store.close()
 
     if output:
         out_path = Path(output)
@@ -1203,7 +1436,6 @@ def export(ctx, project, output, enable, disable, confidence, token_budget):
     out_path.write_text(markdown)
     click.echo(f"Exported {len(all_nodes)} nodes to {out_path}")
 
-    store.close()
 
 
 @cli.command("reconcile")

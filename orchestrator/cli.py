@@ -1,4 +1,4 @@
-"""CLI entry point for the Waystone Orchestrator (interactive REPL)."""
+"""CLI entry point for the Waystone Orchestrator (interactive REPL + headless mode)."""
 
 from __future__ import annotations
 
@@ -80,6 +80,20 @@ def _load_cfg(config_path: str | None) -> dict:
 # ---------------------------------------------------------------------------
 
 
+async def _headless(conversation: Conversation, prompt: str, fmt: str) -> None:
+    """Run a single agentic turn and print the reply, then exit.
+
+    The full tool-call loop runs inside ``Conversation.chat()`` — up to
+    ``_MAX_TOOL_ROUNDS`` rounds — before the final text reply is returned.
+    """
+    reply = await conversation.chat(prompt)
+    if fmt == "json":
+        import json as _json
+        click.echo(_json.dumps({"reply": reply}))
+    else:
+        click.echo(reply)
+
+
 async def _repl(conversation: Conversation, stream: bool) -> None:
     """Run the interactive prompt loop."""
     click.echo(_BANNER)
@@ -146,21 +160,51 @@ async def _repl(conversation: Conversation, stream: bool) -> None:
 @click.command(name="orchestrate")
 @click.argument("project")
 @click.option("--config", "config_path", default=None, help="Path to config.yaml")
-@click.option("--stream/--no-stream", default=True, show_default=True, help="Stream reply tokens")
+@click.option("--stream/--no-stream", default=True, show_default=True, help="Stream reply tokens (REPL only)")
 @click.option("-v", "--verbose", is_flag=True, default=False, help="Enable debug logging")
-def main(project: str, config_path: str | None, stream: bool, verbose: bool) -> None:
-    """Start an interactive orchestrator session for PROJECT.
+@click.option(
+    "--print",
+    "print_prompt",
+    default=None,
+    metavar="PROMPT",
+    help=(
+        "Headless mode: run one agentic turn with PROMPT and exit. "
+        "Pass '-' to read the prompt from stdin."
+    ),
+)
+@click.option(
+    "--format",
+    "fmt",
+    type=click.Choice(["text", "json"]),
+    default="text",
+    show_default=True,
+    help="Output format for headless mode (--print).",
+)
+def main(
+    project: str,
+    config_path: str | None,
+    stream: bool,
+    verbose: bool,
+    print_prompt: str | None,
+    fmt: str,
+) -> None:
+    """Start an orchestrator session for PROJECT.
 
     PROJECT is the name of a Waystone project (same namespace used by
-    ``waystone init`` / ``waystone extract``).  The orchestrator loads the project's
-    graph store and starts a REPL that keeps a sliding history window,
-    retrieves relevant graph context on every turn, and compacts old messages
-    back into the graph automatically.
+    ``waystone init`` / ``waystone extract``).  The orchestrator loads the
+    project's graph store, retrieves relevant graph context on every turn,
+    and compacts old messages back into the graph automatically.
 
     \b
-    Example:
+    Interactive REPL (default):
         waystone orchestrate my_project
         waystone orchestrate my_project --config ./config.yaml -v
+
+    \b
+    Headless (single agentic turn, full tool-call loop):
+        waystone orchestrate my_project --print "summarise open questions"
+        echo "what is the auth approach?" | waystone orchestrate my_project --print -
+        waystone orchestrate my_project --print "list constraints" --format json
     """
     _setup_logging(verbose)
 
@@ -178,6 +222,20 @@ def main(project: str, config_path: str | None, stream: bool, verbose: bool) -> 
     store = GraphStore(db_path)
     try:
         conversation = Conversation(cfg=cfg, store=store, project_name=project)
-        asyncio.run(_repl(conversation, stream=stream))
+        if print_prompt is not None:
+            # Headless mode — read prompt from stdin if '-'
+            if print_prompt == "-":
+                prompt = sys.stdin.read().strip()
+                if not prompt:
+                    click.echo("Error: stdin was empty.", err=True)
+                    sys.exit(1)
+            else:
+                prompt = print_prompt.strip()
+                if not prompt:
+                    click.echo("Error: --print prompt is empty.", err=True)
+                    sys.exit(1)
+            asyncio.run(_headless(conversation, prompt, fmt))
+        else:
+            asyncio.run(_repl(conversation, stream=stream))
     finally:
         store.close()

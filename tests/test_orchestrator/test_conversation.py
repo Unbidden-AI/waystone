@@ -350,7 +350,7 @@ async def test_llm_loop_text_reply_no_tools(conversation):
         ]
         conversation._context_mgr.touch = MagicMock()
 
-        reply = await conversation._llm_loop("System prompt")
+        reply = await conversation._llm_loop("System prompt", {})
 
         assert reply == "Final reply"
         mock_llm.assert_called_once()
@@ -382,7 +382,7 @@ async def test_llm_loop_executes_tool_calls(conversation):
         ]
         conversation._context_mgr.touch = MagicMock()
 
-        reply = await conversation._llm_loop("System prompt")
+        reply = await conversation._llm_loop("System prompt", {})
 
         assert reply == "Final reply"
         assert mock_llm.call_count == 2
@@ -411,7 +411,7 @@ async def test_llm_loop_max_tool_rounds(conversation):
         ]
         conversation._context_mgr.touch = MagicMock()
 
-        reply = await conversation._llm_loop("System prompt")
+        reply = await conversation._llm_loop("System prompt", {})
 
         # Should have made max_rounds + 1 call
         assert mock_llm.call_count == 5
@@ -428,7 +428,7 @@ async def test_llm_loop_empty_text_returns_empty_string(conversation):
         conversation._context_mgr.get_history.return_value = []
         conversation._context_mgr.touch = MagicMock()
 
-        reply = await conversation._llm_loop("System prompt")
+        reply = await conversation._llm_loop("System prompt", {})
 
         assert reply == ""
 
@@ -444,7 +444,7 @@ async def test_llm_loop_no_tool_calls_on_final_round(conversation):
         conversation._context_mgr.get_history.return_value = []
         conversation._context_mgr.touch = MagicMock()
 
-        reply = await conversation._llm_loop("System prompt")
+        reply = await conversation._llm_loop("System prompt", {})
 
         # Should return immediately, not execute empty list
         assert reply == "Some text"
@@ -574,7 +574,7 @@ async def test_llm_loop_multiple_tool_rounds(conversation):
         ]
         conversation._context_mgr.touch = MagicMock()
 
-        reply = await conversation._llm_loop("System prompt")
+        reply = await conversation._llm_loop("System prompt", {})
 
         assert reply == "Final result"
         assert mock_llm.call_count == 3
@@ -633,7 +633,7 @@ async def test_llm_loop_passes_tools_list_when_enabled(conversation):
         conversation._context_mgr.touch = MagicMock()
         conversation._enabled_tools = ["bash", "read_file"]
 
-        await conversation._llm_loop("System")
+        await conversation._llm_loop("System", {})
 
         # Should pass tools list
         call_kwargs = mock_llm.call_args[1]
@@ -649,7 +649,7 @@ async def test_llm_loop_passes_none_tools_when_disabled(conversation):
         conversation._context_mgr.touch = MagicMock()
         conversation._enabled_tools = []
 
-        await conversation._llm_loop("System")
+        await conversation._llm_loop("System", {})
 
         # Should pass None (no tools available)
         call_kwargs = mock_llm.call_args[1]
