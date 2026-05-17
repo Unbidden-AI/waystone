@@ -437,7 +437,10 @@ def init_project(project: str, key_info: AuthDep, response: Response) -> dict:
         try:
             check_project_limit(None, key_info["key_hash"], key_info.get("tier", "free"), current_count)  # type: ignore[arg-type]
         except ValueError as exc:
-            raise HTTPException(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail=str(exc))
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail={"message": str(exc), "upgrade_url": "https://unbidden.ai/pricing/"},
+            )
 
     db_path.parent.mkdir(parents=True, exist_ok=True)
     store = GraphStore(db_path)
@@ -550,7 +553,10 @@ async def extract_project(project: str, req: ExtractRequest, key_info: AuthDep, 
                     check_node_limit(key_info.get("tier", "free"), current_stats["node_count"])
                 except ValueError as exc:
                     # Transaction will auto-rollback when exiting the context
-                    raise HTTPException(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail=str(exc))
+                    raise HTTPException(
+                        status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                        detail={"message": str(exc), "upgrade_url": "https://unbidden.ai/pricing/"},
+                    )
 
             store.merge_extraction(nodes, edges)
     finally:
