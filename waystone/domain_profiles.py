@@ -20,6 +20,7 @@ Built-in profiles:
   - agentic_workflow             — AI agent orchestration, tool calls, prompt engineering
   - creative_writing             — characters, plot, worldbuilding, narrative craft
   - product_management           — features, prioritization, user stories, roadmap decisions
+  - solution_design              — sales engineering: requirements, proposals, objections, competitive comparisons
 """
 
 from __future__ import annotations
@@ -85,6 +86,7 @@ SOFTWARE_DEV = DomainProfile(
         "part_of": "source node is a component, sub-step, or subset of the target — use for containment or decomposition",
         "implements": "source node is the concrete realization of the target decision, design, or specification",
         "enables": "source node unlocks, unblocks, or makes possible the target — use when source is a prerequisite that opens capability",
+        "satisfies": "source node (solution, implementation, or proposal) meets the target requirement, constraint, or criterion — use when the bar has been explicitly confirmed as cleared, not just addressed",
     },
     node_types_note=(
         'When a "decision" or "transition" node supersedes a prior approach, its tags MUST include '
@@ -1019,6 +1021,7 @@ AGENTIC_WORKFLOW = DomainProfile(
         "decomposes_into": "source goal or task_decomposition breaks the target complex goal into subtasks",
         "supersedes": "source prompt template or model config replaces the target earlier version",
         "conflicts_with": "source and target decisions or configs are in active unresolved tension",
+        "satisfies": "source agent output or artifact meets the target evaluation criterion or task requirement — use when the criterion is confirmed cleared, not just addressed",
     },
     node_types_note=(
         "Always tag nodes with the agent name, workflow name, or task identifier so all "
@@ -1162,12 +1165,86 @@ PRODUCT_MANAGEMENT = DomainProfile(
         "supersedes": "source decision or priority replaces the target earlier direction",
         "relates_to": "source and target are connected without a more specific structural link",
         "conflicts_with": "source and target priorities or decisions are in active unresolved tension",
+        "satisfies": "source feature or implementation meets the target user story acceptance criteria or stated requirement — use when the bar has been explicitly confirmed as cleared",
     },
     node_types_note=(
         "Always tag features and decisions with the product area, team, and any associated "
         "quarter or milestone (e.g. 'Q3 launch', 'v2.0', 'beta'). When a decision or "
         "priority changes, create a new node with supersedes: [<old_node_id>] so the "
         "full decision history is preserved and traversable."
+    ),
+)
+
+
+SOLUTION_DESIGN = DomainProfile(
+    name="solution_design",
+    node_types={
+        "requirement": (
+            "a technical or business requirement stated by the prospect or customer — something "
+            "the solution must do or satisfy. Include the requirement statement, who stated it, "
+            "which workload or use case it applies to, and any priority signal (blocker vs. "
+            "nice-to-have). Capture numeric thresholds verbatim where present (e.g. '99.99% "
+            "uptime', 'sub-100ms P99 latency'). Distinct from constraint (which is an internal "
+            "limitation) — requirements come from the buyer and drive evaluation."
+        ),
+        "evaluation_criterion": (
+            "a specific dimension along which the prospect is scoring or comparing solutions — "
+            "a rubric item in their evaluation. More granular than a requirement: a requirement "
+            "says 'we need X', a criterion says 'we will score you on X and here is how we "
+            "weight it'. Include the criterion name, how it is weighted or ranked, who owns "
+            "the evaluation on the prospect side, and any known scoring rubric."
+        ),
+        "proposal": (
+            "a specific solution design, architecture, or configuration offered to a prospect "
+            "in response to their requirements or evaluation criteria. Include what was proposed, "
+            "the specific configuration or architecture, which requirements or criteria it "
+            "targets, and any trade-offs acknowledged. Link to the requirement or "
+            "evaluation_criterion nodes it satisfies via 'satisfies' edges. Tag with the "
+            "account name and product or feature name."
+        ),
+        "objection": (
+            "a concern, risk, or blocker raised by the prospect that threatens deal progress. "
+            "Reactive (raised in response to something they heard or saw) rather than proactive. "
+            "Include the objection verbatim or close paraphrase, who raised it, what stage of "
+            "the deal it arose in, and whether it has been addressed. Link to the proposal that "
+            "triggered it or the requirement it connects to. Tag with the deal stage, prospect "
+            "role, and objection category (price, security, integration, performance, etc.)."
+        ),
+        "comparison": (
+            "a structured side-by-side of two or more solutions (our product vs. a competitor, "
+            "or alternative internal approaches) on a specific dimension. Include what was "
+            "compared, on which dimension, what the conclusion was, and what evidence supported "
+            "it. Comparisons are REUSABLE institutional knowledge — tag with both the engagement "
+            "name AND the technology or competitor names so the node is retrievable both ways. "
+            "Link to the evaluation_criterion via 'addresses' edges and to the compared "
+            "alternative via 'compared_against' edges."
+        ),
+        "outcome": (
+            "the result of a deal, POC, or evaluation phase: win, loss, stall, or no-decision. "
+            "Include the decisive factor(s), which requirements or objections were decisive, and "
+            "any prospect-stated reason. If lost, capture what the competitor offered that was "
+            "not matchable. Tag with deal result, decisive factor, account segment, and product "
+            "area. Outcome nodes close the feedback loop — link to the requirements and "
+            "objections that shaped the result."
+        ),
+    },
+    edge_relations={
+        "satisfies": "source proposal or implementation confirms the target requirement or evaluation_criterion is met — use when the bar is explicitly cleared, not just addressed",
+        "addresses": "source proposal or comparison is directed at the target requirement, criterion, or objection — use before satisfaction is confirmed",
+        "compared_against": "source comparison node evaluates one solution against the target (competitor, alternative approach, or prior version) on a specific dimension",
+        "produces": "source evaluation or POC produces the target outcome or artifact",
+        "supersedes": "source updated proposal or resolved objection replaces the target earlier version",
+        "relates_to": "source and target are connected without a more specific structural link",
+        "depends_on": "source proposal depends on the target product feature, integration, or capability",
+        "elaborates_on": "source comparison or proposal provides additional detail about the target evaluation_criterion",
+    },
+    node_types_note=(
+        "Tag every node with the account name, engagement name, or deal identifier so all "
+        "nodes from a given engagement are retrievable together. Comparisons are reusable "
+        "competitive intelligence — tag with both the account name AND the technology or "
+        "competitor names so they surface for future engagements with the same competitive "
+        "landscape. When a proposal is updated, create a new node and set supersedes: "
+        "[<old_node_id>] so the full proposal history is traversable."
     ),
 )
 
@@ -1187,6 +1264,7 @@ BUILTIN_PROFILES: dict[str, DomainProfile] = {
     "agentic_workflow": AGENTIC_WORKFLOW,
     "creative_writing": CREATIVE_WRITING,
     "product_management": PRODUCT_MANAGEMENT,
+    "solution_design": SOLUTION_DESIGN,
 }
 
 
