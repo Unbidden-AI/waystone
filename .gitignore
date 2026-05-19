@@ -13,3 +13,7 @@ benchmarks/locomo/data/*.json
 .context-broker
 .claude/
 benchmarks/longmemeval/data/*.json
+
+# Internal planning docs (kept locally, not published)
+internal/
+specs/
