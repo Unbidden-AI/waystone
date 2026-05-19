@@ -107,9 +107,9 @@ class TestContextBrokerListProjects:
     def test_lists_existing_projects(self, project_setup):
         tmp_path, db_path, config = project_setup
 
-        from waystone.mcp_server import engram_list_projects
+        from waystone.mcp_server import waystone_list_projects
         with patch("waystone.mcp_server._load_config", return_value=config):
-            result = engram_list_projects()
+            result = waystone_list_projects()
 
         assert "test-project" in result
         assert "2 nodes" in result
@@ -117,9 +117,9 @@ class TestContextBrokerListProjects:
     def test_returns_message_when_no_projects(self, tmp_path):
         config = {"llm": {}, "defaults": {}, "strategies": {}, "projects_dir": str(tmp_path / "nonexistent")}
 
-        from waystone.mcp_server import engram_list_projects
+        from waystone.mcp_server import waystone_list_projects
         with patch("waystone.mcp_server._load_config", return_value=config):
-            result = engram_list_projects()
+            result = waystone_list_projects()
 
         assert "No projects found" in result
 
@@ -186,7 +186,7 @@ class TestMcpToolsAllLoad:
         assert "waystone_query" in names
         assert "waystone_extract" in names
         assert "waystone_stats" in names
-        assert "engram_list_projects" in names
+        assert "waystone_list_projects" in names
 
 
 class TestMcpJsonRpcHandshake:
