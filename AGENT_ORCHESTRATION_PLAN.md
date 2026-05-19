@@ -2,15 +2,15 @@
 
 **Created:** 2026-04-28  
 **Status:** Planning  
-**Related:** `DEVELOPMENT_PLAN.md` (orchestrator REPL), `FINDINGS.md` (DB architecture), `engram-roadmap.md`
+**Related:** `DEVELOPMENT_PLAN.md` (orchestrator REPL), `FINDINGS.md` (DB architecture), `waystone-roadmap.md`
 
 ---
 
 ## What This Is
 
-A plan for building an agent orchestration stack where Engram serves as the routing brain — surfacing accumulated institutional knowledge before agent tasks run, extracting new knowledge after they complete, and compounding both over time.
+A plan for building an agent orchestration stack where Waystone serves as the routing brain — surfacing accumulated institutional knowledge before agent tasks run, extracting new knowledge after they complete, and compounding both over time.
 
-This is architecturally distinct from `DEVELOPMENT_PLAN.md`, which covers the `engram chat` REPL and compaction loop. That plan is about Engram as a conversation assistant. This plan is about Engram as a pre/post-dispatch layer in an autonomous agent workflow.
+This is architecturally distinct from `DEVELOPMENT_PLAN.md`, which covers the `waystone chat` REPL and compaction loop. That plan is about Waystone as a conversation assistant. This plan is about Waystone as a pre/post-dispatch layer in an autonomous agent workflow.
 
 ---
 
@@ -19,7 +19,7 @@ This is architecturally distinct from `DEVELOPMENT_PLAN.md`, which covers the `e
 Four layers, four phases of a task lifecycle:
 
 ```
-1. Pre-dispatch (Engram)
+1. Pre-dispatch (Waystone)
    ↓ query DECISION, LESSON_LEARNED, PROCEDURE, open QUESTION nodes in task scope
    ↓ produce context block + concrete blocker list
    ↓ route: proceed / request human review
@@ -27,14 +27,14 @@ Four layers, four phases of a task lifecycle:
 2. Context injection (Graphify — optional)
    ↓ AST-based code graph for relevant codebase module
    ↓ function signatures, call relationships, dependencies
-   ↓ combined with Engram context into single context block
+   ↓ combined with Waystone context into single context block
 
 3. Execution (agent-orchestrator)
    ↓ isolated worktree, CI feedback loop, PR
-   ↓ before_run hook → Engram routing gate fires
-   ↓ after_run hook → Engram extraction fires
+   ↓ before_run hook → Waystone routing gate fires
+   ↓ after_run hook → Waystone extraction fires
 
-4. Post-run (Engram extraction + parallel review)
+4. Post-run (Waystone extraction + parallel review)
    ↓ extract DECISION/LESSON/PROCEDURE nodes from session log (not just diff)
    ↓ parallel domain reviewers validate extracted nodes
    ↓ high-confidence nodes promoted to graph
@@ -55,7 +55,7 @@ Four layers, four phases of a task lifecycle:
 | **Concrete blocker lists over confidence floats** | Pre-dispatch output is "here are three things that blocked similar tasks before" not "confidence: 0.73." Actionable, not probabilistic. |
 | **LESSON_LEARNED as the strongest routing signal** | DECISION nodes say what was chosen. LESSON_LEARNED nodes say what went wrong. The latter is more predictive of whether a task needs human review. |
 | **ANNS with re-ranking** | Binary or PQ quantized ANN for candidate fetch → exact float32 cosine re-ranking over top-100 → top-k to BFS pipeline. Gains are in RAM and search speed, not disk. See FINDINGS.md for full analysis. |
-| **Graphify is optional, not load-bearing** | Don't absorb it into Engram. Run it separately, extend Engram's retrieval pipeline to query its output as a second source. Validate the 71.5× token reduction claim on your actual codebase before designing token budgets around it. |
+| **Graphify is optional, not load-bearing** | Don't absorb it into Waystone. Run it separately, extend Waystone's retrieval pipeline to query its output as a second source. Validate the 71.5× token reduction claim on your actual codebase before designing token budgets around it. |
 
 ---
 
@@ -92,23 +92,93 @@ Not all external content is equal. Ingestion must gate on:
 ### Reference knowledge scope control
 
 "Ingest Stack Overflow" = millions of nodes. Scope must be explicit:
-- Domain-specific ingestion: `engram ingest-reference <project> --domain python-async --source stackoverflow --limit 200`
-- Internal runbooks: `engram ingest-reference <project> --path ./docs/runbooks/`
-- Framework docs: `engram ingest-reference <project> --url https://fastapi.tiangolo.com/`
+- Domain-specific ingestion: `waystone ingest-reference <project> --domain python-async --source stackoverflow --limit 200`
+- Internal runbooks: `waystone ingest-reference <project> --path ./docs/runbooks/`
+- Framework docs: `waystone ingest-reference <project> --url https://fastapi.tiangolo.com/`
 
 Open-ended crawl is not a supported mode in the initial implementation.
 
 ---
 
+## Implementation Roadmap
+
+### Phase 1: Ingestion + Tier 2 Retrieval (4–6 weeks)
+
+**Goal:** Add reference knowledge layer (tier 2) with basic FTS + ANN retrieval.
+
+1. **Schema extension**
+   - Add `reference` node type to domain profiles
+   - Add TTL field and source tracking to node table
+   - Create reference-specific indexes (FTS + vec0)
+
+2. **Ingestion CLI**
+   - `waystone ingest-reference <project> --domain python-async --source stackoverflow --limit 200`
+   - GitHub markdown ingestor (runbooks, docs)
+   - Stack Overflow scraper with quality gate (score ≥ 20)
+
+3. **Retrieval weighting**
+   - Tier 1 (project) gets 0.7 weight, tier 2 (reference) gets 0.3
+   - Modify BFS pipeline to merge tier 2 results
+   - Test on LOCOMO to ensure no regression
+
+### Phase 2: Pre-Dispatch Routing Gate (6–8 weeks)
+
+**Goal:** Expose routing decision API — block task, flag for review, or proceed.
+
+1. **Blocker extraction**
+   - Query LESSON_LEARNED + DECISION nodes in task scope
+   - Extract concrete blockers: "tried X before and it failed", "constraint Y rules out Z"
+   - Format as structured list (not confidence scores)
+
+2. **Routing API**
+   - `POST /routing/task/{task_id}/can-proceed` → returns decision + blocker list
+   - Integrate with agent-orchestrator `beforeEachRun` hook
+   - Log all routing decisions for bias analysis
+
+### Phase 3: Post-Run Extraction + Review (8–12 weeks)
+
+**Goal:** Extract from session logs, not diffs. Run parallel validation.
+
+1. **Log-based extraction**
+   - Hook into agent-orchestrator `afterEachRun` → session log path
+   - Run full extraction on log (like CLI `--verify`)
+   - Suppress already-extracted facts via dedup pass
+
+2. **Parallel validators**
+   - Fact-checker: does retrieved context support the claim?
+   - Contradiction-checker: does this conflict with existing DECISION nodes?
+   - Scope-validator: is this project-specific or generic?
+   - Temporal-validator: is timestamp coherent with other facts?
+   - Each runs in parallel (4 LLM calls, not sequential)
+
+3. **Confidence gating**
+   - Only promote nodes that pass ≥3/4 validators
+   - Track validator disagreement for bias audit
+   - Manual review queue for edge cases
+
+---
+
+## Success Metrics
+
+| Metric | Target | Measure |
+|--------|--------|---------|
+| Pre-dispatch accuracy | ≥85% | % of tasks that should've been blocked but weren't (post-hoc audit) |
+| Extraction completeness | ≥90% | % of important decisions in session log that were extracted |
+| Validator agreement | ≥0.8 kappa | Inter-validator Cohen's kappa on sample of extracted nodes |
+| Retrieval latency | <500ms | P95 wall time for pre-dispatch query |
+| Reference knowledge ROI | ≥2× | LOCOMO score improvement by adding tier 2 vs. tier 1 alone |
+
+---
+
 ## Cold-Start Onboarding
 
-A fresh Engram install has no LESSON_LEARNED or DECISION nodes. The routing gate routes everything at minimum confidence — which means "always human review." This is the correct safe default but it produces a bad first impression.
+A fresh Waystone install has no LESSON_LEARNED or DECISION nodes. The routing gate routes everything at minimum confidence — which means "always human review." This is the correct safe default but it produces a bad first impression.
 
 **Required onboarding step (must ship with v1):**
 ```bash
 # Bootstrap LESSON_LEARNED nodes from commit/PR history before first deployment
-engram extract <project> <path/to/commit_log.txt>
-engram extract <project> <path/to/pr_descriptions.txt>
+waystone extract <project> <path/to/commit_log.txt>
+waystone extract <project> <path/to/pr_descriptions.txt>
 ```
 
 **Minimum graph density gate:**
@@ -117,7 +187,7 @@ Pre-dispatch routing gate should not activate until the graph has at least N LES
 **Tiered activation:**
 Not every task needs all four layers. The routing gate determines the tier at pre-dispatch:
 - Low complexity (no matching blockers, no open questions): skip Graphify, skip parallel review
-- Medium: Engram gate + execution only
+- Medium: Waystone gate + execution only
 - High (known blockers, unresolved questions): full four-layer stack
 
 ---
@@ -172,16 +242,16 @@ The Lance+Tantivy+graph layer migration (documented in FINDINGS.md) is not prema
 ### Phase 1A: Orchestration Stack MVP
 *Prerequisite: Phase 0 decision made. If reference ingestion in scope, Lance+Tantivy must be complete first.*
 
-**Goal:** Validate the routing gate hypothesis. Does surfacing Engram context before agent tasks run change outcomes?
+**Goal:** Validate the routing gate hypothesis. Does surfacing Waystone context before agent tasks run change outcomes?
 
 **Deliverables:**
-- `before_run` hook in agent-orchestrator → calls `engram query <project> "<task description>"` → injects result into agent context
+- `before_run` hook in agent-orchestrator → calls `waystone query <project> "<task description>"` → injects result into agent context
 - Blocker list formatter: transform retrieved LESSON_LEARNED nodes into concrete "watch out for X" list
-- `after_run` hook → writes session log to temp file → calls `engram extract <project> <tempfile>`
-- Cold-start onboarding: `engram extract <project> <commit_log>` + density gate
-- `engram ingest-reference` command (basic) — file and URL ingestion for tier 2 nodes
+- `after_run` hook → writes session log to temp file → calls `waystone extract <project> <tempfile>`
+- Cold-start onboarding: `waystone extract <project> <commit_log>` + density gate
+- `waystone ingest-reference` command (basic) — file and URL ingestion for tier 2 nodes
 
-**Language bridge:** agent-orchestrator is TypeScript, Engram is Python. `before_run` and `after_run` hooks call `engram` CLI as subprocess, or call the Engram REST API (`/v1/query`, `/v1/extract`). Subprocess works today with zero new infrastructure.
+**Language bridge:** agent-orchestrator is TypeScript, Waystone is Python. `before_run` and `after_run` hooks call `waystone` CLI as subprocess, or call the Waystone REST API (`/v1/query`, `/v1/extract`). Subprocess works today with zero new infrastructure.
 
 **Validation experiment:** Run 50 tasks with routing gate active vs. 50 tasks without. Measure: tasks requiring human intervention, tasks hitting known blockers, tasks that produce LESSON_LEARNED nodes (novel failures vs. known ones).
 
@@ -192,7 +262,7 @@ The Lance+Tantivy+graph layer migration (documented in FINDINGS.md) is not prema
 
 **Deliverables:**
 - Five parallel validator agents (fact, contradiction, scope, temporal, supersession)
-- Conflict log table and `engram conflicts` CLI command
+- Conflict log table and `waystone conflicts` CLI command
 - Node confidence adjustment based on validator consensus
 - PROCEDURE node promotion for high-confidence, repeated-pattern skills
 
@@ -203,7 +273,7 @@ The Lance+Tantivy+graph layer migration (documented in FINDINGS.md) is not prema
 
 **Deliverables:**
 - `reference` node type with required metadata fields (source_url, source_date, ingested_at, quality_score, ttl)
-- `engram ingest-reference` with domain, source, and limit controls
+- `waystone ingest-reference` with domain, source, and limit controls
 - Stack Overflow ingestor (votes threshold + accepted answer gate)
 - Documentation ingestor (URL or local path)
 - Two-tier retrieval weighting in query pipeline
@@ -215,8 +285,8 @@ The Lance+Tantivy+graph layer migration (documented in FINDINGS.md) is not prema
 *Prerequisite: Phase 1A validated. Validate 71.5× token reduction claim before this phase begins.*
 
 **Deliverables:**
-- Extend Engram retrieval pipeline to query Graphify output as second source
-- Combined context assembly: Engram graph + Graphify code graph → single context block
+- Extend Waystone retrieval pipeline to query Graphify output as second source
+- Combined context assembly: Waystone graph + Graphify code graph → single context block
 - Lazy cache invalidation: regenerate only subgraph for changed files
 - Tiered activation: Graphify layer only for medium/high complexity tasks (not default)
 
@@ -246,7 +316,7 @@ The Lance+Tantivy+graph layer migration (documented in FINDINGS.md) is not prema
 
 | Tool | Routing gate | Auto skill extraction | Typed memory | Supersession |
 |---|---|---|---|---|
-| **Engram (this plan)** | ✅ | ✅ | ✅ | ✅ |
+| **Waystone (this plan)** | ✅ | ✅ | ✅ | ✅ |
 | CompoundEngineering | ✗ | ✗ (manual compound) | ✗ (markdown) | ✗ |
 | GSD | ✗ (manual checkpoints) | ✗ | ✗ | ✗ |
 | arscontexta | ✗ | ✗ | ✗ (untyped) | ✗ |

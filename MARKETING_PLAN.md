@@ -1,7 +1,7 @@
 # Unbidden AI — Marketing Plan
 
 **Company:** Unbidden AI (`unbidden.ai`)
-**Product:** Engram — persistent memory for AI development workflows
+**Product:** Waystone — persistent memory for AI development workflows
 **Stage:** Pre-launch / first revenue
 
 ---
@@ -10,7 +10,7 @@
 
 ### Positioning
 
-Unbidden AI is the company. Engram is the first product. The site should establish a brand identity around the idea of AI that surfaces what you need *before you ask for it* — memory that works the way human intuition does, automatically present when relevant.
+Unbidden AI is the company. Waystone is the first product. The site should establish a brand identity around the idea of AI that surfaces what you need *before you ask for it* — memory that works the way human intuition does, automatically present when relevant.
 
 The name "Unbidden" does a lot of work here: it implies the assistant brings things up proactively, without being asked. Lean into that framing.
 
@@ -20,7 +20,7 @@ The name "Unbidden" does a lot of work here: it implies the assistant brings thi
 
 ```
 unbidden.ai/               → Company home (brand + product intro)
-unbidden.ai/engram         → Engram product page
+unbidden.ai/waystone         → Waystone product page
 unbidden.ai/pricing        → Pricing tiers
 unbidden.ai/docs           → Getting started, integration guides
 unbidden.ai/blog           → Technical posts, case studies
@@ -36,12 +36,12 @@ unbidden.ai/changelog      → Product updates
 **Above the fold:**
 - Tagline: *"AI that remembers. Context that compounds."*
 - Subhead: *"Unbidden builds memory infrastructure for AI development workflows. Your AI gets smarter the longer it works with you."*
-- Single CTA: `Try Engram →` (links to `/engram`)
+- Single CTA: `Try Waystone →` (links to `/waystone`)
 - No pricing on home. Establish the vision first.
 
 **Below the fold:**
 - One-liner on the problem: *"Every AI session starts from zero. Unbidden fixes that."*
-- Product card: Engram (with brief description and link)
+- Product card: Waystone (with brief description and link)
 - Optional: "More products coming" placeholder — positions this as a company, not a one-trick site
 - Footer: GitHub, docs, pricing, blog, contact email
 
@@ -49,30 +49,30 @@ unbidden.ai/changelog      → Product updates
 
 ---
 
-#### `/engram` — Product Page
+#### `/waystone` — Product Page
 
 **Structure:**
 
 1. **Hero** — problem statement, not feature list
-   > *"Your AI forgets everything between sessions. Engram doesn't."*
+   > *"Your AI forgets everything between sessions. Waystone doesn't."*
 
    Subhead: *"Persistent memory for AI-assisted development. Works with any OpenAI-compatible model via MCP or REST API."*
 
    CTAs: `Get Started (free)` | `View Docs`
 
 2. **Problem section** — three cards, each targeting a buyer type:
-   - *Local model users:* "Your 4K context fills up at turn 15. Engram extends that to unlimited."
-   - *API teams:* "You're paying for every token in history. Engram cuts that by 60–80%."
-   - *Long-running projects:* "Week 6 AI contradicts week 1 decisions. Engram prevents that."
+   - *Local model users:* "Your 4K context fills up at turn 15. Waystone extends that to unlimited."
+   - *API teams:* "You're paying for every token in history. Waystone cuts that by 60–80%."
+   - *Long-running projects:* "Week 6 AI contradicts week 1 decisions. Waystone prevents that."
 
 3. **How it works** — three steps, no implementation details:
-   - Step 1: *Connect Engram to your AI editor or workflow via MCP or API*
-   - Step 2: *Engram automatically extracts and stores what matters from every session*
-   - Step 3: *On your next session, Engram surfaces only what's relevant — not everything, not nothing*
+   - Step 1: *Connect Waystone to your AI editor or workflow via MCP or API*
+   - Step 2: *Waystone automatically extracts and stores what matters from every session*
+   - Step 3: *On your next session, Waystone surfaces only what's relevant — not everything, not nothing*
 
 4. **Social proof section** (placeholder for now — fill in with real quotes/numbers post-launch):
    - "95% recall across 23 benchmark questions"
-   - Benchmark comparison table (Engram vs raw context window)
+   - Benchmark comparison table (Waystone vs raw context window)
 
 5. **Integration list:**
    - Claude Code, Cursor, Windsurf, Continue.dev, OpenClaw, any MCP-compatible client
@@ -109,7 +109,7 @@ Add a persistent email capture on every page — not a modal, just a slim banner
 - **Lead magnet:** The cost calculator breakdown (from Pitch 1) as a one-page PDF, or the full benchmark methodology doc. Developers respond to data, not discounts.
 - **Tool:** Buttondown or Resend — both are developer-friendly, cheap, and don't have bloated marketing UX. Avoid Mailchimp for a technical audience.
 - **Sequence:** 3 emails over 2 weeks after signup:
-  1. Immediate: the lead magnet + "here's what Engram does in 3 bullets"
+  1. Immediate: the lead magnet + "here's what Waystone does in 3 bullets"
   2. Day 4: The cost math post (from blog) — value-first, no ask
   3. Day 10: "We just launched" / soft CTA to try the free tier
 - **CTA copy:** Avoid "Subscribe to our newsletter." Use *"Get the benchmark report"* or *"Follow the build"* — specific and lower commitment.
@@ -125,7 +125,7 @@ Add a persistent email capture on every page — not a modal, just a slim banner
 4. Cursor/Windsurf integration
 5. OpenClaw integration
 6. REST API reference
-7. CLI reference (`engram` commands)
+7. CLI reference (`waystone` commands)
 8. Configuration (`config.yaml`)
 
 Use existing `GETTING_STARTED.md` as the source for #1. Keep docs in-repo and render them statically — don't build a docs platform until you need to.
@@ -134,7 +134,7 @@ Use existing `GETTING_STARTED.md` as the source for #1. Keep docs in-repo and re
 
 #### MCP Server Documentation (Priority — Required for Public Distribution)
 
-Since Engram is distributed primarily as an MCP server, this is the most important documentation to get right. Developers evaluating an MCP server will check the docs before trying it — a poorly documented MCP integration is a conversion killer.
+Since Waystone is distributed primarily as an MCP server, this is the most important documentation to get right. Developers evaluating an MCP server will check the docs before trying it — a poorly documented MCP integration is a conversion killer.
 
 **Required MCP docs pages:**
 
@@ -144,17 +144,17 @@ Since Engram is distributed primarily as an MCP server, this is the most importa
 - Compatibility matrix: which MCP clients have been tested (Claude Code, Cursor, Windsurf, Continue.dev, OpenClaw)
 
 **2. Installation & Config Reference**
-- Install command (`npm install -g engram` / `pip install engram` / binary download — whichever applies)
+- Install command (`npm install -g waystone` / `pip install waystone` / binary download — whichever applies)
 - Full annotated config block for each supported client:
 
 ```json
 // claude_code settings.json
 {
   "mcpServers": {
-    "engram": {
-      "command": "engram",
+    "waystone": {
+      "command": "waystone",
       "args": ["serve"],
-      "env": { "ENGRAM_API_KEY": "your-key", "ENGRAM_PROJECT": "my-project" }
+      "env": { "WAYSTONE_API_KEY": "your-key", "WAYSTONE_PROJECT": "my-project" }
     }
   }
 }
@@ -162,34 +162,34 @@ Since Engram is distributed primarily as an MCP server, this is the most importa
 
 Provide a copy-paste block for every supported client. Developers shouldn't have to guess the config shape.
 
-**3. Tool Reference (the MCP tools Engram exposes)**
+**3. Tool Reference (the MCP tools Waystone exposes)**
 
 Document every tool the MCP server registers:
 
 | Tool | Description | Required params | Returns |
 |------|-------------|-----------------|---------|
-| `engram_query` | Retrieve relevant context for the current task | `query: string` | Ranked fact list + relevance scores |
-| `engram_synthesize` | Extract and store facts from the current session | `transcript: string` | Stored fact count, superseded count |
-| `engram_stats` | Project memory stats | none | Fact count, project age, last sync |
+| `waystone_query` | Retrieve relevant context for the current task | `query: string` | Ranked fact list + relevance scores |
+| `waystone_synthesize` | Extract and store facts from the current session | `transcript: string` | Stored fact count, superseded count |
+| `waystone_stats` | Project memory stats | none | Fact count, project age, last sync |
 
 Include example inputs and outputs for each tool — this is what developers copy from when writing agent instructions.
 
 **4. Agent Instruction Templates**
 
-Provide ready-to-paste instruction blocks for each supported client showing how to wire Engram into the agent's system prompt or tool-use instructions. Example:
+Provide ready-to-paste instruction blocks for each supported client showing how to wire Waystone into the agent's system prompt or tool-use instructions. Example:
 
 ```
-# Memory (Engram)
-At the start of each session, call engram_query with a summary of the current task.
-After completing significant work, call engram_synthesize with the session transcript.
-Never write to MEMORY.md — use Engram instead.
+# Memory (Waystone)
+At the start of each session, call waystone_query with a summary of the current task.
+After completing significant work, call waystone_synthesize with the session transcript.
+Never write to MEMORY.md — use Waystone instead.
 ```
 
 **5. Hooks Integration**
-For Claude Code specifically: show the UserPromptSubmit hook config that auto-queries Engram at session start. This is the zero-friction setup and should be the first thing shown.
+For Claude Code specifically: show the UserPromptSubmit hook config that auto-queries Waystone at session start. This is the zero-friction setup and should be the first thing shown.
 
 **6. Troubleshooting**
-- "engram not found" — PATH issues, install verification
+- "waystone not found" — PATH issues, install verification
 - "no facts returned" — project name mismatch, empty memory
 - Rate limiting — what the errors look like, how to handle them
 - Local vs. hosted mode differences
@@ -214,7 +214,7 @@ Launch with 2–3 posts ready to go. These double as Reddit posts (see Part 2).
 
 - Dark background, monospace accent font (project memory = dev tool)
 - Minimal — no carousels, no animations, no gradients
-- Code snippet on the hero showing a single `engram extract` or MCP config block
+- Code snippet on the hero showing a single `waystone extract` or MCP config block
 - Primary color: pick one accent (not blue — everyone is blue)
 - Mobile-responsive but desktop-first (developers are on desktop)
 
@@ -247,7 +247,7 @@ Been running local models for a year. The 4K context wall was killing me —
 every session starts cold, model forgets what we built last week, suggests
 approaches I already ruled out.
 
-Built a tool called Engram that extracts the decisions and facts from each
+Built a tool called Waystone that extracts the decisions and facts from each
 session and stores them. Next session it retrieves only what's relevant —
 about 1,200 tokens, regardless of project age.
 
@@ -255,7 +255,7 @@ Tested it on a project with 835 conversation turns across 6 months.
 Retrieval held at 95% recall. The model knows about decisions from
 month 1 without seeing the transcript.
 
-[link to unbidden.ai/engram or GitHub]
+[link to unbidden.ai/waystone or GitHub]
 
 Happy to answer questions about how the retrieval side works.
 ```
@@ -270,7 +270,7 @@ Happy to answer questions about how the retrieval side works.
 #### r/ClaudeAI (~150K) + r/OpenClaw (~40K)
 **Who's here:** Claude Code and OpenClaw users. Memory management is a known pain.
 
-**Angle for r/ClaudeAI:** "I use Engram to give Claude Code cross-session memory"
+**Angle for r/ClaudeAI:** "I use Waystone to give Claude Code cross-session memory"
 
 **Angle for r/OpenClaw:** Direct pitch on the OpenClaw problem (see Pitch 4)
 
@@ -283,7 +283,7 @@ Three months into a project, MEMORY.md hit the cap. Older entries started
 disappearing. The model was working from an increasingly stale picture of
 what we'd built.
 
-Built Engram as a replacement. Instead of a flat file, it stores each fact
+Built Waystone as a replacement. Instead of a flat file, it stores each fact
 individually and retrieves only what's relevant to the current question.
 Memory size doesn't matter — it's been tested at 11,000+ stored facts with
 no degradation.
@@ -318,7 +318,7 @@ only the relevant ones, not everything.
 95% recall on decisions across a 6-month project. The model stopped
 suggesting things I'd already ruled out.
 
-It's called Engram. Free tier available. Works with Claude Code, Cursor,
+It's called Waystone. Free tier available. Works with Claude Code, Cursor,
 Windsurf, and basically anything that supports MCP.
 
 [link]
@@ -357,7 +357,7 @@ For a 5-person team on GPT-4o: $182/month savings on a 50-turn average session.
 - **Don't post everywhere at once.** Start with the subreddit most relevant to your current feature set.
 - **Recommended order:** r/LocalLLaMA first (most specific pain, most technical), then r/OpenClaw, then r/ClaudeAI, then broader subs.
 - **Wait 2–4 weeks between major posts** in the same subreddit to avoid looking like a marketing account.
-- **Participate in threads between posts.** Answer questions about local models, context windows, MCP — not always about Engram.
+- **Participate in threads between posts.** Answer questions about local models, context windows, MCP — not always about Waystone.
 
 ---
 
@@ -367,7 +367,7 @@ For a 5-person team on GPT-4o: $182/month savings on a 50-turn average session.
 
 **When:** After Reddit traction, before or alongside Product Hunt.
 
-**Format:** `Show HN: Engram – persistent memory layer for AI development workflows`
+**Format:** `Show HN: Waystone – persistent memory layer for AI development workflows`
 
 **HN-specific rules:**
 - The HN crowd will ask hard technical questions. Have answers ready for: architecture decisions, benchmark methodology, comparison to vector DBs, comparison to simple summarization.
@@ -401,7 +401,7 @@ For a 5-person team on GPT-4o: $182/month savings on a 50-turn average session.
 | OpenClaw Discord | Direct replacement pitch |
 | LangChain / LlamaIndex | Developer tooling ecosystem |
 
-**Strategy:** Don't post links. Answer questions about context management, memory, long sessions. When directly asked for a solution, mention Engram. Build reputation first.
+**Strategy:** Don't post links. Answer questions about context management, memory, long sessions. When directly asked for a solution, mention Waystone. Build reputation first.
 
 ---
 
@@ -424,7 +424,7 @@ For a 5-person team on GPT-4o: $182/month savings on a 50-turn average session.
 
 ### MCP Registries
 
-**Submit Engram to:**
+**Submit Waystone to:**
 - Anthropic's official MCP directory (highest signal for Claude users)
 - Cursor marketplace
 - Windsurf marketplace
@@ -439,14 +439,14 @@ For a 5-person team on GPT-4o: $182/month savings on a 50-turn average session.
 
 **What they are:** YC W26 company (1.4M developers, 200K MAU) building agent infrastructure — a React component registry, a Magic MCP server for UI generation in IDEs (Cursor, Windsurf, Cline), and an agent SDK with built-in memory, observability, and sandboxed execution.
 
-**Why Engram fits:** Their agent SDK includes session-scoped memory, but no persistent cross-session fact graph. Engram is the layer underneath — long-term structured memory that survives across sessions. Their observability captures traces and token cost; Engram makes those traces semantically queryable. The audiences are identical: developers building production AI agents.
+**Why Waystone fits:** Their agent SDK includes session-scoped memory, but no persistent cross-session fact graph. Waystone is the layer underneath — long-term structured memory that survives across sessions. Their observability captures traces and token cost; Waystone makes those traces semantically queryable. The audiences are identical: developers building production AI agents.
 
 **How to pursue:**
-1. **MCP integration first** — add Engram as a supported memory backend example in their agent SDK docs or as a companion MCP server in their Magic MCP ecosystem. Low friction, high visibility.
+1. **MCP integration first** — add Waystone as a supported memory backend example in their agent SDK docs or as a companion MCP server in their Magic MCP ecosystem. Low friction, high visibility.
 2. **Blog post / co-marketing** — a technical post on "short-term vs long-term agent memory" written jointly or cross-promoted. Reaches their 200K MAU directly.
-3. **Direct outreach** — Serafim Korablev (CEO) or Sergey Bunas (CTO). Frame as: "your SDK ships session memory; Engram is the persistent layer for users who need facts to survive across sessions."
+3. **Direct outreach** — Serafim Korablev (CEO) or Sergey Bunas (CTO). Frame as: "your SDK ships session memory; Waystone is the persistent layer for users who need facts to survive across sessions."
 
-**Distribution value:** 21st.dev has the developer audience Engram needs. A listing or integration mention in their ecosystem is worth more than a Product Hunt launch.
+**Distribution value:** 21st.dev has the developer audience Waystone needs. A listing or integration mention in their ecosystem is worth more than a Product Hunt launch.
 
 ---
 
@@ -475,16 +475,16 @@ dev.to has SEO value. Posts rank for long-tail searches like "AI memory between 
 ## Part 4: FAQ (for Reddit, website, and pitches)
 
 **Q: How is this different from RAG?**
-RAG retrieves from a document corpus — you put documents in, it fetches chunks when asked. Engram builds memory from *conversations* — it watches what you're working on, extracts decisions and facts as you go, and surfaces them in future sessions automatically. It's session memory, not document search.
+RAG retrieves from a document corpus — you put documents in, it fetches chunks when asked. Waystone builds memory from *conversations* — it watches what you're working on, extracts decisions and facts as you go, and surfaces them in future sessions automatically. It's session memory, not document search.
 
 **Q: Does it work with local models (Ollama, LM Studio)?**
-Yes. Engram works with any OpenAI-compatible endpoint. Local models are used for both the extraction (if you configure it that way) and the downstream AI assistant. Gemini Flash is the recommended extraction model for accuracy; local extraction is supported.
+Yes. Waystone works with any OpenAI-compatible endpoint. Local models are used for both the extraction (if you configure it that way) and the downstream AI assistant. Gemini Flash is the recommended extraction model for accuracy; local extraction is supported.
 
 **Q: How is this different from the built-in memory in Claude Code / ChatGPT?**
-Built-in memory tools summarize old context or drop it when the window fills. This means architectural decisions from early in a project eventually disappear. Engram extracts structured facts — it doesn't summarize or discard. A decision from week 1 retrieves just as accurately in week 12 as it did on day 2.
+Built-in memory tools summarize old context or drop it when the window fills. This means architectural decisions from early in a project eventually disappear. Waystone extracts structured facts — it doesn't summarize or discard. A decision from week 1 retrieves just as accurately in week 12 as it did on day 2.
 
 **Q: Does my conversation data leave my machine?**
-Local CLI mode: nothing leaves your machine. The MCP server runs locally, extraction calls your configured endpoint (local or cloud), the memory store is a local SQLite file. Hosted API mode: transcripts are sent to the Engram API for extraction and stored in your project's database on our servers. See the privacy policy for details.
+Local CLI mode: nothing leaves your machine. The MCP server runs locally, extraction calls your configured endpoint (local or cloud), the memory store is a local SQLite file. Hosted API mode: transcripts are sent to the Waystone API for extraction and stored in your project's database on our servers. See the privacy policy for details.
 
 **Q: What AI editors does it support?**
 Claude Code, Cursor, Windsurf, Continue.dev, OpenClaw, and any editor with MCP support. REST API mode works with anything that can make HTTP calls.
@@ -493,13 +493,13 @@ Claude Code, Cursor, Windsurf, Continue.dev, OpenClaw, and any editor with MCP s
 Free tier gives you 1 project and 500 stored facts (enough for a meaningful project). No credit card required. Rate-limited to 10 API calls/min. Upgrade when you hit the ceiling.
 
 **Q: What happens to old facts when I change direction?**
-When a new decision supersedes an old one, Engram marks the old fact as retired. It stops appearing in retrieval. You see the current state of the project — not a history of every decision including the ones you reversed.
+When a new decision supersedes an old one, Waystone marks the old fact as retired. It stops appearing in retrieval. You see the current state of the project — not a history of every decision including the ones you reversed.
 
 **Q: How accurate is the memory extraction?**
 95% recall on our 23-question benchmark across three synthetic projects (api design, auth system, data pipeline). Full benchmark methodology and results are in the repo under `benchmarks/`.
 
 **Q: Can I import my existing MEMORY.md from OpenClaw?**
-Yes. `engram extract` can process a MEMORY.md as a source document. Run it once to seed your Engram project with existing facts before switching.
+Yes. `waystone extract` can process a MEMORY.md as a source document. Run it once to seed your Waystone project with existing facts before switching.
 
 **Q: What does it cost to run?**
 The extraction model (Gemini Flash) costs ~$0.15/1M tokens. A typical 50-turn session generates ~5,000 tokens of transcript. Extraction cost per session: ~$0.001. For a 5-person team doing 440 sessions/month: under $0.50/month in extraction costs.
@@ -518,9 +518,9 @@ When you build with GPT-4o, Claude, or Gemini, you pay for every token you send 
 
 That cost accumulates fast, especially on an active development team.
 
-#### What Engram Does
+#### What Waystone Does
 
-Engram keeps only what matters in the context window at any given moment. Instead of replaying the full conversation history on every call, it maintains a persistent memory index of your project and retrieves only the facts relevant to the current question — typically 2,000–3,000 tokens regardless of how long the session has been running.
+Waystone keeps only what matters in the context window at any given moment. Instead of replaying the full conversation history on every call, it maintains a persistent memory index of your project and retrieves only the facts relevant to the current question — typically 2,000–3,000 tokens regardless of how long the session has been running.
 
 #### The Numbers
 
@@ -528,14 +528,14 @@ Assumptions: GPT-4o at $2.50/1M input tokens. Average message length of 200 toke
 
 **Per session (50 turns):**
 
-| | Without Engram | With Engram | Savings |
+| | Without Waystone | With Waystone | Savings |
 |---|---|---|---|
 | Total input tokens | ~255,000 | ~90,000 | ~65% |
 | Cost per session | $0.64 | $0.23 | **$0.41** |
 
 **Per month (440 sessions):**
 
-| | Without Engram | With Engram | Savings |
+| | Without Waystone | With Waystone | Savings |
 |---|---|---|---|
 | Monthly API spend | ~$281 | ~$99 | **~$182/month** |
 
@@ -545,7 +545,7 @@ The extraction model runs on Gemini Flash at $0.15/1M tokens — the overhead is
 
 #### The Pitch
 
-> "You're paying your AI provider to remember things it said five minutes ago. Engram fixes that. For an active team on GPT-4o, it typically cuts your input token bill by 60–80% — without changing how the model responds or what it knows."
+> "You're paying your AI provider to remember things it said five minutes ago. Waystone fixes that. For an active team on GPT-4o, it typically cuts your input token bill by 60–80% — without changing how the model responds or what it knows."
 
 ---
 
@@ -562,21 +562,21 @@ That setup works great — for about 15 turns. Then the model starts forgetting 
 
 The model doesn't know what you decided last week. It doesn't know you already tried that approach and it didn't work. It doesn't know your current architecture, your constraints, or your team's preferences. Every session is turn one.
 
-#### What Changes With Engram
+#### What Changes With Waystone
 
-Engram gives a 4K local model the project memory of a much larger system.
+Waystone gives a 4K local model the project memory of a much larger system.
 
 **Session persistence.** Project knowledge accumulates on disk. When you start a new session tomorrow, the model already knows what was decided in every session before — not because the transcript is replayed, but because the relevant facts are retrieved and injected at the start.
 
-**Fits every time.** Instead of cramming the full conversation into a 4K window, Engram keeps the context footprint constant at ~2,000–2,500 tokens per call. A project with 500 turns of history takes the same context space as one with 10.
+**Fits every time.** Instead of cramming the full conversation into a 4K window, Waystone keeps the context footprint constant at ~2,000–2,500 tokens per call. A project with 500 turns of history takes the same context space as one with 10.
 
-**No more contradictions.** When you change direction, Engram marks the old fact as superseded. The model stops suggesting approaches you've already ruled out.
+**No more contradictions.** When you change direction, Waystone marks the old fact as superseded. The model stops suggesting approaches you've already ruled out.
 
-**Gets smarter over time.** A raw-history setup degrades as the project grows. Engram improves: more sessions mean richer memory, and retrieval precision increases because there's more signal to match against.
+**Gets smarter over time.** A raw-history setup degrades as the project grows. Waystone improves: more sessions mean richer memory, and retrieval precision increases because there's more signal to match against.
 
 #### The Pitch
 
-> "A 7B local model has a 4,000-token memory. Engram gives it a 4,000-token window into an unlimited project history. Same hardware. Same model. But now it remembers everything — what you built, what you tried, what you decided — across every session, going back as far as the project does."
+> "A 7B local model has a 4,000-token memory. Waystone gives it a 4,000-token window into an unlimited project history. Same hardware. Same model. But now it remembers everything — what you built, what you tried, what you decided — across every session, going back as far as the project does."
 
 ---
 
@@ -590,7 +590,7 @@ Architectural decisions made in week one get summarized away by week four. The c
 
 This is the hidden cost of long-running AI-assisted development: **accumulated context debt**. The longer the project, the more the AI "forgets," and the less trustworthy its recommendations become.
 
-#### What Engram Does for Teams
+#### What Waystone Does for Teams
 
 **Decisions survive.** Every architectural decision, constraint, and rationale is extracted and persisted. When a new decision supersedes an old one, the old one is retired. The model always sees the current state of the project.
 
@@ -600,11 +600,11 @@ This is the hidden cost of long-running AI-assisted development: **accumulated c
 
 **The AI catches contradictions.** When someone proposes an approach that conflicts with a prior decision, the model surfaces that conflict — because the prior decision is still in context.
 
-**Retrieval is task-targeted, not time-ordered.** Engram surfaces what's *relevant to the current question*. A constraint established in week one retrieves just as cleanly in week twelve.
+**Retrieval is task-targeted, not time-ordered.** Waystone surfaces what's *relevant to the current question*. A constraint established in week one retrieves just as cleanly in week twelve.
 
 #### The Pitch
 
-> "The longer your project runs, the less your AI understands it. Engram reverses that. Every decision your team makes accumulates into persistent memory that makes the AI more useful over time — not less. It's the difference between an AI assistant that helps you build the right thing and one that confidently suggests you rebuild what you already have."
+> "The longer your project runs, the less your AI understands it. Waystone reverses that. Every decision your team makes accumulates into persistent memory that makes the AI more useful over time — not less. It's the difference between an AI assistant that helps you build the right thing and one that confidently suggests you rebuild what you already have."
 
 ---
 
@@ -618,13 +618,13 @@ Even before that cap, OpenClaw loads your entire `MEMORY.md` into every session.
 
 And when facts change, the old fact stays in `MEMORY.md` alongside the new one. The model sees both. It may act on either.
 
-#### What Engram Does Differently
+#### What Waystone Does Differently
 
 **Structured memory, not a flat file.** Each fact is stored individually and queryable independently.
 
 **Retrieves what's relevant, not everything.** A 3-year-old project retrieves the same ~1,200 tokens of relevant context as a 3-day-old one.
 
-**No ceiling.** Engram's memory grows without bound. Tested at 11,000+ stored facts with no degradation.
+**No ceiling.** Waystone's memory grows without bound. Tested at 11,000+ stored facts with no degradation.
 
 **Superseded facts disappear from context.** When you change direction, the old fact is retired.
 
@@ -632,26 +632,26 @@ And when facts change, the old fact stays in `MEMORY.md` alongside the new one. 
 
 #### The Numbers
 
-| Scenario | OpenClaw memory tokens/session | Engram tokens/session | Monthly savings (Claude Sonnet) |
+| Scenario | OpenClaw memory tokens/session | Waystone tokens/session | Monthly savings (Claude Sonnet) |
 |---|---|---|---|
 | Early project (20KB) | 5,000 | ~1,200 | ~$4 |
 | Mature project (75KB) | 18,750 | ~1,200 | ~$15 |
 | At the 150KB cap | 37,500 | ~1,200 | ~$30 |
 | 5-agent team at cap | 187,500 | ~6,000 | ~$150 |
 
-Recall quality: OpenClaw's semantic search degrades as MEMORY.md grows. Engram's retrieval holds at **95% recall** regardless of memory size (verified across 23 benchmark questions).
+Recall quality: OpenClaw's semantic search degrades as MEMORY.md grows. Waystone's retrieval holds at **95% recall** regardless of memory size (verified across 23 benchmark questions).
 
 #### The Pitch
 
-> "OpenClaw's memory tops out at 150KB. After that, your agent starts forgetting. Engram removes that ceiling — your project history grows without bound, and your agent only sees what's relevant to the current question, not everything you've ever told it. One MCP config line. No workflow changes."
+> "OpenClaw's memory tops out at 150KB. After that, your agent starts forgetting. Waystone removes that ceiling — your project history grows without bound, and your agent only sees what's relevant to the current question, not everything you've ever told it. One MCP config line. No workflow changes."
 
 #### Integration (30 minutes)
 
-1. Add Engram as an MCP server in `openclaw.json`
-2. Replace `write to MEMORY.md` agent instructions with `call engram_synthesize`
-3. Add an `engram_query` call at session start — or let the UserPromptSubmit hook do it automatically
+1. Add Waystone as an MCP server in `openclaw.json`
+2. Replace `write to MEMORY.md` agent instructions with `call waystone_synthesize`
+3. Add an `waystone_query` call at session start — or let the UserPromptSubmit hook do it automatically
 
-Existing `MEMORY.md` content can be imported as seed facts in a single `engram extract` run.
+Existing `MEMORY.md` content can be imported as seed facts in a single `waystone extract` run.
 
 ---
 
@@ -661,8 +661,8 @@ Existing `MEMORY.md` content can be imported as seed facts in a single `engram e
 |---|---|---|---|---|
 | Primary value | Cost reduction | Feasibility | Quality & consistency | Memory ceiling + recall |
 | Quantified benefit | 60–80% input token savings | Unlimited history in 4K window | Full project memory, no context debt | 95% recall, no 150KB cap, $15–$150/mo savings |
-| Without Engram | Bill grows with session length | Model forgets after ~15 turns | AI contradicts prior decisions | Memory truncates, stale facts conflict, search degrades |
-| With Engram | Constant ~2–3K tokens/turn | Same hardware, unlimited project memory | Every decision persists and retrieves by relevance | Unlimited memory, relevant-only retrieval, supersedes cleans up stale facts |
+| Without Waystone | Bill grows with session length | Model forgets after ~15 turns | AI contradicts prior decisions | Memory truncates, stale facts conflict, search degrades |
+| With Waystone | Constant ~2–3K tokens/turn | Same hardware, unlimited project memory | Every decision persists and retrieves by relevance | Unlimited memory, relevant-only retrieval, supersedes cleans up stale facts |
 
 ---
 
@@ -715,7 +715,7 @@ Start participating in Discord communities (Cursor, Continue.dev, OpenClaw) — 
 
 **When:** After at least one Reddit post with meaningful upvotes (50+) and 20+ signups.
 
-Submit: `Show HN: Engram – persistent memory layer for AI development workflows`
+Submit: `Show HN: Waystone – persistent memory layer for AI development workflows`
 
 HN is high-variance — a great Show HN can drive 200+ signups in 24 hours. Be on standby to answer technical comments for the full day. Have the benchmark methodology docs ready to link.
 
@@ -726,7 +726,7 @@ HN is high-variance — a great Show HN can drive 200+ signups in 24 hours. Be o
 **When:** 20–30 active users, at least 2 real testimonials, demo video ready.
 
 **Prep (2 weeks before):**
-- 30–60 second screen recording: start a session → Engram captures it → start a new session → context is already there
+- 30–60 second screen recording: start a session → Waystone captures it → start a new session → context is already there
 - Maker comment written (the founding story: the specific frustration that caused you to build this)
 - 10 people lined up to upvote on launch day
 
@@ -738,7 +738,7 @@ HN is high-variance — a great Show HN can drive 200+ signups in 24 hours. Be o
 
 - Twitter/X: building-in-public posts on a cadence (2–3/week). Benchmark results, interesting edge cases, new integrations.
 - Email list: monthly update with what shipped, what's next, and one technical insight.
-- Discord: keep participating. When users mention Engram organically, that's the signal to post more directly.
+- Discord: keep participating. When users mention Waystone organically, that's the signal to post more directly.
 - Blog Post 3 (*"The real cost of long context windows"*) — publish after HN, use it as the Reddit post for r/programming and r/SoftwareEngineering.
 
 ---
@@ -778,6 +778,6 @@ HN is high-variance — a great Show HN can drive 200+ signups in 24 hours. Be o
 
 ### The one metric that matters most (pre-$1K MRR)
 
-**Activation rate** — the % of signups who actually configure Engram and run at least one session. A high signup rate with low activation means the marketing is working but the product or onboarding isn't. Fix that before scaling distribution.
+**Activation rate** — the % of signups who actually configure Waystone and run at least one session. A high signup rate with low activation means the marketing is working but the product or onboarding isn't. Fix that before scaling distribution.
 
 If activation is above 40%, double down on distribution. If it's below 20%, stop marketing and fix the setup experience.

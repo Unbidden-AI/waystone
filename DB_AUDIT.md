@@ -1,4 +1,4 @@
-# SQLite Database Audit: Context Broker (Engram)
+# SQLite Database Audit: Context Broker (Waystone)
 
 **Date**: 2026-04-12  
 **Scope**: Read-only audit of SQLite schema, indexing, connection management, threading, and query patterns  
@@ -64,7 +64,7 @@
 
 ### CRITICAL (P0): SQLite Threading Violation
 
-**Location**: `hooks/context_broker_submit.py` lines 220, 288; `engram/retriever.py` retrieve_with_stats()
+**Location**: `hooks/context_broker_submit.py` lines 220, 288; `waystone/retriever.py` retrieve_with_stats()
 
 **Issue**: 
 - Line 288 creates `GraphStore(db_path)` in the main thread (hook invocation thread)
@@ -119,7 +119,7 @@ executor.submit(retrieve_with_stats, store_for_retrieval, ...)
 
 ### CRITICAL (P1): Backfill Operations Run on Every __init__
 
-**Location**: `engram/store.py` GraphStore.__init__()
+**Location**: `waystone/store.py` GraphStore.__init__()
 
 **Issue**:
 - `_backfill_fts()` scans ALL nodes to populate FTS table if empty
@@ -143,7 +143,7 @@ executor.submit(retrieve_with_stats, store_for_retrieval, ...)
 
 ### HIGH (P1): No Query Timeout in BFS Traversal
 
-**Location**: `engram/retriever.py` bfs_collect() function; called from retrieve_with_stats()
+**Location**: `waystone/retriever.py` bfs_collect() function; called from retrieve_with_stats()
 
 **Issue**:
 - bfs_collect() has NO explicit query timeout
@@ -166,7 +166,7 @@ executor.submit(retrieve_with_stats, store_for_retrieval, ...)
 
 ### HIGH (P1): Missing Connection Pooling Across Hook Invocations
 
-**Location**: `hooks/context_broker_submit.py`, `engram/store.py`
+**Location**: `hooks/context_broker_submit.py`, `waystone/store.py`
 
 **Issue**:
 - GraphStore is instantiated fresh on every hook call
@@ -189,7 +189,7 @@ executor.submit(retrieve_with_stats, store_for_retrieval, ...)
 
 ### HIGH (P2): PRAGMA synchronous=NORMAL with WAL Mode
 
-**Location**: `engram/store.py` _init_schema()
+**Location**: `waystone/store.py` _init_schema()
 
 **Issue**:
 ```python
@@ -214,7 +214,7 @@ With WAL enabled, NORMAL means:
 
 ### MEDIUM (P2): JSON Queries on Tags Column (No Dedicated Index)
 
-**Location**: `engram/store.py` get_nodes_by_tags() fallback case
+**Location**: `waystone/store.py` get_nodes_by_tags() fallback case
 
 **Issue**:
 ```python
@@ -239,7 +239,7 @@ SELECT id FROM nodes WHERE tags LIKE ?
 
 ### MEDIUM (P2): Large node_tags Table (599K Rows) with Composite PK
 
-**Location**: `engram/store.py` node_tags junction table
+**Location**: `waystone/store.py` node_tags junction table
 
 **Issue**:
 - 599K rows for 64K nodes → avg 9.4 tags per node
@@ -264,7 +264,7 @@ SELECT id FROM nodes WHERE tags LIKE ?
 
 ### MEDIUM (P3): No Source Restriction Verification in Stores with Multiple Projects
 
-**Location**: `engram/retriever.py` retrieve_with_stats(), `engram/store.py`
+**Location**: `waystone/retriever.py` retrieve_with_stats(), `waystone/store.py`
 
 **Issue**:
 - If GraphStore merges extractions from multiple projects, no index on `nodes(domain)`
@@ -284,7 +284,7 @@ SELECT id FROM nodes WHERE tags LIKE ?
 
 ### MEDIUM (P3): No Explicit Lock or Busy Timeout on Write Operations
 
-**Location**: `engram/store.py` merge_extraction(), add_node()
+**Location**: `waystone/store.py` merge_extraction(), add_node()
 
 **Issue**:
 - Extraction spawned in background (subprocess) writes to DB
@@ -664,7 +664,7 @@ nodes = semantic_rerank(nodes)         # Re-rank by embeddings
 
 **1. Fix threading violation (P0-CRITICAL)**
 
-**File**: `engram/store.py` in `GraphStore.__init__()`
+**File**: `waystone/store.py` in `GraphStore.__init__()`
 
 **Change**: Open connection with `check_same_thread=False`
 
@@ -684,7 +684,7 @@ self.conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
 
 **2. Fix backfill on every __init__ (P0-CRITICAL)**
 
-**File**: `engram/store.py` in `GraphStore.__init__()`
+**File**: `waystone/store.py` in `GraphStore.__init__()`
 
 **Change**: Skip backfill if already done
 
@@ -757,7 +757,7 @@ finally:
 
 **4. Add connection-level settings for concurrency (P1-HIGH)**
 
-**File**: `engram/store.py` in `_init_pragmas()` (new method)
+**File**: `waystone/store.py` in `_init_pragmas()` (new method)
 
 **Change**: Add recommended PRAGMA settings
 
@@ -791,7 +791,7 @@ def __init__(self, ...):
 
 **5. Add index on nodes(domain) for multi-project filtering (P1-HIGH)**
 
-**File**: `engram/store.py` in `_init_schema()`
+**File**: `waystone/store.py` in `_init_schema()`
 
 **Change**: Add domain index
 
@@ -810,7 +810,7 @@ self.conn.execute(
 
 **6. Add per-query timeout for BFS traversal (P1-HIGH)**
 
-**File**: `engram/retriever.py` in `bfs_collect()`
+**File**: `waystone/retriever.py` in `bfs_collect()`
 
 **Change**: Set timeout on execute
 
@@ -847,7 +847,7 @@ for depth in range(hops):
 
 **7. Verify and cover node_tags index (P2-MEDIUM)**
 
-**File**: `engram/store.py` in `_init_schema()`
+**File**: `waystone/store.py` in `_init_schema()`
 
 **Change**: Ensure index covers both columns
 
@@ -874,9 +874,9 @@ cursor = self.conn.execute("EXPLAIN QUERY PLAN "
 
 **8. Move backfill to one-time initialization (P2-MEDIUM)**
 
-**File**: `engram/store.py` + `cli.py`
+**File**: `waystone/store.py` + `cli.py`
 
-**Change**: Move backfill to `engram init` command
+**Change**: Move backfill to `waystone init` command
 
 ```python
 # In store.py, add flag:

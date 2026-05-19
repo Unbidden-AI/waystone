@@ -1,6 +1,6 @@
 # Extraction Issues
 
-Failures and gaps identified via spot-check on conv-26 (`engram_default_topk100`).
+Failures and gaps identified via spot-check on conv-26 (`waystone_default_topk100`).
 
 Each entry includes the question index, observed vs. expected extracted node, and a diagnosis.
 

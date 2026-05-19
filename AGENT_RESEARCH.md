@@ -150,7 +150,7 @@ ReAct loop
   + validation pass (CRITIC / self-critique)
   + prompt caching (system prompt)
   + model routing (cheap classifier → expensive executor)
-  + episodic memory layer (Engram)
+  + episodic memory layer (Waystone)
 ```
 
 This is the architecture every production agent worth selling should have.
@@ -159,8 +159,8 @@ This is the architecture every production agent worth selling should have.
 
 ## Related Documents
 
-- [AGENT_STACK.md](AGENT_STACK.md) — How Engram fits into this agent architecture as the memory layer
-- [engram-roadmap.md](engram-roadmap.md) — Engram development roadmap
+- [AGENT_STACK.md](AGENT_STACK.md) — How Waystone fits into this agent architecture as the memory layer
+- [waystone-roadmap.md](waystone-roadmap.md) — Waystone development roadmap
 
 ---
 
@@ -226,21 +226,21 @@ Recommended stack: SELF-REFINE as the default quality pass; CRITIC when the outp
 
 ### Category 3 — Context Management & Memory
 
-The current keyword tag + BFS retrieval model in Engram is well-suited for structured factual queries. These techniques extend it into semantic and hierarchical retrieval:
+The current keyword tag + BFS retrieval model in Waystone is well-suited for structured factual queries. These techniques extend it into semantic and hierarchical retrieval:
 
-**GraphRAG (Microsoft)** — Builds a knowledge graph from documents, then retrieves subgraphs instead of flat chunks. 1.5x better on complex, multi-hop queries vs. naive RAG. The architecture aligns directly with Engram's DAG model — this is a natural vector for v2.
+**GraphRAG (Microsoft)** — Builds a knowledge graph from documents, then retrieves subgraphs instead of flat chunks. 1.5x better on complex, multi-hop queries vs. naive RAG. The architecture aligns directly with Waystone's DAG model — this is a natural vector for v2.
 
-**RAPTOR** — Hierarchical summarization tree: raw chunks at leaves, progressively higher-level summaries at parent nodes. Retrieval searches all levels. 72% compression, 20-point improvement on the QuALITY benchmark. Applicable to long-document summarization within Engram's extraction pipeline.
+**RAPTOR** — Hierarchical summarization tree: raw chunks at leaves, progressively higher-level summaries at parent nodes. Retrieval searches all levels. 72% compression, 20-point improvement on the QuALITY benchmark. Applicable to long-document summarization within Waystone's extraction pipeline.
 
 **HippoRAG** (NeurIPS 2024) — Integrates a "hippocampal index" (knowledge graph) with a "cortical" dense retrieval layer. Outperforms standard RAG on multi-hop reasoning. Directly complements the planned sqlite-vec work for hybrid graph + vector search.
 
-**Mem0** — Persistent memory layer with automatic tiered storage (working, episodic, long-term). 90% token reduction, 91% latency reduction vs. full context injection. This is Engram's closest direct competitor — worth a deep comparison.
+**Mem0** — Persistent memory layer with automatic tiered storage (working, episodic, long-term). 90% token reduction, 91% latency reduction vs. full context injection. This is Waystone's closest direct competitor — worth a deep comparison.
 
-**Hybrid Search (vector + BM25 + reranking)** — 580% recall improvement on sparse-only retrieval baselines. The practical pattern: BM25 for keyword precision, dense vectors for semantic coverage, cross-encoder reranker to re-rank the union. This is the retrieval stack to build for Engram v2.
+**Hybrid Search (vector + BM25 + reranking)** — 580% recall improvement on sparse-only retrieval baselines. The practical pattern: BM25 for keyword precision, dense vectors for semantic coverage, cross-encoder reranker to re-rank the union. This is the retrieval stack to build for Waystone v2.
 
 **HyDE (Hypothetical Document Embeddings)** — For a query, generate a hypothetical ideal answer first, then embed that answer (not the query) for retrieval. Consistently better recall than embedding the raw query. Zero additional training required.
 
-**Agentic RAG** — RAG inside the agent loop: agent decides when to retrieve, what to retrieve, and whether to iterate. Outperforms single-pass RAG on complex multi-step tasks. Pairs with Engram's context_broker_query as the retrieval action inside a ReAct loop.
+**Agentic RAG** — RAG inside the agent loop: agent decides when to retrieve, what to retrieve, and whether to iterate. Outperforms single-pass RAG on complex multi-step tasks. Pairs with Waystone's context_broker_query as the retrieval action inside a ReAct loop.
 
 ---
 
@@ -253,7 +253,7 @@ The current keyword tag + BFS retrieval model in Engram is well-suited for struc
 
 **Infrastructure-Level Wins**
 - **Async tool execution**: 1.6–5.4x latency reduction; fire independent tool calls simultaneously rather than sequentially. This is architecture, not infra — free to implement.
-- **LMCache** (KV cache reuse across requests): 3–10x TTFT improvement for repeated prefixes. High value for Engram's use case where system prompts are static.
+- **LMCache** (KV cache reuse across requests): 3–10x TTFT improvement for repeated prefixes. High value for Waystone's use case where system prompts are static.
 - **MorphKV**: 52.9% KV cache memory savings via token importance scoring. Extends effective context length without hardware changes.
 
 **Cost Routing**
@@ -317,7 +317,7 @@ ReAct loop (or ReWOO for plan-first tasks)
   + trajectory evaluation (not just outcome grading)
   + prompt caching (system prompt)
   + RouteLLM routing (cheap classifier → expensive executor)
-  + Engram episodic memory (context injection + supersedes)
+  + Waystone episodic memory (context injection + supersedes)
   + hybrid retrieval (BM25 + vectors + reranker) when needed
   + exponential backoff + circuit breakers on all API calls
   + LLM-as-Judge evaluation (calibrated, pairwise)

@@ -27,14 +27,21 @@ Stage only `SALES_PITCHES.md` and the updated `.gitignore`. Do NOT stage `.claud
 
 ### 1a. Fastest path to first revenue (Week 1-2)
 
-**Landing page + LemonSqueezy checkout.** No custom billing code yet.
+**Landing page + Stripe Checkout.** No custom billing code beyond the webhook handler.
 
-- Create LemonSqueezy products: Pro ($20/mo), Team ($80/mo)
-- Landing page with pricing table -> LemonSqueezy checkout links
-- On payment webhook -> manually provision an API key and email it
-- This is a "Wizard of Oz" approach -- automate the payment, manual-provision the key
+- Create Stripe products: Pro ($20/mo), Team ($80/mo) with recurring prices
+- Set `metadata.price_id` on each Stripe Checkout session so the webhook can map to a tier
+- Landing page with pricing table → Stripe Checkout links
+- Stripe webhook (`checkout.session.completed`) → auto-provision API key + email customer
+- Cancellation webhook (`customer.subscription.deleted`) → revoke key by Stripe customer ID
 
-**Why LemonSqueezy over Stripe:** Merchant-of-record handles tax/VAT/compliance. Solo developer doesn't deal with Stripe Tax or international invoicing.
+**Why Stripe:** Best-in-class docs, widest payment method support, no application process.
+**Tax note:** Not a merchant of record — add Stripe Tax when ≥3 EU customers request VAT invoices.
+
+**Stripe env vars required on Railway:**
+- `STRIPE_WEBHOOK_SECRET` — from Stripe webhook endpoint settings
+- `STRIPE_PRO_PRICE_ID`, `STRIPE_PRO_ANNUAL_PRICE_ID`
+- `STRIPE_TEAM_PRICE_ID`, `STRIPE_TEAM_ANNUAL_PRICE_ID`
 
 ### 1b. Per-user API keys + tier enforcement (Week 2-3)
 
@@ -74,7 +81,7 @@ Submit `context-broker` to:
 - Cursor marketplace
 - Windsurf marketplace
 
-The MCP server already works (`engram mcp-serve`). This is just writing marketplace listings using existing `GETTING_STARTED.md` and `SALES_PITCHES.md` as source material.
+The MCP server already works (`waystone mcp-serve`). This is just writing marketplace listings using existing `GETTING_STARTED.md` and `SALES_PITCHES.md` as source material.
 
 ### What NOT to build for monetization yet
 

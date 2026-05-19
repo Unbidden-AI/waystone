@@ -15,7 +15,7 @@ Each entry includes the question index, what was (and wasn't) retrieved, and a d
 - **Node that should have been retrieved:** ...
 - **Why it was missed:** ...
   - tag mismatch / BFS depth / token budget cutoff / wrong entry node / ...
-- **Config:** engram_default_topk100 | engram_semantic_rerank_topk100 | ...
+- **Config:** waystone_default_topk100 | waystone_semantic_rerank_topk100 | ...
 - **Session source:** conv-26/session_N
 - **Status:** open
 ```
@@ -29,7 +29,7 @@ Each entry includes the question index, what was (and wasn't) retrieved, and a d
 - **Ground truth answer:** dinosaurs, nature
 - **Node that should have been retrieved:** `n_7464db14` — "Melanie's kids were stoked about the dinosaur exhibit at the museum." (tags: `["melanie", "kids", "museum", "dinosaur exhibit", "excitement"]`)
 - **Why it was missed:** Tag mismatch. The query keywords from "what do Melanie's kids like" produce terms like "melanie", "kids", "like" — none of which overlap with `"dinosaur exhibit"` or `"museum"`. The node is retrievable only if the query contains "dinosaur" or "museum". BFS never starts from this node.
-- **Config:** engram_semantic_rerank_topk100
+- **Config:** waystone_semantic_rerank_topk100
 - **Session source:** conv-26 (session unknown — museum visit)
 - **Status:** open
 

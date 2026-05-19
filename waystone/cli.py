@@ -1198,7 +1198,7 @@ def savings(ctx, project, top_k, queries):
         ("Claude Sonnet 4.6",     3.00),
     ]
 
-    click.echo(f"\nEngram Memory Savings — {project}")
+    click.echo(f"\nWaystone Memory Savings — {project}")
     click.echo("─" * 52)
     click.echo(f"Graph:             {node_count:,} nodes  ·  {stats['edge_count']:,} edges")
     click.echo(f"Avg node size:     ~{int(avg_tokens_per_node)} tokens  ({int(avg_node_chars)} chars)")
@@ -2766,14 +2766,14 @@ def resume_cmd():
 
 
 # ---------------------------------------------------------------------------
-# Orchestrator REPL (imported from orchestrator package)
+# Pilot REPL (imported from pilot package)
 # ---------------------------------------------------------------------------
 
 try:
-    from orchestrator.cli import main as _orchestrate_cmd
+    from pilot.cli import main as _orchestrate_cmd
     cli.add_command(_orchestrate_cmd, name="orchestrate")
 except ImportError:
-    pass  # orchestrator package not installed — skip gracefully
+    pass  # pilot package not installed — skip gracefully
 
 
 # ---------------------------------------------------------------------------

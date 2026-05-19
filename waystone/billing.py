@@ -1,17 +1,17 @@
 """Billing and API key management for Waystone hosted service.
 
 Admin DB schema (separate from per-project graph DBs):
-  api_keys  — key_hash, tier, email, org_id, created_at, last_used, is_revoked
+  api_keys  — key_hash, tier, email, org_id, stripe_customer_id, created_at, last_used, is_revoked
   usage_log — key_hash, project, action, input_chars, timestamp
 
 Environment variables:
-  CB_ADMIN_DB       — path to admin.db (default: ~/.waystone/admin.db)
-  LS_WEBHOOK_SECRET         — LemonSqueezy webhook signing secret
-  LS_PRO_VARIANT_ID         — LemonSqueezy variant ID for Pro monthly
-  LS_PRO_ANNUAL_VARIANT_ID  — LemonSqueezy variant ID for Pro annual
-  LS_TEAM_VARIANT_ID        — LemonSqueezy variant ID for Team monthly
-  LS_TEAM_ANNUAL_VARIANT_ID — LemonSqueezy variant ID for Team annual
-  RESEND_API_KEY    — Resend email API key (omit for dev/stdout mode)
+  CB_ADMIN_DB              — path to admin.db (default: ~/.waystone/admin.db)
+  STRIPE_WEBHOOK_SECRET    — Stripe webhook endpoint signing secret
+  STRIPE_PRO_PRICE_ID      — Stripe price ID for Pro monthly
+  STRIPE_PRO_ANNUAL_PRICE_ID  — Stripe price ID for Pro annual
+  STRIPE_TEAM_PRICE_ID     — Stripe price ID for Team monthly
+  STRIPE_TEAM_ANNUAL_PRICE_ID — Stripe price ID for Team annual
+  RESEND_API_KEY           — Resend email API key (omit for dev/stdout mode)
 """
 
 from __future__ import annotations
@@ -96,22 +96,31 @@ def open_admin_db(db_path: Path | None = None) -> sqlite3.Connection:
 def init_admin_db(conn: sqlite3.Connection) -> None:
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS api_keys (
-            key_hash   TEXT PRIMARY KEY,
-            tier       TEXT NOT NULL DEFAULT 'free',
-            email      TEXT NOT NULL DEFAULT '',
-            org_id     TEXT NOT NULL DEFAULT '',
-            created_at TEXT NOT NULL,
-            last_used  TEXT,
-            is_revoked INTEGER NOT NULL DEFAULT 0
+            key_hash           TEXT PRIMARY KEY,
+            tier               TEXT NOT NULL DEFAULT 'free',
+            email              TEXT NOT NULL DEFAULT '',
+            org_id             TEXT NOT NULL DEFAULT '',
+            created_at         TEXT NOT NULL,
+            last_used          TEXT,
+            is_revoked         INTEGER NOT NULL DEFAULT 0
         );
         CREATE INDEX IF NOT EXISTS idx_api_keys_email ON api_keys(email);
 """)
-    # Migration: add raw_key column for account page key retrieval
+    # Migrations: add columns added after initial schema
+    for col, definition in [
+        ("raw_key", "TEXT"),
+        ("stripe_customer_id", "TEXT"),
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE api_keys ADD COLUMN {col} {definition}")
+            conn.commit()
+        except Exception:
+            pass  # Column already exists
     try:
-        conn.execute("ALTER TABLE api_keys ADD COLUMN raw_key TEXT")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_api_keys_stripe ON api_keys(stripe_customer_id)")
         conn.commit()
     except Exception:
-        pass  # Column already exists
+        pass
     conn.executescript("""
 
         CREATE TABLE IF NOT EXISTS usage_log (
@@ -152,15 +161,22 @@ def generate_api_key() -> tuple[str, str]:
     return raw, _hash_key(raw)
 
 
-def create_key(conn: sqlite3.Connection, email: str, tier: str = "free", org_id: str = "") -> str:
+def create_key(
+    conn: sqlite3.Connection,
+    email: str,
+    tier: str = "free",
+    org_id: str = "",
+    stripe_customer_id: str = "",
+) -> str:
     """Insert a new API key row and return the raw key (caller must deliver it)."""
     if tier not in TIERS:
         raise ValueError(f"Unknown tier: {tier!r}")
     raw, key_hash = generate_api_key()
     now = datetime.now(timezone.utc).isoformat()
     conn.execute(
-        "INSERT INTO api_keys (key_hash, raw_key, tier, email, org_id, created_at, is_revoked) VALUES (?, ?, ?, ?, ?, ?, 0)",
-        (key_hash, raw, tier, email, org_id, now),
+        "INSERT INTO api_keys (key_hash, raw_key, tier, email, org_id, stripe_customer_id, created_at, is_revoked) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, 0)",
+        (key_hash, raw, tier, email, org_id, stripe_customer_id, now),
     )
     conn.commit()
     return raw
@@ -314,7 +330,7 @@ def send_key_email(email: str, raw_key: str, tier: str, admin_conn: sqlite3.Conn
             "https://api.resend.com/emails",
             headers={"Authorization": f"Bearer {resend_key}"},
             json={
-                "from": "Waystone <noreply@engram.unbidden.ai>",
+                "from": "Waystone <noreply@waystone.unbidden.ai>",
                 "to": [email],
                 "subject": subject,
                 "text": body,
@@ -394,7 +410,7 @@ def retry_dead_letter_emails(admin_conn: sqlite3.Connection, max_retries: int = 
                 "https://api.resend.com/emails",
                 headers={"Authorization": f"Bearer {resend_key}"},
                 json={
-                    "from": "Waystone <noreply@engram.unbidden.ai>",
+                    "from": "Waystone <noreply@waystone.unbidden.ai>",
                     "to": [email],
                     "subject": subject,
                     "text": body,
@@ -425,40 +441,71 @@ def retry_dead_letter_emails(admin_conn: sqlite3.Connection, max_retries: int = 
 
 
 # ---------------------------------------------------------------------------
-# LemonSqueezy webhook helpers
+# Stripe webhook helpers
 # ---------------------------------------------------------------------------
 
-def verify_ls_signature(body: bytes, signature: str) -> bool:
-    """Verify X-Signature header from LemonSqueezy webhook."""
-    secret = os.environ.get("LS_WEBHOOK_SECRET", "")
+def verify_stripe_signature(body: bytes, sig_header: str) -> bool:
+    """Verify Stripe-Signature header from Stripe webhook.
+
+    Stripe signs webhooks with HMAC-SHA256 of "{timestamp}.{raw_body}".
+    The header format is: t=<timestamp>,v1=<hex_sig>[,v1=<hex_sig>...]
+    """
+    secret = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
     if not secret:
         return False
-    expected = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
-    return hmac.compare_digest(expected, signature)
+
+    timestamp = ""
+    v1_sigs: list[str] = []
+    for part in sig_header.split(","):
+        if "=" not in part:
+            continue
+        k, v = part.split("=", 1)
+        k = k.strip()
+        if k == "t":
+            timestamp = v.strip()
+        elif k == "v1":
+            v1_sigs.append(v.strip())
+
+    if not timestamp or not v1_sigs:
+        return False
+
+    signed_payload = timestamp.encode() + b"." + body
+    expected = hmac.new(secret.encode(), signed_payload, hashlib.sha256).hexdigest()
+    return any(hmac.compare_digest(expected, sig) for sig in v1_sigs)
 
 
-def tier_from_variant(variant_id: str) -> str:
-    """Map a LemonSqueezy variant ID to a tier name.
+def tier_from_price(price_id: str) -> str:
+    """Map a Stripe price ID to a tier name.
 
-    Checks both monthly and annual variant IDs for each tier:
-      LS_PRO_VARIANT_ID        — Pro monthly
-      LS_PRO_ANNUAL_VARIANT_ID — Pro annual
-      LS_TEAM_VARIANT_ID       — Team monthly
-      LS_TEAM_ANNUAL_VARIANT_ID — Team annual
+    Checks both monthly and annual price IDs for each tier:
+      STRIPE_PRO_PRICE_ID          — Pro monthly
+      STRIPE_PRO_ANNUAL_PRICE_ID   — Pro annual
+      STRIPE_TEAM_PRICE_ID         — Team monthly
+      STRIPE_TEAM_ANNUAL_PRICE_ID  — Team annual
     """
     team_ids = {
-        os.environ.get("LS_TEAM_VARIANT_ID", ""),
-        os.environ.get("LS_TEAM_ANNUAL_VARIANT_ID", ""),
+        os.environ.get("STRIPE_TEAM_PRICE_ID", ""),
+        os.environ.get("STRIPE_TEAM_ANNUAL_PRICE_ID", ""),
     } - {""}
-    if variant_id in team_ids:
+    if price_id in team_ids:
         return "team"
     pro_ids = {
-        os.environ.get("LS_PRO_VARIANT_ID", ""),
-        os.environ.get("LS_PRO_ANNUAL_VARIANT_ID", ""),
+        os.environ.get("STRIPE_PRO_PRICE_ID", ""),
+        os.environ.get("STRIPE_PRO_ANNUAL_PRICE_ID", ""),
     } - {""}
-    if variant_id in pro_ids:
+    if price_id in pro_ids:
         return "pro"
     return "free"
+
+
+def revoke_key_by_stripe_customer(conn: sqlite3.Connection, stripe_customer_id: str) -> int:
+    """Revoke all active keys for a Stripe customer ID (subscription deleted). Returns count."""
+    cur = conn.execute(
+        "UPDATE api_keys SET is_revoked = 1 WHERE stripe_customer_id = ? AND is_revoked = 0",
+        (stripe_customer_id,),
+    )
+    conn.commit()
+    return cur.rowcount
 
 
 # ---------------------------------------------------------------------------

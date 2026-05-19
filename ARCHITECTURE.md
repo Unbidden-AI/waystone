@@ -101,18 +101,18 @@ naturally exclude them from normal responses. Implemented as `apply_soft_superse
 
 Three named configs in `benchmarks/locomo/ablation_configs.py` isolate each component:
 
-- `engram_romem_typedecay` — per-type half-lives only (Step 1)
-- `engram_romem_phase` — phase rotation only (Step 2)
-- `engram_romem_full` — all three: per-type half-lives + phase rotation + soft supersede
+- `waystone_romem_typedecay` — per-type half-lives only (Step 1)
+- `waystone_romem_phase` — phase rotation only (Step 2)
+- `waystone_romem_full` — all three: per-type half-lives + phase rotation + soft supersede
 
-All reuse the `engram_dedup95` extraction checkpoint. No re-extraction is needed.
+All reuse the `waystone_dedup95` extraction checkpoint. No re-extraction is needed.
 
 To run the ablation:
 
 ```bash
 python -m benchmarks.locomo.harness \
   --dataset benchmarks/locomo/data/locomo10.json \
-  --configs engram_dedup95 engram_romem_typedecay engram_romem_phase engram_romem_full \
+  --configs waystone_dedup95 waystone_romem_typedecay waystone_romem_phase waystone_romem_full \
   --split dev \
   --llm-judge \
   --output benchmarks/locomo/results/romem_ablation_$(date +%Y%m%d).json

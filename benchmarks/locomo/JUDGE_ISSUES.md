@@ -39,7 +39,7 @@ Judge labels: **A** = qwen3-8b (tends lenient), **B** = qwen3.5-9b (tends strict
 - **Which judge failed:** B (qwen3.5-9b)
 - **Failure mode:** temporal inference rejection
 - **Diagnosis:** qwen3.5-9b required the literal string "7 May 2023" (or equivalent) to appear in the context. "The day before May 8" encodes the same date but requires a one-step arithmetic inference. The model refused to perform this inference and returned 0.0. qwen3-8b correctly derived May 7 from the relative date expression.
-- **Config:** engram_semantic_rerank_topk100
+- **Config:** waystone_semantic_rerank_topk100
 - **Status:** open
 
 ---
@@ -53,7 +53,7 @@ Judge labels: **A** = qwen3-8b (tends lenient), **B** = qwen3.5-9b (tends strict
 - **Which judge failed:** B (qwen3.5-9b)
 - **Failure mode:** framing mismatch — too strict
 - **Diagnosis:** qwen3.5-9b penalized because the context didn't explicitly frame the events as "to help children" — the nodes described the events themselves (school speech, mentoring), not their purpose. The judge demanded purpose-language that matched the question framing, even though the answer was fully supported. qwen3-8b correctly credited the factual match.
-- **Config:** engram_semantic_rerank_topk100
+- **Config:** waystone_semantic_rerank_topk100
 - **Status:** open
 
 ---
@@ -74,7 +74,7 @@ Judge labels: **A** = qwen3-8b (tends lenient), **B** = qwen3.5-9b (tends strict
 - **Failure mode:** A too lenient (1.0 despite museum/swimming absent); B too strict (0.0 despite 3 items present)
 - **Diagnosis:** Compound failure. Ground truth has 6 items but only 4 are real (swimming hallucinated). Of the 4 real ones, 3 were in context and 1 was a retrieval miss (museum). Correct score is ~0.5 PARTIAL. qwen3-8b overcredited — gave full YES despite two items absent. qwen3.5-9b overcorrected — gave full NO despite three items clearly present. Neither judge handled partial enumeration correctly.
 - **Note:** This case also appears in BENCHMARK_ISSUES.md (swimming) and RETRIEVAL_ISSUES.md (museum).
-- **Config:** engram_semantic_rerank_topk100
+- **Config:** waystone_semantic_rerank_topk100
 - **Status:** open
 
 ---
@@ -91,7 +91,7 @@ Judge labels: **A** = qwen3-8b (tends lenient), **B** = qwen3.5-9b (tends strict
 - **Which judge failed:** B (qwen3.5-9b)
 - **Failure mode:** counting failure — too strict
 - **Diagnosis:** qwen3.5-9b latched onto "once or twice a year" as imprecise and concluded the context didn't definitively confirm "2". But the context contains two *specific* beach trip events in 2023 (June camping trip + July beach day). The judge failed to count distinct event mentions and instead treated the frequency statement as the only evidence. qwen3-8b gave the correct verdict.
-- **Config:** engram_semantic_rerank_topk100
+- **Config:** waystone_semantic_rerank_topk100
 - **Status:** open
 
 ---
@@ -105,7 +105,7 @@ Judge labels: **A** = qwen3-8b (tends lenient), **B** = qwen3.5-9b (tends strict
 - **Which judge failed:** B (qwen3.5-9b)
 - **Failure mode:** inferential reasoning rejection
 - **Diagnosis:** No single node says "Melanie likes the outdoors" — the evidence is circumstantial (she camps, goes to the beach, takes kids to parks, finds parks fun). qwen3.5-9b demanded an explicit preference statement and gave 0.0. qwen3-8b correctly synthesized the behavioral evidence. This is a preference-inference question: the correct evaluation requires reasoning from activity patterns, not matching a single fact.
-- **Config:** engram_semantic_rerank_topk100
+- **Config:** waystone_semantic_rerank_topk100
 - **Status:** open
 
 ---
@@ -119,7 +119,7 @@ Judge labels: **A** = qwen3-8b (tends lenient), **B** = qwen3.5-9b (tends strict
 - **Which judge failed:** B (qwen3.5-9b)
 - **Failure mode:** semantic equivalence rejection
 - **Diagnosis:** The ground truth uses adjectives ("thoughtful", "authentic", "driven") but the context expresses the same traits through behavioral observations and Melanie's own statements. qwen3.5-9b required verbatim trait labels; qwen3-8b correctly mapped caring→thoughtful, authentic-living→authentic, passion+pursuit→driven. Semantic synonym matching is the core skill being tested here.
-- **Config:** engram_semantic_rerank_topk100
+- **Config:** waystone_semantic_rerank_topk100
 - **Status:** open
 
 ---
@@ -143,7 +143,7 @@ Judge labels: **A** = qwen3-8b (tends lenient), **B** = qwen3.5-9b (tends strict
 ### Known judge failure modes (qwen3-8b)
 - **Enumeration leniency**: For multi-item answers, returns 1.0 if most items are present — even when significant items are absent. Should return PARTIAL but returns full YES.
 
-### Calibration summary (conv-26, engram_semantic_rerank_topk100, thinking=off)
+### Calibration summary (conv-26, waystone_semantic_rerank_topk100, thinking=off)
 - qwen3-8b: **91.0%** (n=199)
 - qwen3.5-9b: **56.8%** (n=199)
 - Disagreements: **74/199 (37%)**

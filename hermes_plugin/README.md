@@ -4,7 +4,7 @@ Plugs Waystone's DAG-based knowledge graph into [Hermes Agent](https://github.co
 
 - **`prefetch()`** — BFS retrieval injects structured context (decisions, constraints, implementations) before each LLM call
 - **`sync_turn()`** — incremental fact extraction runs in the background after each turn; the graph grows automatically
-- **Tools** — exposes `engram_query` (semantic BFS search) and `engram_recall` (tag-based lookup) to the Hermes LLM
+- **Tools** — exposes `waystone_query` (semantic BFS search) and `waystone_recall` (tag-based lookup) to the Hermes LLM
 
 ## Why Waystone vs other Hermes memory providers
 
@@ -50,10 +50,10 @@ Run `hermes memory setup` and select `waystone`. You'll be prompted for:
 ### Via environment variables
 
 ```bash
-export ENGRAM_PROJECT=my-project
-export ENGRAM_TOP_K=15
-export ENGRAM_HOPS=3
-export ENGRAM_EXTRACT=1   # set to "0" to disable auto-extraction
+export WAYSTONE_PROJECT=my-project
+export WAYSTONE_TOP_K=15
+export WAYSTONE_HOPS=3
+export WAYSTONE_EXTRACT=1   # set to "0" to disable auto-extraction
 ```
 
 ## Setup
@@ -78,7 +78,7 @@ The graph grows automatically as Hermes has conversations — each session's tur
 Hermes LLM call
      │
      ▼ prefetch(query)                     ← BFS retrieval, sub-second
-EngramMemoryProvider
+WaystoneMemoryProvider
      │ returns structured markdown context
      ▼
 LLM call with context injected

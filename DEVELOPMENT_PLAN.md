@@ -1,6 +1,6 @@
 # Orchestrator Development Plan
 
-This document covers the *how* of building the orchestrator — agent workflows, milestone sequencing, and process conventions. See `ORCHESTRATOR_PLAN.md` for the *what* — architecture, module designs, and code.
+This document covers the *how* of building the orchestrator — agent workflows, milestone sequencing, and process conventions. See `PILOT_PLAN.md` for the *what* — architecture, module designs, and code.
 
 ---
 
@@ -50,10 +50,10 @@ QA agent outputs test results directly to the orchestrator. All failing tests mu
 **Deliverables:**
 - Add `litellm` to `pyproject.toml` dependencies
 - Add `tiktoken` to `pyproject.toml` (accurate token estimation)
-- Add `orchestrator` package to `pyproject.toml` entry points (`engram chat`)
-- Extend `config.yaml` with `orchestrator:` section (schema in `ORCHESTRATOR_PLAN.md`)
-- Create `orchestrator/` directory with `__init__.py`
-- Create `tests/test_orchestrator/` directory with `__init__.py`
+- Add `pilot` package to `pyproject.toml` entry points (`waystone chat`)
+- Extend `config.yaml` with `pilot:` section (schema in `PILOT_PLAN.md`)
+- Create `pilot/` directory with `__init__.py`
+- Create `tests/test_pilot/` directory with `__init__.py`
 - Create `CHANGELOG.md`
 
 **Agents:** GitHub (Haiku) — commit skeleton
@@ -66,7 +66,7 @@ QA agent outputs test results directly to the orchestrator. All failing tests mu
 **The communication layer — everything else depends on this**
 
 **Deliverables:**
-- `orchestrator/types.py`
+- `pilot/types.py`
   - `Message` dataclass (role, content, timestamp, token_estimate, tool_call_id)
   - `ToolCall` dataclass (id, name, args)
   - `ToolResult` dataclass (tool_call_id, name, output, error)
@@ -74,7 +74,7 @@ QA agent outputs test results directly to the orchestrator. All failing tests mu
   - `ConversationState` dataclass
   - `CompactionResult` dataclass (nodes_extracted, messages_removed, tokens_freed)
 
-- `orchestrator/llm_adapter.py`
+- `pilot/llm_adapter.py`
   - `async call_llm(messages, system, config, tools=None) -> tuple[str | None, list[ToolCall] | None, str]`
   - `estimate_tokens(text) -> int` (~4 chars/token, tiktoken for accuracy)
   - `build_tool_schemas(enabled_tools) -> list[dict]`
@@ -118,7 +118,7 @@ Note: Anthropic-side 500s hitting *Claude Code itself* (as seen in this session)
 **Local execution — highest security surface area in Phase 1**
 
 **Deliverables:**
-- `orchestrator/tool_executor.py`
+- `pilot/tool_executor.py`
   - `execute_tool(name, args) -> str` — dispatcher
   - `bash(command, cwd, timeout=30) -> str` — subprocess execution
   - `read_file(path) -> str`
@@ -157,7 +157,7 @@ Note: Anthropic-side 500s hitting *Claude Code itself* (as seen in this session)
 **The core — sliding window + proactive compaction. Most complex module.**
 
 **Deliverables:**
-- `orchestrator/context_manager.py`
+- `pilot/context_manager.py`
   - `ContextManager(store, config, project)` class
   - `add_message(msg) -> None` — append + check compaction
   - `should_compact() -> CompactionTrigger | None`
@@ -205,7 +205,7 @@ Note: Anthropic-side 500s hitting *Claude Code itself* (as seen in this session)
 **Dynamic per-turn system prompt composition**
 
 **Deliverables:**
-- `orchestrator/system_prompt_builder.py`
+- `pilot/system_prompt_builder.py`
   - `build_system_prompt(context_markdown, config) -> str`
   - Node grouping by type (decision > constraint > implementation > resolved > preference > question)
   - Token budget enforcement for context section
@@ -230,7 +230,7 @@ Note: Anthropic-side 500s hitting *Claude Code itself* (as seen in this session)
 **Main loop — first working end-to-end prototype**
 
 **Deliverables:**
-- `orchestrator/conversation.py`
+- `pilot/conversation.py`
   - `ConversationOrchestrator(project, config)` class
   - `async process_turn(user_input) -> str` — full loop with tool call handling
   - Tool call retry loop (max 5 iterations)
@@ -238,8 +238,8 @@ Note: Anthropic-side 500s hitting *Claude Code itself* (as seen in this session)
   - `/context`, `/stats`, `/compact`, `/reset`, `/quit` command handlers
   - `run_interactive()` — REPL entry point
 
-- `orchestrator/cli.py`
-  - `engram chat <project> [--config CONFIG] [--model MODEL] [--dry-run]`
+- `pilot/cli.py`
+  - `waystone chat <project> [--config CONFIG] [--model MODEL] [--dry-run]`
   - `--dry-run`: prints composed system prompt + message list without calling LLM
 
 **process_turn flow:**
@@ -286,11 +286,11 @@ Return text to user
 **End-to-end validation before Phase 1 is "done"**
 
 **Deliverables:**
-- Full integration test suite in `tests/test_orchestrator/test_integration.py`
+- Full integration test suite in `tests/test_pilot/test_integration.py`
 - Token efficiency benchmark (measure reduction vs. naive full-history)
 - Full Phase 1 security audit across all modules together
 - Holistic code review now that the full system works
-- `ORCHESTRATOR_PLAN.md` updated with any design changes made during implementation
+- `PILOT_PLAN.md` updated with any design changes made during implementation
 - `CHANGELOG.md` updated
 
 **Agent sequence:**
@@ -325,7 +325,7 @@ After Phase 1 stabilizes. Each milestone follows the same agent sequence pattern
 | **2.5** | Planning / decomposition (ReAct-style reasoning, task breakdown) | Research (Opus) + Code Review (Sonnet) |
 | **2.6** | TUI / IDE integration (Rich terminal UI or VS Code extension) | Code Review + QA + Security |
 | **2.7** | Adaptive strategies (learn which retrieval strategies work best per project) | Research + QA |
-| **2.8** | Health dashboard (`engram inspect` CLI + optional local web panel): node density, BFS depth distribution, retrieval score histograms, type breakdown, token budget utilization — actionable signals for extraction/retrieval quality without ground truth | Code Review + QA |
+| **2.8** | Health dashboard (`waystone inspect` CLI + optional local web panel): node density, BFS depth distribution, retrieval score histograms, type breakdown, token budget utilization — actionable signals for extraction/retrieval quality without ground truth | Code Review + QA |
 | **2.9** | On-the-fly accuracy monitoring: self-supervised synthetic QA generation from extracted nodes, retrieval tested against generated questions, anomaly alerts surfaced via health metrics | Research (Sonnet) + QA |
 | **2.10** | Dynamic `extraction_focus` generation: auto-generate domain `extraction_focus` from first session sample rather than hand-authoring; fires when domain detection confidence is low; generated focus injected on top of generic domain schema | Research + QA |
 
@@ -341,9 +341,9 @@ After Phase 1 stabilizes. Each milestone follows the same agent sequence pattern
 
 3. **Structured logging** — Python `logging` module with configurable level (`orchestrator.log_level` in config). Essential for debugging background extraction. QA verifies log output at each milestone.
 
-4. **`tests/test_orchestrator/` directory** — parallel to `tests/test_store.py`. QA agent owns this directory. Tests committed with each milestone, never after.
+4. **`tests/test_pilot/` directory** — parallel to `tests/test_store.py`. QA agent owns this directory. Tests committed with each milestone, never after.
 
-5. **`--dry-run` flag on `engram chat`** — prints composed system prompt + message list without calling LLM. Invaluable for debugging token budget and context composition without burning API credits.
+5. **`--dry-run` flag on `waystone chat`** — prints composed system prompt + message list without calling LLM. Invaluable for debugging token budget and context composition without burning API credits.
 
 6. **Graceful degradation** — if graph DB is unavailable or corrupted, conversation loop continues without context rather than crashing. QA tests this explicitly.
 

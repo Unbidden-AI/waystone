@@ -1,17 +1,17 @@
-# Unbidden Engram — Product Roadmap
+# Unbidden Waystone — Product Roadmap
 
 **Company:** Unbidden (`unbidden.ai`)
-**Product:** Unbidden Engram
-**CLI:** `engram`
+**Product:** Unbidden Waystone
+**CLI:** `waystone`
 **Document created:** March 22, 2026
 
 ---
 
-## What Engram Is
+## What Waystone Is
 
-Engram is an AI context middleware layer that extracts structured facts from conversation transcripts, stores them in a SQLite DAG, and surfaces relevant context proactively — before agents have to ask for it. It operates across tools, sessions, and agents, maintaining per-agent databases with self-generated guidelines and a cross-agent shared knowledge layer.
+Waystone is an AI context middleware layer that extracts structured facts from conversation transcripts, stores them in a SQLite DAG, and surfaces relevant context proactively — before agents have to ask for it. It operates across tools, sessions, and agents, maintaining per-agent databases with self-generated guidelines and a cross-agent shared knowledge layer.
 
-**Core metaphor:** An engram is the physical memory trace left in neural tissue after an experience. Engram does the same for AI agents — encoding the residue of conversation into retrievable, structured memory.
+**Core metaphor:** A waystone is a point of passage and orientation that guides travelers through complex terrain. Waystone does the same for AI agents — encoding the residue of conversation into retrievable, structured memory that guides context decisions.
 
 ---
 
@@ -73,45 +73,40 @@ Engram is an AI context middleware layer that extracts structured facts from con
 - [ ] Sentiment and tone tracking — adapt communication style per agent
 - [ ] Multi-turn threading — understand conversation arc, not just isolated messages
 - [ ] Fact deduplication — recognize when new facts restate existing ones
-  - **Semantic dedup pass (priority — graph is at 24K+ nodes):** Extend `engram reconcile` (or add `engram deduplicate`) to scan for paraphrase duplicates using embedding cosine similarity. SHA-256 hashing catches exact duplicates at insert time, but paraphrased restatements accumulate undetected over many sessions. At 24K+ nodes, even a 5% duplicate rate is ~1,200 redundant nodes competing for top_k retrieval slots — causing retrieval dilution, not broken retrieval.
+  - **Semantic dedup pass (priority — graph is at 24K+ nodes):** Extend `waystone reconcile` (or add `waystone deduplicate`) to scan for paraphrase duplicates using embedding cosine similarity. SHA-256 hashing catches exact duplicates at insert time, but paraphrased restatements accumulate undetected over many sessions. At 24K+ nodes, even a 5% duplicate rate is ~1,200 redundant nodes competing for top_k retrieval slots — causing retrieval dilution, not broken retrieval.
   - **Mechanism:** Pull pairs of nodes with cosine similarity above a threshold (e.g. 0.93+). Auto-merge the lower-confidence node into the higher-confidence one (or mark it superseded). Run threshold-gated in the background, same pattern as reconcile.
   - **Note:** The 30-node context injection at extraction time is a partial mitigation but has coverage gaps — old nodes on tangential topics may not surface in a session's top 30, so the LLM re-extracts the same fact without knowing it already exists.
 
 ---
 
 ### v4 — Integration Surface
-*Expands Engram's reach into the broader stack*
+*Expands Waystone's reach into the broader stack*
 
-**Goal:** More ways to plug Engram into any tool or workflow.
+**Goal:** More ways to plug Waystone into any tool or workflow.
 
-- [ ] REST API — expose Engram as a standalone service
+- [ ] REST API — expose Waystone as a standalone service
 - [ ] WebSocket support — real-time context streaming to agents
 - [ ] Broader MCP server coverage — more tools, more agents
 - [ ] OpenAI-compatible API wrapper — drop-in for any tool expecting OpenAI format
 - [ ] Claude Code native integration
 - [ ] LM Studio native integration
 - [ ] VS Code / Cursor plugin
-- [ ] CLI enhancements — `engram inspect`, `engram graph`, `engram export`
+- [ ] CLI enhancements — `waystone inspect`, `waystone graph`, `waystone export`
 
----
-
-### v5 — Agent Intelligence
-*Deeper context routing and agent awareness*
-
-**Goal:** Engram understands agents as first-class entities, not just storage buckets.
+**Goal:** Waystone understands agents as first-class entities, not just storage buckets.
 
 - [ ] Agent relationship mapping — which agents communicate with which
 - [ ] Context routing rules — agent A receives fact types X and Y, agent B receives Z
 - [ ] Broadcast vs. targeted context delivery
-- [ ] Agent specialization profiles — Engram learns what each agent cares about
+- [ ] Agent specialization profiles — Waystone learns what each agent cares about
 - [ ] Cross-session continuity — seamless pickup across sessions per agent
 - [ ] Multi-user support — context scoped to users, not just agents
-- [ ] Feedback loops — agents signal which context was useful, Engram adapts
+- [ ] Feedback loops — agents signal which context was useful, Waystone adapts
 
 ---
 
 ### v6 — Observability
-*Transparency into what Engram is doing and why*
+*Transparency into what Waystone is doing and why*
 
 **Goal:** Full visibility into context flow, retrieval decisions, and system health.
 
@@ -127,7 +122,7 @@ Engram is an AI context middleware layer that extracts structured facts from con
 ### v7 — Privacy and Security
 *Required before any enterprise or multi-user deployment*
 
-**Goal:** Engram is safe to run in regulated or sensitive environments.
+**Goal:** Waystone is safe to run in regulated or sensitive environments.
 
 - [ ] Fact-level encryption at rest
 - [ ] PII detection and automatic redaction
@@ -142,10 +137,10 @@ Engram is an AI context middleware layer that extracts structured facts from con
 ### v8 — Platform and SaaS
 *The commercial layer*
 
-**Goal:** Engram scales beyond a single developer to teams and organizations.
+**Goal:** Waystone scales beyond a single developer to teams and organizations.
 
 - [ ] Multi-tenant architecture
-- [ ] Cloud sync — local Engram instance syncs to encrypted cloud backup
+- [ ] Cloud sync — local Waystone instance syncs to encrypted cloud backup
 - [ ] Team shared knowledge — organizational context layer above agent layer
 - [ ] Admin dashboard — manage agents, users, context policies
 - [ ] Usage analytics — what context is being used, by whom, how often
@@ -163,7 +158,7 @@ These apply to every phase and every decision:
 3. **License hygiene** — MIT, Apache 2.0, BSD, and Public Domain only; avoid GPL and AGPL entirely
 4. **Clean storage abstraction** — storage implementation is swappable; the schema and extraction logic are the IP
 5. **Zero surprise dependencies** — every new dependency is a conscious decision, documented and licensed
-6. **Local by default** — Engram runs fully offline; cloud features are opt-in, never required
+6. **Local by default** — Waystone runs fully offline; cloud features are opt-in, never required
 7. **The proactive principle** — context should arrive unbidden; agents should never have to ask twice for the same thing
 
 ---
@@ -191,31 +186,31 @@ Distribution becomes relevant starting v3 when the integration surface expands. 
 
 **v1-v2 — Foundation channels**
 - **GitHub** — open core presence from day one; builds credibility, inbound developer interest, and a paper trail of serious engineering
-- **PyPI / npm** — table stakes for developer adoption; `pip install engram` should work from v1
+- **PyPI / npm** — table stakes for developer adoption; `pip install waystone` should work from v1
 
 **v3-v4 — Ecosystem channels**
-- **MCP marketplace** — as the MCP ecosystem matures, an Engram MCP server is a natural listing; high-intent audience of agent builders
+- **MCP marketplace** — as the MCP ecosystem matures, an Waystone MCP server is a natural listing; high-intent audience of agent builders
 - **LangChain / LlamaIndex integrations** — large developer audiences actively looking for memory and context solutions; an official integration drives inbound
 - **Hugging Face** — growing as an agent tooling hub beyond just models; worth a presence as the model fine-tuning work matures
-- **Claude Code ecosystem** — if Anthropic formalizes a plugin or extension marketplace, Engram is a natural fit given the deep Claude Code integration
+- **Claude Code ecosystem** — if Anthropic formalizes a plugin or extension marketplace, Waystone is a natural fit given the deep Claude Code integration
 
 **v5+ — Enterprise channels**
 - **Direct enterprise sales** — context management at scale is a real enterprise problem; outbound to AI engineering teams
-- **Consulting / implementation partners** — Unbidden as a company could build an implementation partner network around Engram deployments
+- **Consulting / implementation partners** — Unbidden as a company could build an implementation partner network around Waystone deployments
 - **Cloud marketplace listings** — AWS Marketplace, Azure Marketplace for enterprise procurement
 
 **What Apify is not:**
-Apify is a web scraping and data pipeline platform. Engram is an embedded agent memory layer. The audiences and use cases are orthogonal — Apify is not a distribution channel for Engram.
+Apify is a web scraping and data pipeline platform. Waystone is an embedded agent memory layer. The audiences and use cases are orthogonal — Apify is not a distribution channel for Waystone.
 
 ---
 
 ## Custom LLM Model Strategy
 
-Engram currently uses general-purpose LLMs (Qwen3-32B-4bit, Claude API) for extraction, reflection, and guideline generation. A purpose-built small model is a realistic and strategically valuable future direction.
+Waystone currently uses general-purpose LLMs (Qwen3-32B-4bit, Claude API) for extraction, reflection, and guideline generation. A purpose-built small model is a realistic and strategically valuable future direction.
 
-### Why it makes sense for Engram
+### Why it makes sense for Waystone
 
-Engram's LLM tasks are narrow, repeatable, and well-defined:
+Waystone's LLM tasks are narrow, repeatable, and well-defined:
 - Extract structured facts from raw conversation
 - Identify typed relationships between entities
 - Generate agent guidelines via reflection passes
@@ -226,7 +221,7 @@ These are exactly the tasks small fine-tuned models excel at. A 1-3B model tuned
 
 ### The data flywheel
 
-Every Engram installation generates training data: real conversations → real extracted facts → agent feedback on what was useful. Over time this becomes a proprietary dataset that no general-purpose model provider can replicate. That flywheel is a genuine, defensible competitive moat.
+Every Waystone installation generates training data: real conversations → real extracted facts → agent feedback on what was useful. Over time this becomes a proprietary dataset that no general-purpose model provider can replicate. That flywheel is a genuine, defensible competitive moat.
 
 ### Phased model development plan
 
@@ -252,14 +247,14 @@ Fine-tuning approach:
 
 #### Training data — positive examples (SFT)
 
-All nodes already in the graph are positive examples. `engram feedback <project> --export training.jsonl` exports them as `(transcript chunk → extracted fact)` pairs. SFT requires only positives; the existing pipeline already collects these.
+All nodes already in the graph are positive examples. `waystone feedback <project> --export training.jsonl` exports them as `(transcript chunk → extracted fact)` pairs. SFT requires only positives; the existing pipeline already collects these.
 
 #### Training data — negative examples (DPO, future)
 
 Three sources, ranked by signal quality:
 
 **1. `--capture-rejected` flag** *(not yet implemented)*
-Add a `rejected_extractions` table to `store.py`, keyed on `(transcript_hash, model_id)`. When running `engram extract` with a weaker model (e.g. Qwen 3.5 9B), pass `--capture-rejected` to save its raw JSON output without merging it into the graph. Pair with Gemini 2.5 Flash output on the same transcript:
+Add a `rejected_extractions` table to `store.py`, keyed on `(transcript_hash, model_id)`. When running `waystone extract` with a weaker model (e.g. Qwen 3.5 9B), pass `--capture-rejected` to save its raw JSON output without merging it into the graph. Pair with Gemini 2.5 Flash output on the same transcript:
 ```
 chosen   = Gemini nodes JSON for transcript X  (good extraction)
 rejected = Qwen raw JSON for transcript X       (weaker extraction)
@@ -269,20 +264,20 @@ This produces genuine DPO rows — same prompt, better vs. worse completion — 
 Implementation needed:
 - `store.py`: `rejected_extractions` table + `log_rejected(transcript_hash, model_id, raw_json)` method
 - `extractor.py`: save raw LLM response before parse/merge when flag is set
-- `cli.py`: `--capture-rejected` flag on `engram extract`
+- `cli.py`: `--capture-rejected` flag on `waystone extract`
 - `feedback.py`: `export_dpo_jsonl()` that joins `nodes` (chosen) with `rejected_extractions` (rejected) on `transcript_hash`
 
 **2. Parse/schema failures** *(already collected)*
 Any row in `extraction_failures` where `error_type IN ('json_parse', 'schema')` is an unambiguous rejected response — the model failed to produce valid output for a prompt that Gemini handles correctly. No labeling needed; use directly as DPO negatives.
 
 **3. Thumbs-down from auto-label** *(infrastructure exists, unused)*
-Run `engram feedback <project> --auto-label`. The LLM-as-judge down-rates vague, hallucinated, or over-broad nodes. These export as `label: -1` in the JSONL. Lower signal than option 1 but requires no additional extraction runs.
+Run `waystone feedback <project> --auto-label`. The LLM-as-judge down-rates vague, hallucinated, or over-broad nodes. These export as `label: -1` in the JSONL. Lower signal than option 1 but requires no additional extraction runs.
 
-**Phase 2 output:** A 1-3B model running at ~100 tokens/second locally, zero cost per call, tuned specifically for Engram's extraction tasks. Bundled with Engram so users need no external API for core functionality.
+**Phase 2 output:** A 1-3B model running at ~100 tokens/second locally, zero cost per call, tuned specifically for Waystone's extraction tasks. Bundled with Waystone so users need no external API for core functionality.
 
 **Phase 3 — Continuous improvement (v5+)**
-- Feedback loops from real Engram usage feed back into training data
-- Model versioning tied to Engram releases
+- Feedback loops from real Waystone usage feed back into training data
+- Model versioning tied to Waystone releases
 - Optional: publish model to Hugging Face under Unbidden brand
 - Full pretraining from scratch is likely overkill indefinitely — fine-tuning gives 90% of the benefit at 1% of the cost
 
@@ -299,8 +294,8 @@ Prefer Apache 2.0 or MIT base models for cleanest commercial licensing. Qwen2.5 
 
 ## Open Questions
 
-- [ ] CLI command confirmed as `engram` — verify no pip/npm package name conflict
-- [ ] Own licensing strategy for Engram itself — MIT/Apache open core vs. source available vs. proprietary
+- [ ] CLI command confirmed as `waystone` — verify no pip/npm package name conflict
+- [ ] Own licensing strategy for Waystone itself — MIT/Apache open core vs. source available vs. proprietary
 - [ ] v2 vector search: sqlite-vec vs. sqlite-vss — evaluate stability and feature set
 - [ ] MCP vs. lifecycle hooks as primary integration path — or support both equally
 - [ ] Begin labeling extraction outputs from v1 as future fine-tuning training data — establish format early
@@ -315,6 +310,6 @@ Prefer Apache 2.0 or MIT base models for cleanest commercial licensing. Qwen2.5 
 |---|---|
 | Company | Unbidden |
 | Domain | unbidden.ai (purchased) |
-| Product | Unbidden Engram |
-| CLI | `engram` |
+| Product | Unbidden Waystone |
+| CLI | `waystone` |
 | Previous working title | Context Broker |

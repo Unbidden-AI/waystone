@@ -46,7 +46,7 @@ def route(message: str, routing_cfg: dict, base_llm_cfg: dict) -> dict:
         The ``orchestrator.routing`` config block.  Must have ``enabled``
         (bool) and ``rules`` (list of rule dicts).
     base_llm_cfg:
-        The default ``orchestrator.llm`` config (including ``_retry``).
+        The default ``pilot.llm`` config (including ``_retry``).
 
     Returns
     -------

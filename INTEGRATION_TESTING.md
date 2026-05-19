@@ -67,7 +67,7 @@ waystone query test-project "database choice"
     "waystone": {
       "command": "waystone",
       "args": ["mcp-serve"],
-      "env": { "ENGRAM_PROJECT": "test-project" }
+      "env": { "WAYSTONE_PROJECT": "test-project" }
     }
   }
 }
@@ -75,10 +75,10 @@ waystone query test-project "database choice"
 
 **Test:**
 1. Start Claude Code, run `/mcp` — confirm `waystone` shows as connected
-2. Ask Claude: *"Use the engram_query tool to check what we know about database choices"*
-3. Verify Claude calls `engram_query` and returns results
+2. Ask Claude: *"Use the waystone_query tool to check what we know about database choices"*
+3. Verify Claude calls `waystone_query` and returns results
 
-**Pass criteria:** `waystone` listed as active MCP server; `engram_query` tool callable.
+**Pass criteria:** `waystone` listed as active MCP server; `waystone_query` tool callable.
 
 ---
 
@@ -92,7 +92,7 @@ waystone query test-project "database choice"
   "waystone": {
     "command": "waystone",
     "args": ["mcp-serve"],
-    "env": { "ENGRAM_PROJECT": "test-project" }
+    "env": { "WAYSTONE_PROJECT": "test-project" }
   }
 }
 ```
@@ -102,7 +102,7 @@ Or edit `~/.cursor/mcp.json` directly.
 **Test:**
 1. Open Cursor, open Agent mode (Cmd+I)
 2. Ask: *"Check waystone for any context on this project"*
-3. Confirm `engram_query` is called in the tool calls panel
+3. Confirm `waystone_query` is called in the tool calls panel
 
 **Pass criteria:** Cursor shows waystone tools available; query returns results.
 
@@ -119,13 +119,13 @@ Or edit `~/.cursor/mcp.json` directly.
     "waystone": {
       "command": "waystone",
       "args": ["mcp-serve"],
-      "env": { "ENGRAM_PROJECT": "test-project" }
+      "env": { "WAYSTONE_PROJECT": "test-project" }
     }
   }
 }
 ```
 
-**Test:** Open Cascade (Windsurf's agent), ask it to use engram_query.
+**Test:** Open Cascade (Windsurf's agent), ask it to use waystone_query.
 
 **Pass criteria:** MCP tools available in Cascade.
 
@@ -146,7 +146,7 @@ Or edit `~/.cursor/mcp.json` directly.
         "type": "stdio",
         "command": "waystone",
         "args": ["mcp-serve"],
-        "env": { "ENGRAM_PROJECT": "test-project" }
+        "env": { "WAYSTONE_PROJECT": "test-project" }
       }
     }]
   }
@@ -166,9 +166,9 @@ Or edit `~/.cursor/mcp.json` directly.
 **Configure** — Cline Settings → MCP Servers → Add:
 - Command: `waystone`
 - Args: `mcp-serve`
-- Env: `ENGRAM_PROJECT=test-project`
+- Env: `WAYSTONE_PROJECT=test-project`
 
-**Test:** Open Cline, ask it to use engram_query tool.
+**Test:** Open Cline, ask it to use waystone_query tool.
 
 **Pass criteria:** waystone tools visible; query returns results.
 
@@ -187,7 +187,7 @@ Or edit `~/.cursor/mcp.json` directly.
         "command": {
           "path": "waystone",
           "args": ["mcp-serve"],
-          "env": { "ENGRAM_PROJECT": "test-project" }
+          "env": { "WAYSTONE_PROJECT": "test-project" }
         }
       }
     }

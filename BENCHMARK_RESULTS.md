@@ -170,7 +170,7 @@ Example: Query "What authentication methods are supported?" with initial seed co
 
 ### Fix (Commit 4ec0abe)
 
-Changed `SEED_CONFIDENCE_FLOOR` from 0.4 to 0.8 in `/engram/retriever.py:165`
+Changed `SEED_CONFIDENCE_FLOOR` from 0.4 to 0.8 in `/waystone/retriever.py:165`
 
 **Rationale:**
 - 0.8 threshold: Expansion only for genuinely weak seeds (< 0.8 confidence)
@@ -237,9 +237,9 @@ With Issues #3 and #4 enabled:
 
 ## Files Modified
 
-- `/engram/retriever.py` — seed confidence floor adjustment (Issue #4)
-- `/engram/extractor.py` — targeted extraction pass (Issue #3)
-- `/engram/graph_store.py` — adaptive stacking logic (Issue #2)
+- `/waystone/retriever.py` — seed confidence floor adjustment (Issue #4)
+- `/waystone/extractor.py` — targeted extraction pass (Issue #3)
+- `/waystone/graph_store.py` — adaptive stacking logic (Issue #2)
 - All retrieval strategies tested via `/benchmarks/run_benchmark.py`
 
 ## Benchmark Methodology

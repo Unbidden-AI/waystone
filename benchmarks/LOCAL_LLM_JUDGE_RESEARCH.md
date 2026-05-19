@@ -131,5 +131,5 @@ If you have 50+ labeled YES/PARTIAL/NO examples:
 
 ## Judge Cache Note
 
-The judge cache at `~/.cache/engram_judge_cache.json` is keyed on `(model, question, answer, context)`.
+The judge cache at `~/.cache/waystone_judge_cache.json` is keyed on `(model, question, answer, context)`.
 Switching from `gemini-2.5-flash-lite` to `local:qwen3:8b` will NOT reuse cached scores — new model = new cache key. Clear the cache only if you change judge model or prompt.

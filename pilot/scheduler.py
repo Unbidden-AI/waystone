@@ -128,7 +128,7 @@ class ScheduleConfig:
 
 
 class Scheduler:
-    """Manages scheduled runs of the orchestrator.
+    """Manages scheduled runs of the pilot.
 
     EXPERIMENTAL in v1. Intended for single-machine deployment.
     For HA / distributed scheduling, use system cron or systemd timers.
@@ -236,7 +236,7 @@ class Scheduler:
             }
             prompt = sched.prompt_template.format(**template_vars)
 
-            # Run the orchestrator
+            # Run the pilot
             reply = await conv.chat(prompt)
 
             # Route output

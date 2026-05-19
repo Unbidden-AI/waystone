@@ -65,7 +65,7 @@ Turns are accumulated and flushed to the LLM only when a threshold is met:
 
 ### Episodic ingestion (current production mode)
 
-The Stop hook (`hooks/context_broker_stop.py`) captures only the new turns since the last extraction (delta), prepends 2 prior turns as co-reference context, and submits to `engram extract --verify`. This is structurally similar to incremental but operates at conversation-end rather than per-turn, avoiding per-turn cost while retaining the delta coherence benefit. A `MAX_DELTA_TURNS=50` hard cap prevents runaway LLM cost if state is lost. This is the recommended real-time mode.
+The Stop hook (`hooks/context_broker_stop.py`) captures only the new turns since the last extraction (delta), prepends 2 prior turns as co-reference context, and submits to `waystone extract --verify`. This is structurally similar to incremental but operates at conversation-end rather than per-turn, avoiding per-turn cost while retaining the delta coherence benefit. A `MAX_DELTA_TURNS=50` hard cap prevents runaway LLM cost if state is lost. This is the recommended real-time mode.
 
 ---
 
@@ -193,16 +193,16 @@ The hook integration is **operational**. Both hooks are live and active in daily
 
 **`UserPromptSubmit` hook** (`hooks/context_broker_submit.py`) — runs before each user prompt reaches the model:
 1. Receives the user's prompt text on stdin as JSON
-2. Runs `engram query <project> "<prompt>"` locally (SQLite lookup, <5ms)
+2. Runs `waystone query <project> "<prompt>"` locally (SQLite lookup, <5ms)
 3. Writes the retrieved context block to stdout
 4. Claude Code prepends this to the prompt automatically
 
 **`Stop` hook** (`hooks/context_broker_stop.py`) — runs after each conversation ends:
-1. Parses the full JSONL transcript and saves to `~/.engram/transcripts/<project>/`
+1. Parses the full JSONL transcript and saves to `~/.waystone/transcripts/<project>/`
 2. Computes the delta: only turns since the last extraction (tracked in `<session_id>.state`)
 3. Prepends 2 prior turns as co-reference context, writes a delta snippet to a temp file
-4. Spawns `engram extract <project> <delta_file> --verify` as a detached background process
-5. Checks node count; if `current_nodes - last_reconcile_nodes >= reconcile_threshold (75)` and total ≥ 100, spawns `engram reconcile` to find supersedes relationships
+4. Spawns `waystone extract <project> <delta_file> --verify` as a detached background process
+5. Checks node count; if `current_nodes - last_reconcile_nodes >= reconcile_threshold (75)` and total ≥ 100, spawns `waystone reconcile` to find supersedes relationships
 6. Hard cap: `MAX_DELTA_TURNS=50` prevents runaway extraction cost if state file is lost
 
 ### What this achieves
@@ -229,7 +229,7 @@ These are not retrieval gaps; they reflect keyword-overlap scoring limitations i
 
 ### LOCOMO episodic memory benchmark (current: 85.7% gpt-4o-mini / 73.4% gemini-flash-lite)
 
-On the LOCOMO benchmark (real human conversations, multi-session episodic memory), the current best pipeline (`engram_semantic_rerank_topk100`) scores **85.7% LLM accuracy** (gpt-4o-mini judge) and **72.6% keyword accuracy** on the dev split (5 conversations, 762 QA pairs, categories 1–4, April 2026). This **exceeds Zep (~73% LLM)** and approaches Mem0 (~88% LLM). The March 2026 conv-26-only baseline was ~50% keyword; the improvement came from semantic rerank, top_k=100, and correcting the evaluation protocol to exclude adversarial category 5 questions (which depressed earlier scores by ~10pp). A full 10-conversation run against the complete test split is pending for a like-for-like comparison with published Zep/Mem0 numbers.
+On the LOCOMO benchmark (real human conversations, multi-session episodic memory), the current best pipeline (`waystone_semantic_rerank_topk100`) scores **85.7% LLM accuracy** (gpt-4o-mini judge) and **72.6% keyword accuracy** on the dev split (5 conversations, 762 QA pairs, categories 1–4, April 2026). This **exceeds Zep (~73% LLM)** and approaches Mem0 (~88% LLM). The March 2026 conv-26-only baseline was ~50% keyword; the improvement came from semantic rerank, top_k=100, and correcting the evaluation protocol to exclude adversarial category 5 questions (which depressed earlier scores by ~10pp). A full 10-conversation run against the complete test split is pending for a like-for-like comparison with published Zep/Mem0 numbers.
 
 > **Judge model note (April 2026)**: The 85.7% result used gpt-4o-mini as judge. Re-running with gemini-2.5-flash-lite (stricter) yields **73.4%** on the same dev split — a 12.3pp delta that reflects judge leniency, not retrieval quality. The gemini-flash-lite baseline is ~74% (consistent across April 12 and April 19 runs). Zep/Mem0 published numbers used gpt-4o-mini, so 85.7% is the correct like-for-like comparison figure.
 
@@ -241,26 +241,26 @@ LongMemEval is a Microsoft Research benchmark for long-term episodic memory in L
 
 | Config | Split | kw% | LLM% | LLM partial% | Notes |
 |--------|-------|-----|------|--------------|-------|
-| `engram_lme_s_apr15_repro` (no date strings) | standard | 61.4% | **61.6%** | — | **New best standard** — Apr-19 date-string fix, multi-session 50.4%, preference 50.0% |
-| `engram_lme_gemini` / `engram_lme_rrf_dynamic` | oracle | 54.0% | **60.6%** | 66.5% | Best oracle — Gemini 2.5 Flash-Lite extraction, RRF or semantic rerank, top_k=100 |
-| `engram_lme_s_user_patched` + preference pass | standard | 63.4% | **60.8%** | 66.0% | Prior best standard — preference node augmentation (+7.6K nodes on 30 pref samples), +20pp on preference type (Apr 15) |
-| `engram_lme_s_user_patched` (person fan-out) | standard | 63.4% | 59.5% | — | Person exhaustive fan-out, person anchoring, semantic rerank top_k=100 (Apr 14) |
-| `engram_lme_s_user_patched` | standard | 62.6% | 58.0% | 64.2% | Prior best — synthetic user node injection, person anchoring (Apr 10) |
-| `engram_lme_gemini_s` | standard | 61.8% | 57.8% | 64.2% | Standard split baseline without user node patch |
-| `engram_lme_keyword` | oracle | 52.4% | 59.6% | 65.9% | Keyword-only (no rerank) — nearly as good as semantic rerank |
+| `waystone_lme_s_apr15_repro` (no date strings) | standard | 61.4% | **61.6%** | — | **New best standard** — Apr-19 date-string fix, multi-session 50.4%, preference 50.0% |
+| `waystone_lme_gemini` / `waystone_lme_rrf_dynamic` | oracle | 54.0% | **60.6%** | 66.5% | Best oracle — Gemini 2.5 Flash-Lite extraction, RRF or semantic rerank, top_k=100 |
+| `waystone_lme_s_user_patched` + preference pass | standard | 63.4% | **60.8%** | 66.0% | Prior best standard — preference node augmentation (+7.6K nodes on 30 pref samples), +20pp on preference type (Apr 15) |
+| `waystone_lme_s_user_patched` (person fan-out) | standard | 63.4% | 59.5% | — | Person exhaustive fan-out, person anchoring, semantic rerank top_k=100 (Apr 14) |
+| `waystone_lme_s_user_patched` | standard | 62.6% | 58.0% | 64.2% | Prior best — synthetic user node injection, person anchoring (Apr 10) |
+| `waystone_lme_gemini_s` | standard | 61.8% | 57.8% | 64.2% | Standard split baseline without user node patch |
+| `waystone_lme_keyword` | oracle | 52.4% | 59.6% | 65.9% | Keyword-only (no rerank) — nearly as good as semantic rerank |
 
-**Per-category breakdown (oracle split, `engram_lme_gemini`):**
+**Per-category breakdown (oracle split, `waystone_lme_gemini`):**
 
 | Question type | n | kw% | LLM% |
 |---------------|---|-----|------|
-| knowledge-update | 78 | 64.1% | **70.5%** | ← Engram's strongest category (supersedes mechanism) |
+| knowledge-update | 78 | 64.1% | **70.5%** | ← Waystone's strongest category (supersedes mechanism) |
 | single-session-assistant | 56 | 73.2% | **76.8%** | Facts about assistant behavior are well-extracted |
 | single-session-user | 70 | 60.0% | 65.7% | |
 | multi-session | 133 | 51.1% | 64.7% | |
 | temporal-reasoning | 133 | 51.9% | 51.5% | ← Weakest content category |
 | single-session-preference | 30 | 0.0% | 13.8% | ← Structural gap: preference facts aren't reliably extracted |
 
-**Per-category breakdown (standard split, `engram_lme_s_user_patched` + preference pass + bi-temporal routing, Apr 15):**
+**Per-category breakdown (standard split, `waystone_lme_s_user_patched` + preference pass + bi-temporal routing, Apr 15):**
 
 | Question type | n | kw% | LLM% | vs Apr 14 |
 |---------------|---|-----|------|-----------|
@@ -274,7 +274,7 @@ LongMemEval is a Microsoft Research benchmark for long-term episodic memory in L
 
 *(Overall estimated: temporal 133/500 × +6.0pp ≈ +1.6pp on temporal, ~+0.6pp overall vs Apr 14 fan-out. Full 500-sample re-run needed for exact overall.)*
 
-**Per-category breakdown (standard split, `engram_lme_s_user_patched` + preference pass, Apr 15):**
+**Per-category breakdown (standard split, `waystone_lme_s_user_patched` + preference pass, Apr 15):**
 
 | Question type | n | kw% | LLM% | vs Apr 14 |
 |---------------|---|-----|------|-----------|
@@ -286,7 +286,7 @@ LongMemEval is a Microsoft Research benchmark for long-term episodic memory in L
 | single-session-preference | 30 | — | **26.7%** | **+20pp** ✅ preference pass |
 | **overall** | **500** | **63.4%** | **60.8%** | **+1.3pp** |
 
-**Per-category breakdown (standard split, `engram_lme_s_user_patched` with person fan-out, Apr 14):**
+**Per-category breakdown (standard split, `waystone_lme_s_user_patched` with person fan-out, Apr 14):**
 
 | Question type | n | kw% | LLM% | vs Apr 10 |
 |---------------|---|-----|------|-----------|
@@ -304,11 +304,11 @@ LongMemEval is a Microsoft Research benchmark for long-term episodic memory in L
 | GPT-4o no memory | ~30% | Upper bound without persistent memory |
 | MemoryBank | ~40–50% | Flat retrieval baseline |
 | ReadAgent | ~55–60% | Summarization-based compression |
-| **Engram standard** | **60.8%** | Graph retrieval, Gemini extraction, person fan-out, preference pass, semantic rerank |
-| **Engram oracle** | **60.6%** | Same with oracle-extracted graph |
+| **Waystone standard** | **60.8%** | Graph retrieval, Gemini extraction, person fan-out, preference pass, semantic rerank |
+| **Waystone oracle** | **60.6%** | Same with oracle-extracted graph |
 | Full context (oracle) | ~70% | All sessions concatenated into context window |
 
-Engram exceeds ReadAgent on both splits, despite ReadAgent using compression specifically tuned for long-context recall. The gap to full-context oracle (~70%) is ~10pp — mostly attributable to the temporal-reasoning and single-session-preference categories.
+Waystone exceeds ReadAgent on both splits, despite ReadAgent using compression specifically tuned for long-context recall. The gap to full-context oracle (~70%) is ~10pp — mostly attributable to the temporal-reasoning and single-session-preference categories.
 
 **Bi-temporal routing (+6.0pp temporal-reasoning, Apr 15):** Two changes in combination lifted temporal-reasoning from 57.9% → 63.9% (77→85 correct out of 133, vs S-split Gemini baseline):
 
@@ -324,7 +324,7 @@ Preference questions ("What coffee does the user like?") are the weakest categor
 
 **Key strength: knowledge-update (70.5% LLM)**
 
-Questions that test whether a system knows about updates ("The user switched from X to Y — what are they using now?") are Engram's structural differentiator. The `superseded_pruning` strategy correctly removes stale facts, making the updated fact the only answer candidate. This category scores higher for Engram than flat-retrieval systems.
+Questions that test whether a system knows about updates ("The user switched from X to Y — what are they using now?") are Waystone's structural differentiator. The `superseded_pruning` strategy correctly removes stale facts, making the updated fact the only answer candidate. This category scores higher for Waystone than flat-retrieval systems.
 
 ### Specific values are under-extracted
 
@@ -360,7 +360,7 @@ The 18% call rate observed in benchmarks (7 calls for 39 turns) is close to the 
 
 ### Buffer persistence
 
-The buffer persists to `buffer.json` in the project directory between `engram extract-turn` invocations. This means a buffer can span multiple shell sessions — a turn added via hook in one process is still buffered when the next prompt arrives. The `engram query` command auto-flushes any pending buffer before retrieval to ensure the graph reflects all available conversation content.
+The buffer persists to `buffer.json` in the project directory between `waystone extract-turn` invocations. This means a buffer can span multiple shell sessions — a turn added via hook in one process is still buffered when the next prompt arrives. The `waystone query` command auto-flushes any pending buffer before retrieval to ensure the graph reflects all available conversation content.
 
 ---
 
@@ -427,10 +427,10 @@ Each pass is designed to be independently useful — you can run any subset. Ded
 
 ```bash
 # Single targeted pass
-engram extract myproject transcript.md --lessons
+waystone extract myproject transcript.md --lessons
 
 # Multiple targeted passes
-engram extract myproject transcript.md --verify --lessons --decisions
+waystone extract myproject transcript.md --verify --lessons --decisions
 
 # Benchmark with targeted pass
 python benchmarks/run_benchmark.py --config benchmarks/model_configs/gemini_25_flash.yaml --verify --lessons
@@ -561,7 +561,7 @@ Re-extracting the same transcript (or running a verify pass) produces duplicate 
 
 **Status: not implemented**
 
-Extend the `engram reconcile` command (which already detects supersedes relationships) with a dedup phase. The LLM is shown clusters of nodes with similar fact text (pre-filtered by token overlap or BM25 similarity) and asked to identify which are duplicates vs. genuinely distinct facts. For duplicates, it selects the canonical fact and flags the rest for merge or deletion.
+Extend the `waystone reconcile` command (which already detects supersedes relationships) with a dedup phase. The LLM is shown clusters of nodes with similar fact text (pre-filtered by token overlap or BM25 similarity) and asked to identify which are duplicates vs. genuinely distinct facts. For duplicates, it selects the canonical fact and flags the rest for merge or deletion.
 
 **When to use:** Periodic maintenance pass on large graphs that have accumulated duplicates from many extraction runs. More expensive than Option B but handles paraphrased duplicates that hash differently.
 
@@ -598,10 +598,10 @@ Compute vector embeddings for each node's fact text (e.g., using `all-MiniLM-L6-
 |--------|-------|-------|
 | Software dev benchmark recall (current best) | **95%** | Gemini 2.5 Flash + `--verify`, top_k=30, 21/23 ≥80% |
 | Software dev benchmark recall (no verify) | 92% | Gemini 2.5 Flash, default strategies, 19/23 ≥80% |
-| LOCOMO benchmark (LLM accuracy, dev split) | **85.7%** | `engram_semantic_rerank_topk100`, 5-conv dev split, cats 1–4, 762 QA, April 2026, **gpt-4o-mini judge**; Zep 73%, Mem0 88% (same judge); gemini-flash-lite gives 73.4% |
+| LOCOMO benchmark (LLM accuracy, dev split) | **85.7%** | `waystone_semantic_rerank_topk100`, 5-conv dev split, cats 1–4, 762 QA, April 2026, **gpt-4o-mini judge**; Zep 73%, Mem0 88% (same judge); gemini-flash-lite gives 73.4% |
 | LOCOMO benchmark (keyword accuracy, dev split) | 72.6% | same config; cross-encoder achieves 75.2% keyword but 84.1% LLM |
-| LongMemEval (LLM accuracy, oracle split) | **60.6%** | `engram_lme_rrf_dynamic`, 500 QA, April 2026; beats ReadAgent (~55–60%), gap to full-context oracle (~70%) |
-| LongMemEval (LLM accuracy, standard split) | **60.8%** | `engram_lme_s_user_patched` + preference pass, 500 QA, April 2026; knowledge-update 71.8% (strongest), preference 26.7% (+20pp from targeted pass) |
+| LongMemEval (LLM accuracy, oracle split) | **60.6%** | `waystone_lme_rrf_dynamic`, 500 QA, April 2026; beats ReadAgent (~55–60%), gap to full-context oracle (~70%) |
+| LongMemEval (LLM accuracy, standard split) | **60.8%** | `waystone_lme_s_user_patched` + preference pass, 500 QA, April 2026; knowledge-update 71.8% (strongest), preference 26.7% (+20pp from targeted pass) |
 | Buffered extraction recall (early baseline) | 47% | ~18% call rate vs per-turn, early March 2026 |
 | Incremental cross-turn edges | ~27/transcript | api_design + data_pipeline average |
 | Avg retrieval latency | <5ms | Local SQLite, all modes |
@@ -633,9 +633,9 @@ SQLite handles concurrent reads correctly (especially in WAL mode) but permits o
 | Shared network SQLite | Medium | Small teams, low extraction concurrency, acceptable failure mode |
 | PostgreSQL backend | High | Proper solution, concurrent writes, enables REST API layer |
 
-**Git-tracked JSON export** is the path of least resistance. The `engram export` command already writes a graph snapshot. If that snapshot is committed to the shared repo, any developer can import it locally. The limitation is that SQLite binary files don't merge in git — switching `engram export` to a line-oriented JSON format (one node per line, one edge per line) would make diffs readable and merges tractable.
+**Git-tracked JSON export** is the path of least resistance. The `waystone export` command already writes a graph snapshot. If that snapshot is committed to the shared repo, any developer can import it locally. The limitation is that SQLite binary files don't merge in git — switching `waystone export` to a line-oriented JSON format (one node per line, one edge per line) would make diffs readable and merges tractable.
 
-**PostgreSQL backend** is the right long-term answer. The `GraphStore` API (`add_node`, `add_edge`, `get_nodes_by_tags`, etc.) maps directly to PostgreSQL with no interface changes. Every developer connects to the shared instance. Concurrent writes are handled natively. This also enables a `engram serve` REST layer so developers without direct database access (different networks, managed environments) can push extractions and pull queries over HTTP.
+**PostgreSQL backend** is the right long-term answer. The `GraphStore` API (`add_node`, `add_edge`, `get_nodes_by_tags`, etc.) maps directly to PostgreSQL with no interface changes. Every developer connects to the shared instance. Concurrent writes are handled natively. This also enables a `waystone serve` REST layer so developers without direct database access (different networks, managed environments) can push extractions and pull queries over HTTP.
 
 ### Design challenges
 
@@ -661,9 +661,9 @@ The smallest change set that enables genuine team use:
 
 2. **`contributor` field on nodes** — set at extraction time from `git config user.name` or a `CTX_CONTRIBUTOR` env var. Stored alongside `source_transcript`. No schema changes required beyond adding the column.
 
-3. **Conflict flagging on cross-author supersedes** — instead of silently pruning, mark conflicts with a `conflict: true` field. The `superseded_pruning` strategy skips conflicted nodes; a `engram conflicts` command lists them for resolution.
+3. **Conflict flagging on cross-author supersedes** — instead of silently pruning, mark conflicts with a `conflict: true` field. The `superseded_pruning` strategy skips conflicted nodes; a `waystone conflicts` command lists them for resolution.
 
-4. **`engram sync` command** — pushes the local buffer to the shared graph and pulls nodes added by other contributors since the last sync. Enables async collaboration without requiring always-on connectivity.
+4. **`waystone sync` command** — pushes the local buffer to the shared graph and pulls nodes added by other contributors since the last sync. Enables async collaboration without requiring always-on connectivity.
 
 5. **Per-contributor transcript namespacing** — convention only, no code change: `contributor/topic_date.md`. Attribution is already implicit in `source_transcript`.
 
@@ -697,10 +697,10 @@ Add domain synonyms to the extraction prompt or as a post-processing pass. Targe
 A per-transcript extraction quality score (node count relative to transcript length, tag density, edge-to-node ratio) would make it easy to identify transcripts that need re-extraction or a different model.
 
 **6. PostgreSQL backend for shared team graphs**
-Swap `GraphStore`'s SQLite connection for PostgreSQL. The store API is unchanged; PostgreSQL handles concurrent multi-developer writes natively and enables a `engram serve` REST layer for teams without direct database access. See the Multi-Developer Shared Graph section for full architecture.
+Swap `GraphStore`'s SQLite connection for PostgreSQL. The store API is unchanged; PostgreSQL handles concurrent multi-developer writes natively and enables a `waystone serve` REST layer for teams without direct database access. See the Multi-Developer Shared Graph section for full architecture.
 
 **7. Git-exportable graph format**
-Switch `engram export` output from a single JSON blob to a line-oriented format (one node/edge per line) so graph snapshots can be diff'd and merged in git. Enables async team collaboration without any server infrastructure.
+Switch `waystone export` output from a single JSON blob to a line-oriented format (one node/edge per line) so graph snapshots can be diff'd and merged in git. Enables async team collaboration without any server infrastructure.
 
 **8. Multi-project graph queries**
 Currently each project is an isolated SQLite database. Cross-project queries (e.g., "what auth patterns have we used across all projects?") would require either a merged graph or a query federation layer.
@@ -713,15 +713,15 @@ Currently each project is an isolated SQLite database. Cross-project queries (e.
 
 #### 1. Recall quality — current status and remaining gaps
 
-**Status:** Software dev benchmark recall is now **95%** (21/23 ≥80%, Gemini 2.5 Flash + `--verify`, March 2026). LOCOMO dev split (official protocol, cats 1–4): **85.7% LLM accuracy** (`engram_semantic_rerank_topk100`, April 2026) — exceeds Zep (73%) and approaches Mem0 (88%). Both benchmark targets are now met on dev split.
+**Status:** Software dev benchmark recall is now **95%** (21/23 ≥80%, Gemini 2.5 Flash + `--verify`, March 2026). LOCOMO dev split (official protocol, cats 1–4): **85.7% LLM accuracy** (`waystone_semantic_rerank_topk100`, April 2026) — exceeds Zep (73%) and approaches Mem0 (88%). Both benchmark targets are now met on dev split.
 
 **Remaining gap:** Full 10-conversation LOCOMO run pending. Dev split (5 conversations) is not a like-for-like comparison to Zep/Mem0's full-test-set numbers. Test split (conv-44, 47, 48, 49, 50) extraction not yet run.
 
 **Plan:**
 
 *Short term — full LOCOMO run:*
-- Extract test split (5 conversations) into `engram_dedup95` checkpoint dir.
-- Run `engram_semantic_rerank_topk100` retrieval + batch gpt-4o-mini judge over all 10 conversations.
+- Extract test split (5 conversations) into `waystone_dedup95` checkpoint dir.
+- Run `waystone_semantic_rerank_topk100` retrieval + batch gpt-4o-mini judge over all 10 conversations.
 - Report combined score as the citable paper number.
 
 *Medium term — close the remaining gap to Mem0 (88%):*
@@ -740,12 +740,12 @@ Currently each project is an isolated SQLite database. Cross-project queries (e.
 **Plan:**
 
 *Onboarding flow:*
-- Ship a `engram demo` command that populates a sample project graph from a bundled transcript, then runs a set of example queries against it. Users see the output format and retrieval quality before investing any extraction effort.
-- On first `engram query` against an empty graph, print an actionable message: "No context found. Run `engram extract <project> <transcript>` to build your graph."
+- Ship a `waystone demo` command that populates a sample project graph from a bundled transcript, then runs a set of example queries against it. Users see the output format and retrieval quality before investing any extraction effort.
+- On first `waystone query` against an empty graph, print an actionable message: "No context found. Run `waystone extract <project> <transcript>` to build your graph."
 
 *Progressive extraction:*
 - For Claude Code hook users, the graph builds automatically in the background from the first conversation. Make this visible: after each buffered flush, print a brief status line — "Context Broker: +8 nodes extracted (42 total)" — so users see the graph growing without any manual steps.
-- Offer a `engram bootstrap` command that takes an existing codebase and generates a starter graph from README files, architecture docs, and any markdown in the repo. Not as rich as conversation extraction, but provides immediate value.
+- Offer a `waystone bootstrap` command that takes an existing codebase and generates a starter graph from README files, architecture docs, and any markdown in the repo. Not as rich as conversation extraction, but provides immediate value.
 
 *Seeded starter graphs:*
 - For common tech stacks (React/Node, Django, Rails, Go microservices), provide downloadable starter graphs containing common architectural constraints and best practices. Users merge these into a new project to get instant useful context, then their conversations enrich and override it over time.
@@ -781,10 +781,10 @@ Currently each project is an isolated SQLite database. Cross-project queries (e.
 The hook integration is operational. Both hooks (`context_broker_submit.py`, `context_broker_stop.py`) are shipped and active. Install via `python hooks/install.py`. Pattern is established; collect feedback and build user base before expanding.
 
 *Phase 2 — VS Code extension:*
-A VS Code extension can integrate with GitHub Copilot Chat, Cursor, and Continue.dev (among others) via the Language Model API or by reading from the workspace chat history. The extension calls `engram query` on every prompt submission and injects the result as a context message. Reaches the largest IDE user base without requiring CLI tool adoption.
+A VS Code extension can integrate with GitHub Copilot Chat, Cursor, and Continue.dev (among others) via the Language Model API or by reading from the workspace chat history. The extension calls `waystone query` on every prompt submission and injects the result as a context message. Reaches the largest IDE user base without requiring CLI tool adoption.
 
 *Phase 3 — Browser extension:*
-For web-based LLM tools (ChatGPT, Claude.ai, Gemini), a browser extension intercepts prompt submission, calls a local Context Broker server (`engram serve --port 7070`), and injects the retrieved context block. This covers the remaining surface area. Technically feasible but requires maintaining extension manifests across Chrome/Firefox and adapting to UI changes in each web app.
+For web-based LLM tools (ChatGPT, Claude.ai, Gemini), a browser extension intercepts prompt submission, calls a local Context Broker server (`waystone serve --port 7070`), and injects the retrieved context block. This covers the remaining surface area. Technically feasible but requires maintaining extension manifests across Chrome/Firefox and adapting to UI changes in each web app.
 
 *Phase 4 — Native integrations:*
 Formal partnerships or plugin listings with Cursor, Cline, Windsurf, and other AI coding tools. These tools have plugin APIs; a Context Broker plugin published to their marketplaces provides discoverability without requiring users to find the CLI tool independently.
@@ -844,17 +844,17 @@ Monitor Zep and MemGPT/Letta closely — they are the closest architectural neig
 **Plan:**
 
 *Inspection commands:*
-- `engram last` — show the exact context block that was injected into the most recent query, with node IDs, confidence scores, and source transcripts. Makes the broker's contribution visible on demand without making it noisy by default.
-- `engram explain "<query>"` — show which keywords were extracted from the query, which entry nodes matched, how BFS traversed the graph, and which strategies pruned what. Full retrieval trace for debugging.
+- `waystone last` — show the exact context block that was injected into the most recent query, with node IDs, confidence scores, and source transcripts. Makes the broker's contribution visible on demand without making it noisy by default.
+- `waystone explain "<query>"` — show which keywords were extracted from the query, which entry nodes matched, how BFS traversed the graph, and which strategies pruned what. Full retrieval trace for debugging.
 
 *Optional verbose mode for hooks:*
-Add a `--verbose` flag to the hook integration that appends a collapsed summary to each prompt: "Context Broker injected 6 nodes (42 tokens) — run `engram last` to inspect." Users who want visibility get it; users who prefer silence stay silent by default.
+Add a `--verbose` flag to the hook integration that appends a collapsed summary to each prompt: "Context Broker injected 6 nodes (42 tokens) — run `waystone last` to inspect." Users who want visibility get it; users who prefer silence stay silent by default.
 
 *Confidence surfacing in output:*
 The markdown output already includes confidence scores. Make them more prominent and add a color-coded indicator (in terminals that support it) so users can glance at the reliability of injected context. A block of 0.9+ confidence nodes reads differently than a block of 0.4–0.6 nodes.
 
 *Conflict visibility:*
-For the multi-developer case, flagged cross-author conflicts should appear prominently in retrieval output: "⚠ Conflicting decisions found — run `engram conflicts` to resolve." Silent conflict suppression is worse than noisy conflict surfacing.
+For the multi-developer case, flagged cross-author conflicts should appear prominently in retrieval output: "⚠ Conflicting decisions found — run `waystone conflicts` to resolve." Silent conflict suppression is worse than noisy conflict surfacing.
 
 ---
 
@@ -870,7 +870,7 @@ For the multi-developer case, flagged cross-author conflicts should appear promi
 - No extraction cost to the company on this tier (users supply their own API keys).
 
 *Team tier (primary revenue):*
-- Shared PostgreSQL graph, contributor attribution, conflict resolution, `engram sync`.
+- Shared PostgreSQL graph, contributor attribution, conflict resolution, `waystone sync`.
 - Cloud-managed extraction service with a monthly credit allocation.
 - Pricing: per-seat, per month. Target: $15–25/developer/month, competitive with other developer productivity tools.
 - This is the product that the current architecture is one PostgreSQL backend swap away from reaching.
@@ -1151,8 +1151,8 @@ Four tests to run in sequence. Each validates a different aspect of the end-to-e
 #### Test 1 — Auth system transcript (in progress)
 **Goal:** Verify prior-state tagging fix works across a different domain with more numeric facts.
 ```bash
-engram extract auth_debug benchmarks/transcripts/project_auth_system.md --verify
-engram orchestrate auth_debug
+waystone extract auth_debug benchmarks/transcripts/project_auth_system.md --verify
+waystone orchestrate auth_debug
 ```
 **Questions to ask:**
 - "What authentication mechanism was chosen?"
@@ -1182,7 +1182,7 @@ the provided context, say so explicitly — do not infer or reason from general 
 #### Test 4 — `--decisions` targeted pass on auth_debug
 **Goal:** Verify the `--decisions` flag improves recall for auth-domain rationale facts (q_auth_04 was 0% without it).
 ```bash
-engram extract auth_debug benchmarks/transcripts/project_auth_system.md --verify --decisions
+waystone extract auth_debug benchmarks/transcripts/project_auth_system.md --verify --decisions
 ```
 Then query: "Why was the chosen auth mechanism selected over alternatives?"
 **Success criteria:** Decision rationale (the "why" behind auth choices) surfaces that wasn't in the base `--verify` pass.
@@ -1234,13 +1234,13 @@ Multi-turn conversation with `pipe_debug` project. Facts introduced in turn 1 (K
 
 ### What it is
 
-`engram synthesize <project>` is a post-extraction maintenance command that runs an LLM pass over **existing graph nodes** (not a transcript). It looks for clusters of 3+ parallel facts about the same metric across different subjects and creates cross-cutting summary nodes — e.g., a single "Overall Recall Ranking" node that aggregates all model results.
+`waystone synthesize <project>` is a post-extraction maintenance command that runs an LLM pass over **existing graph nodes** (not a transcript). It looks for clusters of 3+ parallel facts about the same metric across different subjects and creates cross-cutting summary nodes — e.g., a single "Overall Recall Ranking" node that aggregates all model results.
 
 This solves the **survey query problem**: BFS retrieval with top_k=20 may explore only one model's cluster at a time. "Rank all models" needs a single node tagged with all model names for retrieval to surface the complete answer.
 
 ### Observed behavior (2026-03-18)
 
-Run: `engram synthesize ContextBroker --tags benchmark --tags recall --tags gpt-4o --tags nemotron`
+Run: `waystone synthesize ContextBroker --tags benchmark --tags recall --tags gpt-4o --tags nemotron`
 - 873 candidate nodes filtered from 8590 total
 - 22 summary nodes created, 769 edges
 - Produced "Overall Recall Ranking" node, per-preset comparison nodes, extraction time comparisons
@@ -1258,15 +1258,15 @@ Three patterns for when to run synthesis:
 
 | Option | Command | Scope | Latency | Best for |
 |--------|---------|-------|---------|----------|
-| **A. Periodic maintenance** | `engram synthesize` | Full graph (filtered by type/tags) | High (~30–120s) | After multiple sessions have accumulated; before demo/query-heavy sessions |
-| **B. Post-extract (full graph)** | `engram extract --synthesize` | Full graph | Adds ~30–120s to extraction | When a new transcript is likely to complete a cluster already partially in the graph |
-| **C. Post-extract (recent only)** | `engram extract --synthesize-recent` *(not yet implemented)* | `get_recent_nodes(limit=100)` | Low (~5–15s) | Lightweight per-session synthesis; won't catch cross-session patterns |
+| **A. Periodic maintenance** | `waystone synthesize` | Full graph (filtered by type/tags) | High (~30–120s) | After multiple sessions have accumulated; before demo/query-heavy sessions |
+| **B. Post-extract (full graph)** | `waystone extract --synthesize` | Full graph | Adds ~30–120s to extraction | When a new transcript is likely to complete a cluster already partially in the graph |
+| **C. Post-extract (recent only)** | `waystone extract --synthesize-recent` *(not yet implemented)* | `get_recent_nodes(limit=100)` | Low (~5–15s) | Lightweight per-session synthesis; won't catch cross-session patterns |
 
-**Current recommendation:** Use option A (periodic `engram synthesize`) as the primary pattern. Run with `--tags` to target specific subject clusters when you know what you're looking for. Option B (`--synthesize` on extract) is viable when running full re-extractions. Option C is a potential future improvement.
+**Current recommendation:** Use option A (periodic `waystone synthesize`) as the primary pattern. Run with `--tags` to target specific subject clusters when you know what you're looking for. Option B (`--synthesize` on extract) is viable when running full re-extractions. Option C is a potential future improvement.
 
 ### Synthesis is additive
 
-Synthesis nodes accumulate — each run with different `--tags` adds new summary nodes without deleting previous ones. The existing fact-hash deduplication prevents exact duplicates. If you need to prune stale synthesis nodes, a future `engram prune --synthesis` command can use the `source_transcript = "__synthesis__"` tag to identify them.
+Synthesis nodes accumulate — each run with different `--tags` adds new summary nodes without deleting previous ones. The existing fact-hash deduplication prevents exact duplicates. If you need to prune stale synthesis nodes, a future `waystone prune --synthesis` command can use the `source_transcript = "__synthesis__"` tag to identify them.
 
 ---
 
@@ -1296,7 +1296,7 @@ A-MEM is a Zettelkasten-inspired memory system where the LLM agent autonomously 
 | **iText2KG** (arXiv:2409.03284) | Cosine-similarity entity matching for KG construction — semantic dedup in `merge_extraction()` to catch near-duplicates that text-hash misses |
 | **Zep/Graphiti** (arXiv:2501.13956) | Bi-temporal fact validity (event time + ingestion time + validity windows) — principled replacement for `recency_decay`; facts expire rather than decay |
 | **HippoRAG** (arXiv:2405.14831) | Personalized PageRank on a knowledge graph for retrieval — potential replacement for BFS traversal with semantic re-ranking |
-| **RAPTOR** (arXiv:2401.18059) | Recursive abstractive tree construction — hierarchical synthesis that clusters leaf nodes into progressively abstract summaries; complements `engram synthesize` |
+| **RAPTOR** (arXiv:2401.18059) | Recursive abstractive tree construction — hierarchical synthesis that clusters leaf nodes into progressively abstract summaries; complements `waystone synthesize` |
 | **G-RAG** (arXiv:2405.16506) | Graph-aware reranker using GNN embeddings — reranks retrieved nodes based on graph topology, not just text similarity |
 | **MemoryBank** (arXiv:2305.10250) | Ebbinghaus forgetting curve applied to memory strength — time-decay model more nuanced than a binary superseded flag |
 | **GraphRAG** (arXiv:2404.16130) | Microsoft's community detection + hierarchical summarization — scales graph retrieval to very large corpora; relevant as CB node count grows past 10K |
@@ -1335,9 +1335,9 @@ A-MEM is a Zettelkasten-inspired memory system where the LLM agent autonomously 
 
 **Files changed:**
 - `context_broker/store.py`: Added `delete_node()` and `update_node_fact()` methods
-- `orchestrator/tool_executor.py`: Added `_run_ctx_delete_node`, `_run_ctx_update_node`, `_run_ctx_synthesize` handlers; `_STORE_HANDLERS` dict; updated `execute_tool` and `execute_tools` to accept and thread `store` kwarg
-- `orchestrator/llm_adapter.py`: Added `ctx_delete_node`, `ctx_update_node`, `ctx_synthesize` to `_TOOL_SCHEMAS`
-- `orchestrator/conversation.py`: Saved `self._store` in `__init__`; passes `store=self._store` to `execute_tools`
+- `pilot/tool_executor.py`: Added `_run_ctx_delete_node`, `_run_ctx_update_node`, `_run_ctx_synthesize` handlers; `_STORE_HANDLERS` dict; updated `execute_tool` and `execute_tools` to accept and thread `store` kwarg
+- `pilot/llm_adapter.py`: Added `ctx_delete_node`, `ctx_update_node`, `ctx_synthesize` to `_TOOL_SCHEMAS`
+- `pilot/conversation.py`: Saved `self._store` in `__init__`; passes `store=self._store` to `execute_tools`
 - `config.yaml`: Added three tools to `orchestrator.tools.enabled`
 
 **Design note:** Store-aware tools are dispatched through a separate `_STORE_HANDLERS` dict so they don't require changing the `(args, cfg)` signature of sandbox tools. If `store` is `None` (e.g., a session without a loaded project), the tool returns a descriptive error rather than crashing.
@@ -1362,13 +1362,13 @@ Two metrics reported throughout:
 |--------|--------------|-----------|-----------|-------|
 | no_memory | — | — | 0 | LLM parametric knowledge only |
 | full_context | — | — | ~18K | Raw transcript injected |
-| engram_all_off | — | — | — | BFS, no pipeline components |
-| engram_default v1 | ~20% | 0% | — | LLM judge broken (auth missing) |
-| engram_default v4 | 38.1% | 24.2% | 731 | Three fixes applied (see below) |
-| engram_default v5 | 42.3% | 23.5% | 739 | + retrieval-time date resolution |
-| engram_default v6 | 30.0% | 17.3% | 706 | + ISO date headers at ingest (re-ingest) — **negative result** |
+| waystone_all_off | — | — | — | BFS, no pipeline components |
+| waystone_default v1 | ~20% | 0% | — | LLM judge broken (auth missing) |
+| waystone_default v4 | 38.1% | 24.2% | 731 | Three fixes applied (see below) |
+| waystone_default v5 | 42.3% | 23.5% | 739 | + retrieval-time date resolution |
+| waystone_default v6 | 30.0% | 17.3% | 706 | + ISO date headers at ingest (re-ingest) — **negative result** |
 
-### v4 per-category breakdown (engram_default, conv-42)
+### v4 per-category breakdown (waystone_default, conv-42)
 
 | Category | n | KW exact | LLM strict | LLM partial |
 |----------|---|---------|-----------|------------|
@@ -1402,7 +1402,7 @@ Two metrics reported throughout:
 
 #### Fix 3 — Recency half-life tuned for LOCOMO (v1 → v4)
 `ablation_configs.py`: `recency_half_life_days` default was 30 (real-time use). LOCOMO events span 2-4 years, so all facts scored near-zero recency and were pruned before reaching top_k.
-- **Fix**: Set `recency_half_life_days=3650` (10 years) in all `engram_default`/`engram_filtered`/`engram_tight` configs.
+- **Fix**: Set `recency_half_life_days=3650` (10 years) in all `waystone_default`/`waystone_filtered`/`waystone_tight` configs.
 - **Impact**: Avg tokens 298 → 731. Primary driver of the v1→v4 improvement.
 
 #### Fix 4 — Retrieval-time relative date resolution (v4 → v5)
@@ -1433,8 +1433,8 @@ Multi-hop questions require connecting facts across sessions. LLM strict at 44% 
 #### LLM PARTIAL credit is the ceiling signal
 Single_hop: 67-73% PARTIAL. Temporal: 57-60% PARTIAL. The context is frequently "in the neighborhood" — the right person, the right topic, but missing the precise answer. This points to extraction completeness gaps (some specific facts not captured) rather than retrieval failures.
 
-#### engram_temporal == engram_default (ablation design issue)
-`engram_temporal` and `engram_default` both use `domain='episodic_personal'` with identical config params. Temporal date resolution rules are already in `episodic_personal.layer1_rules`. **To isolate the temporal contribution as an ablation, a baseline profile *without* date resolution is needed.**
+#### waystone_temporal == waystone_default (ablation design issue)
+`waystone_temporal` and `waystone_default` both use `domain='episodic_personal'` with identical config params. Temporal date resolution rules are already in `episodic_personal.layer1_rules`. **To isolate the temporal contribution as an ablation, a baseline profile *without* date resolution is needed.**
 
 ---
 
@@ -1488,7 +1488,7 @@ Two changes to `retriever.py`:
 ## Investigation — top_k as binding constraint (2026-03-31)
 
 ### Background
-Conv-42 has 1085 nodes. With `engram_dynamic_topk` using `sqrt(1085)=32`, keyword accuracy dropped 3.8pp and LLM accuracy dropped 4.4pp vs fixed `top_k=50`. This investigation identifies why and characterizes the correct formula.
+Conv-42 has 1085 nodes. With `waystone_dynamic_topk` using `sqrt(1085)=32`, keyword accuracy dropped 3.8pp and LLM accuracy dropped 4.4pp vs fixed `top_k=50`. This investigation identifies why and characterizes the correct formula.
 
 ### Finding 1: top_k is the binding constraint on every query
 
@@ -1521,11 +1521,11 @@ The 13 questions where top_k=32 misses but top_k=50 hits are spread across categ
 |  1500 |   38 |     52 |    60 |      50 |
 |  5000 |   50 |     61 |   100 |      50 |
 
-`sqrt` compresses too aggressively — at 1085 nodes it gives 32 (36% below fixed 50). `int(log2(n) * 5)` hits exactly 50 at LOCOMO scale and scales gracefully. Added `engram_dynamic_topk_log` ablation config with `topk_formula="log2"`.
+`sqrt` compresses too aggressively — at 1085 nodes it gives 32 (36% below fixed 50). `int(log2(n) * 5)` hits exactly 50 at LOCOMO scale and scales gracefully. Added `waystone_dynamic_topk_log` ablation config with `topk_formula="log2"`.
 
 ### Finding 4: LLM comparison was confounded by nulls
 
-`engram_default` (top_k=50) run had 54/260 null LLM scores, concentrated in adversarial (36/61 = 59% null rate). The adversarial LLM comparison between configs is unreliable. Clean categories (multi_hop, single_hop, temporal) show:
+`waystone_default` (top_k=50) run had 54/260 null LLM scores, concentrated in adversarial (36/61 = 59% null rate). The adversarial LLM comparison between configs is unreliable. Clean categories (multi_hop, single_hop, temporal) show:
 - multi_hop: 60.2% (top_k=50, 93 valid) vs 56.8% (top_k=32, all 111) — real 3.4pp loss
 - single_hop: 16.2% vs 16.2% — no difference
 - temporal: 20.0% vs 20.0% — no difference
@@ -1533,18 +1533,18 @@ The 13 questions where top_k=32 misses but top_k=50 hits are spread across categ
 Multi_hop is the category most sensitive to top_k because BFS chain traversal depends on having sufficient seeds to cover the graph.
 
 ### Changes made
-- `engram/retriever.py`: Dynamic top_k block now reads `strats["topk_formula"]` ("sqrt" | "log2"); defaults to "sqrt" for backward compat
-- `benchmarks/locomo/ablation_configs.py`: Added `topk_formula: str = "sqrt"` field to `AblationConfig`; added `engram_dynamic_topk_log` config
+- `waystone/retriever.py`: Dynamic top_k block now reads `strats["topk_formula"]` ("sqrt" | "log2"); defaults to "sqrt" for backward compat
+- `benchmarks/locomo/ablation_configs.py`: Added `topk_formula: str = "sqrt"` field to `AblationConfig`; added `waystone_dynamic_topk_log` config
 - `benchmarks/locomo/harness.py`: Passes `topk_formula` through strategies dict
 
 ### Validation result (conv-42, 260 QA, LLM judge)
 
 | config | top_k @ 1085 nodes | kw_accuracy | kw_exact | llm_accuracy | avg_tokens |
 |--------|-------------------|-------------|----------|--------------|------------|
-| engram_dynamic_topk (sqrt) | 32 | 47.3% | 40.8% | 31.5% | 464 |
-| engram_dynamic_topk_log (log2) | 50 | **56.9%** | **48.5%** | **38.5%** | 741 |
+| waystone_dynamic_topk (sqrt) | 32 | 47.3% | 40.8% | 31.5% | 464 |
+| waystone_dynamic_topk_log (log2) | 50 | **56.9%** | **48.5%** | **38.5%** | 741 |
 
-log2 is the better formula at this graph scale. The token cost (+60%) is the trade-off; this is the same token cost as `engram_default` (fixed top_k=50). **Recommendation: `engram_dynamic_topk_log` supersedes `engram_dynamic_topk` as the dynamic scaling baseline.** The log2 formula should be the default for dynamic top_k going forward.
+log2 is the better formula at this graph scale. The token cost (+60%) is the trade-off; this is the same token cost as `waystone_default` (fixed top_k=50). **Recommendation: `waystone_dynamic_topk_log` supersedes `waystone_dynamic_topk` as the dynamic scaling baseline.** The log2 formula should be the default for dynamic top_k going forward.
 
 ---
 
@@ -1554,43 +1554,43 @@ log2 is the better formula at this graph scale. The token cost (+60%) is the tra
 `all-MiniLM-L6-v2` (MTEB Retrieval: 41.95) was the default embedding model. `BAAI/bge-small-en-v1.5` is a retrieval-tuned model at the same 384 dimensions with MTEB Retrieval: 51.68 (+23%). Same embedding dimension means zero schema migration — a drop-in swap.
 
 ### Change
-`engram/embedder.py`: Updated `_MODEL_NAME = "BAAI/bge-small-en-v1.5"` and updated the `EMBEDDING_DIM` comment. `local_files_only=True` is preserved; model was pre-downloaded to HF cache before the constant was changed.
+`waystone/embedder.py`: Updated `_MODEL_NAME = "BAAI/bge-small-en-v1.5"` and updated the `EMBEDDING_DIM` comment. `local_files_only=True` is preserved; model was pre-downloaded to HF cache before the constant was changed.
 
-### Validation result (engram_semantic, conv-42, 260 QA, LLM judge)
+### Validation result (waystone_semantic, conv-42, 260 QA, LLM judge)
 
 | config | model | kw_accuracy | kw_exact | llm_accuracy | avg_tokens |
 |--------|-------|-------------|----------|--------------|------------|
-| engram_semantic (all-MiniLM) | all-MiniLM-L6-v2 | 16.5% | 12.3% | — | 546 |
-| engram_semantic (bge-small) | bge-small-en-v1.5 | **41.5%** | **33.9%** | **21.7%** | 756 |
+| waystone_semantic (all-MiniLM) | all-MiniLM-L6-v2 | 16.5% | 12.3% | — | 546 |
+| waystone_semantic (bge-small) | bge-small-en-v1.5 | **41.5%** | **33.9%** | **21.7%** | 756 |
 
 +25pp keyword accuracy improvement — the MTEB Retrieval gap translates directly to benchmark accuracy. The semantic config is now competitive with early-pipeline baselines.
 
-**Note**: `engram_semantic` uses `relevance_scoring=False` to isolate the vector signal. At 21.7% LLM accuracy it still trails `engram_dynamic_topk_log` (38.5%), suggesting keyword-seeded BFS + fact-text scoring outperforms pure embedding retrieval on this corpus.
+**Note**: `waystone_semantic` uses `relevance_scoring=False` to isolate the vector signal. At 21.7% LLM accuracy it still trails `waystone_dynamic_topk_log` (38.5%), suggesting keyword-seeded BFS + fact-text scoring outperforms pure embedding retrieval on this corpus.
 
 ---
 
-## engram_combined ablation (2026-03-31)
+## waystone_combined ablation (2026-03-31)
 
 ### Config
 Full stack: `semantic=True, relevance_scoring=True, topk_formula="log2"`. Tests whether keyword seed ranking and vector retrieval are additive.
 
-**Limitation**: `sqlite-vec` cannot be loaded on Python 3.14 macOS (`enable_load_extension` is disabled). `store._vec_available=False` → `search_by_embedding()` returns `[]` → the `semantic=True` flag has **no runtime effect** on retrieval. The `engram_semantic` and `engram_combined` results are actually keyword-only BFS — the embedding model affects dedup quality at ingestion but not retrieval ranking.
+**Limitation**: `sqlite-vec` cannot be loaded on Python 3.14 macOS (`enable_load_extension` is disabled). `store._vec_available=False` → `search_by_embedding()` returns `[]` → the `semantic=True` flag has **no runtime effect** on retrieval. The `waystone_semantic` and `waystone_combined` results are actually keyword-only BFS — the embedding model affects dedup quality at ingestion but not retrieval ranking.
 
 ### Validation result (conv-42, 260 QA, keyword only — LLM judge failed: Anthropic credits exhausted)
 
 | config | graph | nodes | kw_accuracy | kw_exact | avg_tokens |
 |--------|-------|-------|-------------|----------|------------|
-| engram_dynamic_topk_log | all-MiniLM dedup | 1017 | **56.9%** | **48.5%** | 741 |
-| engram_semantic | bge-small dedup | 712 | 41.5% | 33.9% | 756 |
-| engram_combined | bge-small dedup | 712 | 46.5% | 39.6% | 720 |
+| waystone_dynamic_topk_log | all-MiniLM dedup | 1017 | **56.9%** | **48.5%** | 741 |
+| waystone_semantic | bge-small dedup | 712 | 41.5% | 33.9% | 756 |
+| waystone_combined | bge-small dedup | 712 | 46.5% | 39.6% | 720 |
 
-The combined config (+5pp vs engram_semantic on the same graph) confirms that `relevance_scoring=True` + log2 top_k adds value independent of the semantic flag. However, both configs using the bge_small-deduped graph (712 nodes) trail the all-MiniLM graph (1017 nodes) by ~10pp in keyword accuracy.
+The combined config (+5pp vs waystone_semantic on the same graph) confirms that `relevance_scoring=True` + log2 top_k adds value independent of the semantic flag. However, both configs using the bge_small-deduped graph (712 nodes) trail the all-MiniLM graph (1017 nodes) by ~10pp in keyword accuracy.
 
 ### Finding: bge-small dedup over-prunes at this threshold
 
 The bge-small checkpoint has 30% fewer nodes (712 vs 1017). More aggressive semantic dedup removed 305 nodes that contain answer keywords. The accuracy gap is likely driven by **dedup recall loss**, not the retrieval strategy. bge-small's higher MTEB Retrieval score means it correctly identifies more pairs as semantically equivalent — but on this corpus that appears to over-prune.
 
-**Next step**: Run `engram_combined` (or `engram_dynamic_topk_log`) on the all-MiniLM checkpoint to cleanly isolate retrieval strategy vs dedup quality. Also: fix the sqlite-vec Python 3.14 incompatibility to make semantic retrieval actually work at query time.
+**Next step**: Run `waystone_combined` (or `waystone_dynamic_topk_log`) on the all-MiniLM checkpoint to cleanly isolate retrieval strategy vs dedup quality. Also: fix the sqlite-vec Python 3.14 incompatibility to make semantic retrieval actually work at query time.
 
 ---
 
@@ -1600,30 +1600,30 @@ The bge-small checkpoint has 30% fewer nodes (712 vs 1017). More aggressive sema
 
 Full ablation of 6 retrieval-layer improvements on conv-26 (19 sessions, 199 QA pairs, quick mode). No extraction needed — all configs share `dedup_threshold=0.95, domain="episodic_personal"` so conv-26 checkpoints were reused. LLM judge: `local:qwen/qwen3-8b`.
 
-**Baseline**: `engram_dedup95` — 67.8% keyword accuracy, 62.1% LLM accuracy.  
+**Baseline**: `waystone_dedup95` — 67.8% keyword accuracy, 62.1% LLM accuracy.  
 **Zep target**: 73% LLM accuracy on LOCOMO.
 
 ### Results (all 10 configs)
 
 | Config | Features | kw_accuracy | kw_exact | llm_accuracy | avg_tokens |
 |--------|----------|-------------|----------|--------------|------------|
-| engram_dedup95 (baseline) | — | 67.8% | 52.3% | 62.1% | ~730 |
-| engram_query_expansion | #1 only | 53.3% | 47.2% | 57.8% | 730 |
-| engram_person_anchor | #2 only | 61.3% | 51.3% | 64.3% | 742 |
-| engram_temporal_boost | #3 only | 55.3% | 46.7% | **71.4%** | 764 |
-| engram_bm25_rrf | BM25+RRF | 64.3% | 53.8% | 60.8% | 738 |
-| engram_person_temporal | #2 + #3 | 56.3% | 50.2% | 64.8% | 726 |
-| engram_improvements_1_3 | #1 + #2 + #3 | 60.3% | 51.8% | 70.3% | 757 |
-| engram_coreference | #4 only | 57.3% | 48.2% | 58.3% | 746 |
-| engram_session_scoped | #6 only | **67.8%** | **52.8%** | **74.9%** | 732 |
-| engram_coreference_temporal | #4 + #3 | 57.3% | 48.7% | 64.3% | 746 |
-| **engram_improvements_4_6** | **#4 + #6** | **67.8%** | **52.8%** | **74.9%** | 732 |
+| waystone_dedup95 (baseline) | — | 67.8% | 52.3% | 62.1% | ~730 |
+| waystone_query_expansion | #1 only | 53.3% | 47.2% | 57.8% | 730 |
+| waystone_person_anchor | #2 only | 61.3% | 51.3% | 64.3% | 742 |
+| waystone_temporal_boost | #3 only | 55.3% | 46.7% | **71.4%** | 764 |
+| waystone_bm25_rrf | BM25+RRF | 64.3% | 53.8% | 60.8% | 738 |
+| waystone_person_temporal | #2 + #3 | 56.3% | 50.2% | 64.8% | 726 |
+| waystone_improvements_1_3 | #1 + #2 + #3 | 60.3% | 51.8% | 70.3% | 757 |
+| waystone_coreference | #4 only | 57.3% | 48.2% | 58.3% | 746 |
+| waystone_session_scoped | #6 only | **67.8%** | **52.8%** | **74.9%** | 732 |
+| waystone_coreference_temporal | #4 + #3 | 57.3% | 48.7% | 64.3% | 746 |
+| **waystone_improvements_4_6** | **#4 + #6** | **67.8%** | **52.8%** | **74.9%** | 732 |
 
 ### Key findings
 
 1. **#6 (session_scoped) is the dominant feature** — +12.8pp LLM lift over baseline (74.9% vs 62.1%). Restricting BFS entry candidates to evidence sessions (oracle signal from the dataset) eliminates cross-session noise. This is the single most impactful change.
 
-2. **Coreference (#4) adds nothing on top of session_scoped** — `engram_improvements_4_6` and `engram_session_scoped` produce identical results (67.8% kw, 74.9% LLM). The session filter already scopes the evidence tightly enough that referent resolution doesn't help further.
+2. **Coreference (#4) adds nothing on top of session_scoped** — `waystone_improvements_4_6` and `waystone_session_scoped` produce identical results (67.8% kw, 74.9% LLM). The session filter already scopes the evidence tightly enough that referent resolution doesn't help further.
 
 3. **Temporal boost (#3) is the strongest blind feature** — 71.4% LLM with no oracle signal, above the 70.3% of the full 3-way stack (#1+#2+#3). Combining #3 with person anchoring (#2) drops to 64.8%, suggesting #2 and #3 retrieve overlapping content and the addition adds noise.
 
@@ -1635,7 +1635,7 @@ Full ablation of 6 retrieval-layer improvements on conv-26 (19 sessions, 199 QA 
 
 ### Recommendation
 
-`engram_session_scoped` beats Zep's 73% target and represents the retrieval ceiling for the current graph (oracle sessions). In production (no oracle signal), `engram_temporal_boost` (#3 alone at 71.4%) is the best deployable single improvement.
+`waystone_session_scoped` beats Zep's 73% target and represents the retrieval ceiling for the current graph (oracle sessions). In production (no oracle signal), `waystone_temporal_boost` (#3 alone at 71.4%) is the best deployable single improvement.
 
 **Caveat**: session_scoped uses oracle `evidence_session_ids` from the LOCOMO dataset — not available at query time in production. The 74.9% result is a retrieval upper bound, not a deployable system number. Temporal boost (71.4%) is the realistic ceiling for blind retrieval improvements.
 
@@ -1656,10 +1656,10 @@ Full ablation of 6 retrieval-layer improvements on conv-26 (19 sessions, 199 QA 
 
 | Config | kw_accuracy | kw_exact | llm_accuracy | avg_tokens | n |
 |--------|-------------|----------|--------------|------------|---|
-| **engram_semantic_rerank_topk100** | 72.6% | 63.8% | **85.7%** | 1439 | 762 |
-| engram_cross_encoder_topk100 | 75.2% | 65.5% | 84.1% | 1471 | 762 |
+| **waystone_semantic_rerank_topk100** | 72.6% | 63.8% | **85.7%** | 1439 | 762 |
+| waystone_cross_encoder_topk100 | 75.2% | 65.5% | 84.1% | 1471 | 762 |
 
-**Primary config: `engram_semantic_rerank_topk100`** — highest LLM accuracy (85.7%).
+**Primary config: `waystone_semantic_rerank_topk100`** — highest LLM accuracy (85.7%).
 
 Cross-encoder achieves higher keyword accuracy (75.2% vs 72.6%) but lower LLM accuracy (84.1%). The cross-encoder (`ms-marco-MiniLM-L-6-v2`) is trained on web document retrieval (MS-MARCO), creating a domain mismatch with LOCOMO's conversational personal-memory corpus. The `all-MiniLM` bi-encoder used in semantic rerank is better calibrated for Q&A/conversational similarity.
 
@@ -1667,16 +1667,16 @@ Cross-encoder achieves higher keyword accuracy (75.2% vs 72.6%) but lower LLM ac
 
 | System | LLM accuracy | Notes |
 |--------|-------------|-------|
-| **Engram (semantic_rerank_topk100)** | **85.7%** | Dev split, cats 1–4, 762 QA pairs |
+| **Waystone (semantic_rerank_topk100)** | **85.7%** | Dev split, cats 1–4, 762 QA pairs |
 | Zep | 73% | Published target |
 | Mem0 | 88% | Published target (full test set) |
 
-Engram's 85.7% exceeds Zep (73%) and approaches Mem0 (88%) on the dev split with official protocol scoring.
+Waystone's 85.7% exceeds Zep (73%) and approaches Mem0 (88%) on the dev split with official protocol scoring.
 
 ### Next: Full LOCOMO Run
 
 5 test conversations (conv-44, 47, 48, 49, 50) are not yet extracted. Full official run requires:
-1. Extract test split → stored in `engram_dedup95` checkpoint dir (source for `semantic_rerank_topk100`)
+1. Extract test split → stored in `waystone_dedup95` checkpoint dir (source for `semantic_rerank_topk100`)
 2. Run retrieval + batch judge on all 10 conversations (~778 new QA pairs)
 3. Report combined score as the paper number
 
@@ -1721,10 +1721,10 @@ Two configs are planned. Both use identical retrieval pipelines; the only variab
 
 | Config | Extraction model | Retrieval | Purpose |
 |--------|-----------------|-----------|---------|
-| `engram_semantic_rerank_topk100` | gemini-2.5-flash-lite | top_k=100, semantic rerank | **Primary result** — best Engram pipeline |
-| `engram_semantic_rerank_gpt4omini` | gpt-4o-mini | top_k=100, semantic rerank | **Apples-to-apples** — same extraction model as Zep/Mem0 |
+| `waystone_semantic_rerank_topk100` | gemini-2.5-flash-lite | top_k=100, semantic rerank | **Primary result** — best Waystone pipeline |
+| `waystone_semantic_rerank_gpt4omini` | gpt-4o-mini | top_k=100, semantic rerank | **Apples-to-apples** — same extraction model as Zep/Mem0 |
 
-The delta between the two configs isolates how much of Engram's performance comes from the extraction model vs. the graph retrieval architecture.
+The delta between the two configs isolates how much of Waystone's performance comes from the extraction model vs. the graph retrieval architecture.
 
 ### Dataset
 
@@ -1736,17 +1736,17 @@ The delta between the two configs isolates how much of Engram's performance come
 
 | Config | Dev split | Test split |
 |--------|-----------|------------|
-| `engram_dedup95` (source for semantic_rerank) | ✅ done (5 convs) | ⬜ pending |
-| `engram_gpt4o_mini_extraction` (source for gpt4omini config) | ⬜ pending | ⬜ pending |
+| `waystone_dedup95` (source for semantic_rerank) | ✅ done (5 convs) | ⬜ pending |
+| `waystone_gpt4o_mini_extraction` (source for gpt4omini config) | ⬜ pending | ⬜ pending |
 
-The dev-split checkpoints for `engram_dedup95` are already stored and reused — no re-extraction needed for the primary config's dev portion. Only the 5 test conversations need fresh extraction.
+The dev-split checkpoints for `waystone_dedup95` are already stored and reused — no re-extraction needed for the primary config's dev portion. Only the 5 test conversations need fresh extraction.
 
 ### Execution
 
 ```bash
 python -m benchmarks.locomo.harness \
   --split all \
-  --configs engram_semantic_rerank_topk100 engram_semantic_rerank_gpt4omini \
+  --configs waystone_semantic_rerank_topk100 waystone_semantic_rerank_gpt4omini \
   --conv-workers 2 \
   --use-batch \
   --verbose
@@ -1764,18 +1764,18 @@ Once the full run completes, update this section with the final table:
 
 | System | LLM accuracy | Extraction model | Notes |
 |--------|-------------|-----------------|-------|
-| **Engram (`semantic_rerank_topk100`)** | _TBD_ | gemini-2.5-flash-lite | All 10 convs, cats 1–4 |
-| **Engram (`semantic_rerank_gpt4omini`)** | _TBD_ | gpt-4o-mini | Apples-to-apples vs Zep/Mem0 |
+| **Waystone (`semantic_rerank_topk100`)** | _TBD_ | gemini-2.5-flash-lite | All 10 convs, cats 1–4 |
+| **Waystone (`semantic_rerank_gpt4omini`)** | _TBD_ | gpt-4o-mini | Apples-to-apples vs Zep/Mem0 |
 | Zep | 73% | gpt-4o-mini | Published, full test set |
 | Mem0 | 88% | gpt-4o-mini | Published, full test set |
 
-The gpt4omini config is the controlled comparison: same extraction model, same judge, same dataset, different memory architecture. That delta is the cleanest evidence of Engram's architectural contribution.
+The gpt4omini config is the controlled comparison: same extraction model, same judge, same dataset, different memory architecture. That delta is the cleanest evidence of Waystone's architectural contribution.
 
 ---
 
 ## LongMemEval Benchmark Plan
 
-**Goal**: Run Engram against LongMemEval — a Microsoft Research benchmark for long-term memory in LLM assistants — to validate performance on question types that directly target Engram's architectural differentiators: knowledge update (supersedes), multi-session aggregation (graph BFS), and temporal reasoning.
+**Goal**: Run Waystone against LongMemEval — a Microsoft Research benchmark for long-term memory in LLM assistants — to validate performance on question types that directly target Waystone's architectural differentiators: knowledge update (supersedes), multi-session aggregation (graph BFS), and temporal reasoning.
 
 ### Dataset
 
@@ -1789,27 +1789,27 @@ Two variants:
 
 - **500 questions** total per variant
 - **No official train/test split**; run all 500
-- **Judge**: The original paper uses GPT-4o (not mini). We will use **gpt-4o-mini** for cost reasons, same as LOCOMO. This means our absolute scores will not be directly comparable to published paper numbers. The meaningful comparison is Engram vs other systems run under the same judge — not Engram vs the paper's table.
+- **Judge**: The original paper uses GPT-4o (not mini). We will use **gpt-4o-mini** for cost reasons, same as LOCOMO. This means our absolute scores will not be directly comparable to published paper numbers. The meaningful comparison is Waystone vs other systems run under the same judge — not Waystone vs the paper's table.
 
 ### Question categories
 
-| Category | Count (approx) | Engram relevance |
+| Category | Count (approx) | Waystone relevance |
 |----------|---------------|-----------------|
 | Single-session fact recall | ~150 | Baseline — tag matching, BFS |
 | Temporal reasoning | ~100 | `occurred_at` field + temporal prompt rules |
-| **Knowledge update** | ~100 | **Engram's key differentiator** — supersedes mechanism tracks old→new directly |
+| **Knowledge update** | ~100 | **Waystone's key differentiator** — supersedes mechanism tracks old→new directly |
 | Multi-session aggregation | ~100 | Graph BFS collects distributed facts across sessions |
 | Absent information | ~50 | Requires confident "I don't know" — retrieval precision matters |
 
-Knowledge update is the category most likely to produce a meaningful delta over flat-memory systems (Zep, Mem0). Engram's `supersedes` edge means the graph already encodes "X was replaced by Y"; retrieval for Y also surfaces the old value for context. Flat systems must either overwrite the old value (and lose temporal context) or store both and let the LLM sort it out (retrieval noise).
+Knowledge update is the category most likely to produce a meaningful delta over flat-memory systems (Zep, Mem0). Waystone's `supersedes` edge means the graph already encodes "X was replaced by Y"; retrieval for Y also surfaces the old value for context. Flat systems must either overwrite the old value (and lose temporal context) or store both and let the LLM sort it out (retrieval noise).
 
-### How the data maps to Engram's ingestion model
+### How the data maps to Waystone's ingestion model
 
 LongMemEval sessions are conversation turns, same as LOCOMO. The ingestion pipeline maps cleanly:
 
 ```
-LongMemEval session  →  engram Session (session_id, datetime_str, turns)
-LongMemEval subject  →  engram Conversation (sample_id, sessions[])
+LongMemEval session  →  waystone Session (session_id, datetime_str, turns)
+LongMemEval subject  →  waystone Conversation (sample_id, sessions[])
 ```
 
 For `LongMemEval_S`, each question's single long conversation is bisected into sessions by the harness (the ingestion pipeline already handles bisection on output-length truncation). For `LongMemEval_M`, sessions arrive pre-segmented.
@@ -1849,14 +1849,14 @@ Option 2 is simpler and avoids introducing a new hyperparameter. The judge promp
 
 | Config | Purpose |
 |--------|---------|
-| `engram_lme_gemini` | Primary — gemini-2.5-flash-lite extraction, semantic rerank top_k=100 |
-| `engram_lme_gpt4omini` | Apples-to-apples — gpt-4o-mini extraction (matches paper's model family) |
+| `waystone_lme_gemini` | Primary — gemini-2.5-flash-lite extraction, semantic rerank top_k=100 |
+| `waystone_lme_gpt4omini` | Apples-to-apples — gpt-4o-mini extraction (matches paper's model family) |
 
 These mirror the two LOCOMO configs. Same domain profile (`episodic_personal`), same retrieval pipeline.
 
 ### Expected advantages by category
 
-| Category | Why Engram should win |
+| Category | Why Waystone should win |
 |----------|----------------------|
 | Knowledge update | `supersedes` edge explicitly models old→new. Query for "current job" retrieves the latest node AND the superseded node (for context), giving the LLM everything it needs. Flat memory systems either overwrite (lose history) or store both unlinked (retrieval lottery). |
 | Multi-session aggregation | BFS traversal across graph edges collects facts distributed across many sessions. Flat vector search returns top-K chunks by similarity; aggregation questions often require low-similarity nodes that happen to be connected. |
@@ -1871,7 +1871,7 @@ These mirror the two LOCOMO configs. Same domain profile (`episodic_personal`), 
 
 3. **Harness** (`harness.py`): port the LOCOMO harness structure. Key difference: the absent-info category must be identified and handled separately (either by category label in the dataset or by the "none of the above" retrieval fallback).
 
-4. **Ablation configs** (`ablation_configs.py`): copy the LOCOMO `engram_semantic_rerank_topk100` config; rename; point `db_dir` to a longmemeval-specific cache directory.
+4. **Ablation configs** (`ablation_configs.py`): copy the LOCOMO `waystone_semantic_rerank_topk100` config; rename; point `db_dir` to a longmemeval-specific cache directory.
 
 5. **Scoring** (`evaluation/scoring.py`): import and re-export `score_llm_judge`, `submit_judge_batch` from the LOCOMO path. Add absent-info override: if `retrieved_context` is empty, map answer to `"I don't know"` before judging.
 
@@ -1887,7 +1887,7 @@ The LongMemEval paper reports results for several retrieval-augmented memory sys
 | Full context (oracle) | ~70% | All sessions concatenated into context window |
 | MemoryBank | ~40–50% | Flat retrieval baseline |
 | ReadAgent | ~55–60% | Summarization-based compression |
-| **Engram (target)** | _TBD_ | Graph retrieval with supersedes |
+| **Waystone (target)** | _TBD_ | Graph retrieval with supersedes |
 
 Note: exact published numbers vary by variant (S vs M) and question category. The paper's Table 2 is the reference.
 
@@ -1927,9 +1927,9 @@ LOCOMO extraction (10 conversations, ~220 sessions total) costs roughly $0.10–
 
 2. **500 independent GraphStores, no cross-conversation checkpointing.** LOCOMO has 10 conversations; we can reuse all 10 checkpoint DBs. LongMemEval has 500. If a run is interrupted partway, already-completed conversations are checkpointed individually. The harness checkpoint logic (one DB per `sample_id`) already handles this correctly.
 
-3. **Judge model mismatch.** The paper reports scores with GPT-4o. Our gpt-4o-mini scores will be systematically lower (gpt-4o-mini is a stricter judge in some categories). To interpret results: compare Engram vs other systems that have been run under gpt-4o-mini judging, not the paper's absolute numbers. If we want apples-to-apples with the paper, one calibration run on a 50-question subset with both judges would establish the offset.
+3. **Judge model mismatch.** The paper reports scores with GPT-4o. Our gpt-4o-mini scores will be systematically lower (gpt-4o-mini is a stricter judge in some categories). To interpret results: compare Waystone vs other systems that have been run under gpt-4o-mini judging, not the paper's absolute numbers. If we want apples-to-apples with the paper, one calibration run on a 50-question subset with both judges would establish the offset.
 
-4. **Abstention category requires retrieval confidence signal.** When Engram retrieves nothing above the relevance threshold, the answer should be "I don't know." LOCOMO never tests this. The harness needs to detect empty/low-confidence retrieval and short-circuit to "the information is not available in the conversation history" before calling the judge.
+4. **Abstention category requires retrieval confidence signal.** When Waystone retrieves nothing above the relevance threshold, the answer should be "I don't know." LOCOMO never tests this. The harness needs to detect empty/low-confidence retrieval and short-circuit to "the information is not available in the conversation history" before calling the judge.
 
 5. **`longmemeval` (original) is deprecated.** Use `longmemeval-cleaned` — the original had noisy sessions that made some questions unanswerable, biasing scores downward for memory systems that actually retrieved the right facts.
 
@@ -1948,7 +1948,7 @@ No new model dependencies — the existing `sentence-transformers` install cover
 
 *April 2026 — NanoSwarm research agent output*
 
-*Context: Four independent swarm bots with unrelated constraints (HFT engineer, RPG AI director, adversarial critic, data governance specialist) all independently proposed GNN re-ranking as the highest-leverage improvement to Engram retrieval accuracy. This section documents the supporting research.*
+*Context: Four independent swarm bots with unrelated constraints (HFT engineer, RPG AI director, adversarial critic, data governance specialist) all independently proposed GNN re-ranking as the highest-leverage improvement to Waystone retrieval accuracy. This section documents the supporting research.*
 
 ---
 
@@ -1959,13 +1959,13 @@ A GNN is an iterative message-passing neural network. Each node aggregates its n
 - **Vector search**: `relevance = cosine_sim(query, node)` — nodes scored in isolation
 - **GNN re-ranking**: `relevance = MLP(gnn_embed(node + neighbors), query)` — nodes scored in graph context
 
-Key capability: GNN can discover that a node is relevant *because of its neighbors*, not because it's directly similar to the query. For Engram, this means a stale node from the wrong project context can be downranked even if its embedding is semantically close to the query.
+Key capability: GNN can discover that a node is relevant *because of its neighbors*, not because it's directly similar to the query. For Waystone, this means a stale node from the wrong project context can be downranked even if its embedding is semantically close to the query.
 
 ---
 
 ### Architecture Recommendation
 
-| Architecture | Aggregation | Inductive? | Verdict for Engram |
+| Architecture | Aggregation | Inductive? | Verdict for Waystone |
 |---|---|---|---|
 | GCN | Fixed mean | No | Fallback — simpler, faster, transductive |
 | GraphSAGE | Learned, sampled | Yes | Overkill unless graph grows very rapidly |
@@ -1975,13 +1975,13 @@ Key capability: GNN can discover that a node is relevant *because of its neighbo
 - ~40K–100K parameters — tiny, trains in minutes
 - Inductive: no retraining when new nodes arrive daily
 - Attention weights are interpretable (shows which neighbors influenced the ranking)
-- Handles Engram's typed heterogeneous nodes via multi-head attention
+- Handles Waystone's typed heterogeneous nodes via multi-head attention
 
 Multi-relational GCN (RGCN) is worth considering if edge type differentiation (decision→lesson vs. entity→entity) matters more than inductive learning.
 
 ---
 
-### Engram-Specific Fit
+### Waystone-Specific Fit
 
 **Why it fits:**
 - False positive reduction is exactly the core problem — stale nodes from old projects with similar embeddings get downranked via neighbor context
@@ -1991,7 +1991,7 @@ Multi-relational GCN (RGCN) is worth considering if edge type differentiation (d
 
 **What needs custom work:**
 - **Temporal decay** requires feature engineering — encode `node_age_log` as a node feature; no off-the-shelf temporal GNN has been evaluated on small personal KGs
-- **Graph construction is ambiguous** — recommend starting with top-8 cosine-similar neighbors per node (sparse, conservative); explicit Engram relationships are also edges
+- **Graph construction is ambiguous** — recommend starting with top-8 cosine-similar neighbors per node (sparse, conservative); explicit Waystone relationships are also edges
 - **Cold-start is severe** — needs ~2 weeks of retrieval logs before model becomes useful
 - No published benchmarks on personal KGs — all evidence comes from document ranking tasks
 
@@ -2011,7 +2011,7 @@ Published results on standard document ranking tasks:
 
 Sources: [GNN Re-ranking via Corpus Graph](https://arxiv.org/html/2406.11720v1), [G-RAG Paper](https://arxiv.org/abs/2405.18414), [Graph-Based Re-ranking Survey](https://arxiv.org/html/2503.14802v1)
 
-**Engram estimate: +4–6% AP/MRR** if false positives and temporal staling are real problems. Gains are larger on hard/ambiguous queries — which is exactly where Engram's false positive problem lives. Less than +2% if vector search baseline is already >0.85.
+**Waystone estimate: +4–6% AP/MRR** if false positives and temporal staling are real problems. Gains are larger on hard/ambiguous queries — which is exactly where Waystone's false positive problem lives. Less than +2% if vector search baseline is already >0.85.
 
 ---
 
@@ -2028,7 +2028,7 @@ Query → Vector search (top-500 candidates) → Subgraph extraction → GNN re-
 
 **Build path:**
 1. **Week 1**: Instrument retrieval logs; collect implicit triplets (click = relevant, scroll-past = not)
-2. **Week 2**: Build graph (explicit Engram edges + top-8 cosine-similar neighbors); train 2-layer GAT on 500–1000 triplets (~30 min CPU); deploy
+2. **Week 2**: Build graph (explicit Waystone edges + top-8 cosine-similar neighbors); train 2-layer GAT on 500–1000 triplets (~30 min CPU); deploy
 3. **Week 3+**: Monitor, fine-tune weekly as logs accumulate
 4. **Month 2 (optional)**: Manually label 20–30 hard queries for +1–2% boost
 
@@ -2036,7 +2036,7 @@ Query → Vector search (top-500 candidates) → Subgraph extraction → GNN re-
 ```
 Nodes: all entities/decisions/lessons in KG
 Edges:
-  - Explicit: Engram relationships (decision→lesson, entity→entity, etc.)
+  - Explicit: Waystone relationships (decision→lesson, entity→entity, etc.)
   - Learned: top-8 cosine-similar neighbors per node (sparse, conservative)
 Node features: [embedding_768dim, node_type_onehot, log(age_days), project_id_onehot]
 ```
@@ -2060,7 +2060,7 @@ Node features: [embedding_768dim, node_type_onehot, log(age_days), project_id_on
 
 The four bots converged for the same reason the benchmarks show consistent gains: GNN re-ranking addresses a structural weakness in vector search that no prompt-engineering fix can solve. Vector search scores documents in isolation. GNN re-ranking scores them in context of their neighbors. For a knowledge graph where the same concept appears across multiple projects with different relevance, neighbor context is the only reliable disambiguation signal.
 
-The improvement is modest (+4–6%) but addresses the specific failure mode — false positives from stale/out-of-scope nodes — that Engram's retrieval layer is most vulnerable to at scale.
+The improvement is modest (+4–6%) but addresses the specific failure mode — false positives from stale/out-of-scope nodes — that Waystone's retrieval layer is most vulnerable to at scale.
 
 
 ---
@@ -2222,7 +2222,7 @@ Extended `STOP_WORDS` in `retriever.py` with counting/quantity/temporal noise wo
 
 These words carry no meaningful BFS-seeding signal on their own; FTS/semantic channels handle them where they do appear as content.
 
-### Validation run — `engram_lme_s_pref_fanout`, 500 samples
+### Validation run — `waystone_lme_s_pref_fanout`, 500 samples
 
 | Metric | Cap=20 regressed | STOP_WORDS fix | Delta |
 |--------|-----------------|----------------|-------|
@@ -2273,7 +2273,7 @@ Commit `22a3bc6` ("feat(retriever): semantic retrieval channel, preference fanou
 
 Three changes:
 
-1. **`engram/retriever.py`** — `DEFAULT_STRATEGIES["semantic_rerank_cap"]` changed from `300` → `0` (0 = unlimited, rerank all collected nodes). Restores Apr-15 behavior as the default.
+1. **`waystone/retriever.py`** — `DEFAULT_STRATEGIES["semantic_rerank_cap"]` changed from `300` → `0` (0 = unlimited, rerank all collected nodes). Restores Apr-15 behavior as the default.
 
 2. **`benchmarks/locomo/ablation_configs.py`** — Added `semantic_rerank_cap: int = 0` field to `AblationConfig` dataclass (default 0 = unlimited). Field comment explains the tradeoff: cap>0 only if O(n) embedding lookups are a bottleneck; risk is multi-session recall loss.
 
@@ -2281,11 +2281,11 @@ Three changes:
 
 ### Verification (partial)
 
-Config `engram_lme_s_rerank_uncapped` (keyword-only): multi-session kw 48.9% → **51.1%** (+2.2pp). Partial recovery — the cap fix helps but isn't sufficient alone.
+Config `waystone_lme_s_rerank_uncapped` (keyword-only): multi-session kw 48.9% → **51.1%** (+2.2pp). Partial recovery — the cap fix helps but isn't sufficient alone.
 
-Config `engram_lme_s_apr15_repro` (LLM-judge, with fanout=True, cap=0): multi-session LLM **48.1%** — still 6.8pp below Apr-15's 54.9%. Investigation continued; a second uncontrolled difference was found (see below).
+Config `waystone_lme_s_apr15_repro` (LLM-judge, with fanout=True, cap=0): multi-session LLM **48.1%** — still 6.8pp below Apr-15's 54.9%. Investigation continued; a second uncontrolled difference was found (see below).
 
-**Production safety note:** `DEFAULT_STRATEGIES["semantic_rerank_cap"]` was set to `2000` (not 0). At LME scale (~1600 nodes/DB, BFS collects <500) the cap never triggers. At production scale (Engram ~32K nodes, AgentWorkspace ~66K nodes) an O(n) embedding lookup on all BFS-collected nodes would be very slow; the cap was originally added for exactly this reason. AblationConfig default remains `0` (unlimited for benchmarks); production default is `2000`.
+**Production safety note:** `DEFAULT_STRATEGIES["semantic_rerank_cap"]` was set to `2000` (not 0). At LME scale (~1600 nodes/DB, BFS collects <500) the cap never triggers. At production scale (Waystone ~32K nodes, AgentWorkspace ~66K nodes) an O(n) embedding lookup on all BFS-collected nodes would be very slow; the cap was originally added for exactly this reason. AblationConfig default remains `0` (unlimited for benchmarks); production default is `2000`.
 
 ### Second regression cause: `temporal_auto_route` not controlled
 
@@ -2300,7 +2300,7 @@ After the cap fix, per-question analysis revealed 14 multi-session regressions c
 1. **`benchmarks/locomo/ablation_configs.py`** — Added `temporal_auto_route: bool = True` to `AblationConfig` (default True = current behavior for all other configs).
 2. **`benchmarks/longmemeval/harness.py`** — Added `"temporal_auto_route": config.temporal_auto_route` to strategies dict.
 3. **`benchmarks/locomo/harness.py`** — Added `temporal_auto_route` plus all other missing passthrough keys: `semantic_rerank_cap`, `preference_fanout`, `preference_fanout_cap`, `semantic_retrieval`, `semantic_retrieval_k`.
-4. **`benchmarks/longmemeval/ablation_configs.py`** — `engram_lme_s_apr15_repro` updated to `temporal_auto_route=False` to match exact Apr-15 conditions (no temporal auto-routing existed at the time of that run).
+4. **`benchmarks/longmemeval/ablation_configs.py`** — `waystone_lme_s_apr15_repro` updated to `temporal_auto_route=False` to match exact Apr-15 conditions (no temporal auto-routing existed at the time of that run).
 
 **Results with both fixes (`s_apr15_repro_v2_20260419.json`):**
 
@@ -2340,10 +2340,10 @@ Commit `a2e1077` added counting/temporal words to STOP_WORDS: `"many"`, `"times"
 
 **Fix (`extend_stop_words` strategy key, Apr-19):**
 
-1. **`engram/retriever.py`** — Extracted `a2e1077` additions into `_EXTENDED_STOP_WORDS` (frozenset, separate from base `STOP_WORDS`). Added `"extend_stop_words": False` to `DEFAULT_STRATEGIES`. In `extract_keywords()`, added optional `stop_words` param; `retrieve()` passes `STOP_WORDS | _EXTENDED_STOP_WORDS` when `extend_stop_words=True`, otherwise base `STOP_WORDS` only.
+1. **`waystone/retriever.py`** — Extracted `a2e1077` additions into `_EXTENDED_STOP_WORDS` (frozenset, separate from base `STOP_WORDS`). Added `"extend_stop_words": False` to `DEFAULT_STRATEGIES`. In `extract_keywords()`, added optional `stop_words` param; `retrieve()` passes `STOP_WORDS | _EXTENDED_STOP_WORDS` when `extend_stop_words=True`, otherwise base `STOP_WORDS` only.
 2. **`benchmarks/locomo/ablation_configs.py`** — Added `extend_stop_words: bool = False` to `AblationConfig`.
 3. Both harnesses — thread `config.extend_stop_words` through to strategies dict.
-4. **`engram_lme_s_apr15_repro`** — does NOT set `extend_stop_words` (stays `False` = Apr-15 behavior, no extended stop words).
+4. **`waystone_lme_s_apr15_repro`** — does NOT set `extend_stop_words` (stays `False` = Apr-15 behavior, no extended stop words).
 
 **Results with stop_words fix (`s_apr15_repro_v3_stop_fix_20260419.json`):**
 
@@ -2383,7 +2383,7 @@ For questions like "How many plants did I acquire in the last month?" — the LL
 
 **Fix (April 19, 2026):**
 
-Removed `date_str` from type-section per-node rendering in `assemble_markdown()` (`engram/retriever.py`). The `## Timeline` section (active when `temporal_sort=True`) already renders dates in chronological order for temporal queries. Date suffixes in type-sections are redundant for temporal queries and harmful for counting queries.
+Removed `date_str` from type-section per-node rendering in `assemble_markdown()` (`waystone/retriever.py`). The `## Timeline` section (active when `temporal_sort=True`) already renders dates in chronological order for temporal queries. Date suffixes in type-sections are redundant for temporal queries and harmful for counting queries.
 
 **Results (`s_apr15_repro_v5_no_date_str_20260419.json`):**
 
@@ -2499,8 +2499,8 @@ Tested on LOCOMO dev split (conv-42 smoke + first 5 dev questions), gpt-4o-mini 
 
 | Config | Score | vs. SmartVector baseline |
 |--------|-------|--------------------------|
-| `engram_smartvector` | ~61% | baseline |
-| `engram_ehrag` | ~61% | ≈0 |
+| `waystone_smartvector` | ~61% | baseline |
+| `waystone_ehrag` | ~61% | ≈0 |
 
 EHRAG showed negligible impact on LOCOMO scores. Root cause: LOCOMO conversations have high semantic clustering naturally (many facts about the same people/events), so EHRAG injects large numbers of siblings that are topically adjacent but not relevant to the specific question. The top_k=100 ceiling means additional injected nodes displace higher-BFS-rank nodes.
 
@@ -2520,7 +2520,7 @@ After each BFS hop, compute the average cosine similarity between newly-discover
 
 The halt check fires *after* adding a layer to `collected`, so the current layer is always kept — only future hops are suppressed.
 
-### Threshold Sweep (LOCOMO dev split, `engram_autosearch` baseline)
+### Threshold Sweep (LOCOMO dev split, `waystone_autosearch` baseline)
 
 | Threshold | Halt Rate | Avg BFS Candidates | Avg Score |
 |-----------|-----------|--------------------|-----------|
@@ -2532,7 +2532,7 @@ LOCOMO graphs are dense and deeply interconnected. BFS hop similarity stays abov
 
 ### Benchmark Results
 
-`engram_autosearch_40` vs `engram_smartvector` on LOCOMO dev split (gpt-4o-mini judge):
+`waystone_autosearch_40` vs `waystone_smartvector` on LOCOMO dev split (gpt-4o-mini judge):
 
 - Score: approximately neutral (±1pp, within judge variance)
 - Avg BFS candidates before strategy pipeline: 254 vs 331 (−23%)
@@ -2573,9 +2573,9 @@ Keep AutoSearch as a latency knob for production-scale deployments (`autosearch:
 
 ### Motivation
 
-Engram's current SQLite backend has a known scaling ceiling: BFS via per-hop SQL queries degrades around 200K–500K nodes on dense graphs, and SQLite does not natively provide vector search or concurrent multi-process writes. Two use-case pressures drove this evaluation:
+Waystone's current SQLite backend has a known scaling ceiling: BFS via per-hop SQL queries degrades around 200K–500K nodes on dense graphs, and SQLite does not natively provide vector search or concurrent multi-process writes. Two use-case pressures drove this evaluation:
 
-1. **RAG adaptation** — using Engram's extractor as a preprocessing layer for static document corpora, where graph depth and node count could reach millions.
+1. **RAG adaptation** — using Waystone's extractor as a preprocessing layer for static document corpora, where graph depth and node count could reach millions.
 2. **Hook-based continuous writes** — multiple Claude Code sessions writing to the same project simultaneously; SQLite handles this via WAL but at contention cost.
 
 The goal was to identify whether an off-the-shelf embedded database could replace SQLite and handle all four requirements natively.
@@ -2602,8 +2602,8 @@ Any replacement database must satisfy all four:
 - **Strengths:** Direct pointer-based adjacency lists (O(1) neighbor lookups), property graph model, active development, permissive license.
 - **Blocker 1 — Immutable FTS:** BM25 full-text indexes are built once at creation and cannot be updated incrementally. Adding new nodes requires DROP + recreate of the entire index — prohibitive for continuous hook-based writes.
 - **Blocker 2 — Single-writer:** Only one `READ_WRITE` Database object may exist per store at a time. A second process attempting to open the database for write raises `BufferManager` or lock errors. No MVCC; no serialized write queue built in.
-- **Verdict for vanilla Engram:** Blocked on both issues. Not viable as a drop-in replacement.
-- **Verdict for RAG-only Engram:** Blocker 2 disappears (single-process batch extraction). Blocker 1 is acceptable for batch workloads (rebuild FTS at end of each extraction batch). **Viable for RAG.** This is the recommended starting point for a RAG adaptation before committing to a custom database.
+- **Verdict for vanilla Waystone:** Blocked on both issues. Not viable as a drop-in replacement.
+- **Verdict for RAG-only Waystone:** Blocker 2 disappears (single-process batch extraction). Blocker 1 is acceptable for batch workloads (rebuild FTS at end of each extraction batch). **Viable for RAG.** This is the recommended starting point for a RAG adaptation before committing to a custom database.
 
 #### LadybugDB (Kuzu fork, Predictable Labs)
 - **What it is:** Kuzu fork with OPFS support, BSD compat, WAL checkpoint improvements, buffer manager fixes. v0.15.4.2 (April 2026).
@@ -2619,18 +2619,18 @@ Any replacement database must satisfy all four:
 - **What it is:** Embedded graph + relational database with Datalog query language, Tantivy-backed FTS, RocksDB or memory storage.
 - **Strengths:** Mutable Tantivy FTS (incremental add/update/delete — solves Blocker 1). Datalog is natural for recursive graph queries.
 - **Blocker:** Single-writer via RocksDB file locks. Only one process can hold the RocksDB write lock at a time. Does not support concurrent multi-process writes.
-- **License concern:** MPL-2.0 is file-level copyleft. Files that import Cozo must be MPL-2.0 or compatible. Not GPL-viral, but requires careful isolation if Engram is commercial. Consult legal before adopting.
+- **License concern:** MPL-2.0 is file-level copyleft. Files that import Cozo must be MPL-2.0 or compatible. Not GPL-viral, but requires careful isolation if Waystone is commercial. Consult legal before adopting.
 - **Verdict:** Solves FTS mutability but not multi-writer. Partial improvement over Kuzu; MPL license adds friction.
 
 #### DuckDB (MIT)
 - **What it is:** In-process OLAP columnar database; MVCC concurrent reads, SQL, excellent for analytics.
 - **Strengths:** Truly concurrent readers (MVCC), fast columnar scans, MIT license.
 - **Blockers:** No multi-process concurrent writes (single-writer, like SQLite WAL but no built-in serialization). No native FTS. No native graph traversal — adjacency list queries require multiple self-joins, not BFS.
-- **Verdict:** Excellent analytical store. Wrong shape for Engram's access pattern.
+- **Verdict:** Excellent analytical store. Wrong shape for Waystone's access pattern.
 
 #### SurrealDB
 - **What it is:** Multi-model database: document + graph + relational + FTS, multi-writer, mutable indexes.
-- **Why disqualified:** Business Source License 1.1 (BSL 1.1). Converts to Apache 2.0 after a delay, but cannot be used in commercial products before the conversion date. Violates Engram's license policy (MIT/Apache 2.0/BSD/Public Domain only). Do not adopt.
+- **Why disqualified:** Business Source License 1.1 (BSL 1.1). Converts to Apache 2.0 after a delay, but cannot be used in commercial products before the conversion date. Violates Waystone's license policy (MIT/Apache 2.0/BSD/Public Domain only). Do not adopt.
 
 #### FalkorDB
 - **What it is:** Redis-based graph database, Cypher, RedisGraph successor.
@@ -2709,18 +2709,18 @@ This gives graph-native BFS performance (O(1) per neighbor lookup) while persist
 | **When it becomes necessary** | >5M edges in production | Same threshold |
 | **CSR RAM** | ~240MB at 5M edges | Same (CSR lives in shared memory) |
 
-**Recommendation:** Start with Python BFS. The crossover point where Rust becomes necessary is around 5M edges — well beyond current Engram scale (30K nodes as of April 2026). Build the Rust extension as a Phase 3 optimization if and when production load justifies it.
+**Recommendation:** Start with Python BFS. The crossover point where Rust becomes necessary is around 5M edges — well beyond current Waystone scale (30K nodes as of April 2026). Build the Rust extension as a Phase 3 optimization if and when production load justifies it.
 
 #### Cypher and Datalog Query Layers
 
-These are optional query language layers on top of the graph primitives. For internal Engram use, Python BFS is sufficient and neither is required. Their value is for **external API queryability** (v4+ in the roadmap):
+These are optional query language layers on top of the graph primitives. For internal Waystone use, Python BFS is sufficient and neither is required. Their value is for **external API queryability** (v4+ in the roadmap):
 
 | | Cypher | Datalog |
 |---|---|---|
 | **Style** | Declarative pattern matching, ASCII art graph syntax | Logic programming, recursive rules |
 | **Strength** | Path finding, variable-length traversal, industry standard (Neo4j, Kuzu, FalkorDB) | Natural for transitive closure, aggregate graph queries |
 | **Adoption** | Wider — familiar to anyone who has used Neo4j | Narrower — more academic, used in Cozo, Datomic |
-| **Recommended for Engram?** | Yes, if exposing a query API in v4 | Optional — Datalog is a superset of what Cypher handles for recursive queries, but Cypher has far more tooling |
+| **Recommended for Waystone?** | Yes, if exposing a query API in v4 | Optional — Datalog is a superset of what Cypher handles for recursive queries, but Cypher has far more tooling |
 
 If a query API is built, Cypher is the better default for developer familiarity. Datalog is worth considering for power users doing complex recursive graph queries (e.g., "all facts reachable within 3 hops of this entity that were extracted before date X").
 
@@ -2739,7 +2739,7 @@ Embeddings from different models live in incompatible vector spaces. Upgrading f
 Multi-writer solves "two writers can both write simultaneously." It does not answer: "two writers both extracted a fact about the same entity at the same time — now what?" Lance's fragment model keeps both writers' data, but the graph layer needs explicit merge semantics for edges. Options: last-write-wins, higher-confidence-wins, or a manual review queue for conflicts above a threshold. Without a defined policy, multi-writer stores accumulate contradictory edge states silently.
 
 **Tiered storage / hot-cold archiving**
-Without automatic archiving, stores grow unboundedly and retrieval *actively degrades* — old low-relevance nodes still score well enough to consume top_k slots. Nodes not accessed in N days should be demoted to a cold tier: still queryable, deprioritized and slower to load, freeing hot-tier space for recent facts. This is the database-level implementation of the roadmap's `fact decay` concept. A 3-year-old Engram store at 500K nodes with no archiving will have retrieval dilution that no strategy tuning can fix.
+Without automatic archiving, stores grow unboundedly and retrieval *actively degrades* — old low-relevance nodes still score well enough to consume top_k slots. Nodes not accessed in N days should be demoted to a cold tier: still queryable, deprioritized and slower to load, freeing hot-tier space for recent facts. This is the database-level implementation of the roadmap's `fact decay` concept. A 3-year-old Waystone store at 500K nodes with no archiving will have retrieval dilution that no strategy tuning can fix.
 
 #### High Priority (needed before production scale)
 
@@ -2758,7 +2758,7 @@ Lance and Tantivy are separate write targets. A process crash between a Lance wr
 Lance's versioned fragment model makes point-in-time queries nearly free to implement. "What did the graph look like at timestamp T?" is directly useful for the existing `--at-time` retrieval flag and for debugging extraction regressions. Expose as a first-class query parameter. Most graph databases don't provide this at all.
 
 **Hybrid query in a single pass**
-Currently Engram runs vector → BFS → FTS as sequential pipeline stages with RRF combination. A purpose-built database could run all three in one pass: nodes within embedding distance X AND containing keyword Y AND reachable from node Z within N hops. This is the hard research problem in multi-model databases. Approximate solutions (predicate pushdown on ANN + BFS-bounded FTS) are achievable; exact solutions require tight storage integration between the three index types.
+Currently Waystone runs vector → BFS → FTS as sequential pipeline stages with RRF combination. A purpose-built database could run all three in one pass: nodes within embedding distance X AND containing keyword Y AND reachable from node Z within N hops. This is the hard research problem in multi-model databases. Approximate solutions (predicate pushdown on ANN + BFS-bounded FTS) are achievable; exact solutions require tight storage integration between the three index types.
 
 **Property filtering on ANN queries**
 "Top-10 most semantically similar nodes with confidence > 0.8 extracted after 2026-01-01." Standard ANN indexes return global nearest neighbors and post-filter, which wastes the recall budget. Filtered ANN (IVF with predicate pushdown) is the correct solution and is rarely implemented well in embedded databases. Lance has early support for this; it needs to be a first-class query path in the graph layer.
@@ -2799,13 +2799,13 @@ One database process, multiple projects, zero cross-project leakage with row-lev
 
 ---
 
-### RAG-Specific Engram: Recommended Starting Point
+### RAG-Specific Waystone: Recommended Starting Point
 
 For a RAG corpus adaptation (batch extraction, not hook-based continuous writes):
 
 - **Use Kuzu.** The single-writer blocker does not apply to single-process batch extraction. The FTS immutability blocker is acceptable for batch workloads (rebuild at end of each extraction run, not per-node).
-- **This is the validation vehicle.** Build Engram RAG on Kuzu to validate the product hypothesis before investing in a custom database layer.
-- **Migration path is clean:** The Engram extractor and retrieval pipeline are decoupled from the storage backend. A `KuzuStore` can be swapped in alongside `GraphStore` (SQLite) without rewriting extraction or retrieval logic. The Lance+Tantivy store can later be swapped in the same way.
+- **This is the validation vehicle.** Build Waystone RAG on Kuzu to validate the product hypothesis before investing in a custom database layer.
+- **Migration path is clean:** The Waystone extractor and retrieval pipeline are decoupled from the storage backend. A `KuzuStore` can be swapped in alongside `GraphStore` (SQLite) without rewriting extraction or retrieval logic. The Lance+Tantivy store can later be swapped in the same way.
 
 ---
 
@@ -2822,7 +2822,7 @@ The primary benefit of quantization is not disk savings — it's RAM and search 
 - Binary quantized HNSW: ~400MB–1GB RAM
 That difference determines whether the index fits on a laptop. Disk savings (~6GB → 6.2GB when storing both float32 and binary) are secondary. Search speed also improves: binary vector comparison (bitwise AND + popcount) is ~10–30× faster than float32 dot product, with better CPU cache utilization.
 
-Storing both float32 and quantized vectors in the hot store is correct for Engram's current scale (sub-1M nodes). Float32 vectors are needed for the re-ranking step and for future re-quantization if the scheme changes. At 10M+ nodes, revisit a tiered approach: quantized vectors in hot store, float32 on cold/cheap storage, fetched only for re-ranking top-100 candidates (~10–20ms cold fetch latency acceptable at that scale). At current scale (35K nodes, ~210MB total), disk is not the constraint.
+Storing both float32 and quantized vectors in the hot store is correct for Waystone's current scale (sub-1M nodes). Float32 vectors are needed for the re-ranking step and for future re-quantization if the scheme changes. At 10M+ nodes, revisit a tiered approach: quantized vectors in hot store, float32 on cold/cheap storage, fetched only for re-ranking top-100 candidates (~10–20ms cold fetch latency acceptable at that scale). At current scale (35K nodes, ~210MB total), disk is not the constraint.
 
 **Phase 1 — Foundation (3–4 months)**
 Goals: all four core requirements satisfied; design-time decisions locked in correctly.
@@ -2846,7 +2846,7 @@ Goals: ready for multi-user, multi-agent, long-running production deployments.
 - Background maintenance scheduler: Lance compaction, Tantivy merge, CSR hot-reload, priority lanes
 - Property filtering on ANN: predicate pushdown for confidence and recency filters on vector queries
 - Migrate benchmark configs to `LanceStore`; validate recall parity vs SQLite on LOCOMO
-- Migrate production Engram instances; deprecate `GraphStore` for new projects
+- Migrate production Waystone instances; deprecate `GraphStore` for new projects
 
 **Phase 3 — Scale and Ecosystem (ongoing, as needed)**
 Goals: performance at >5M edges; external queryability; ecosystem adoption.
@@ -2866,7 +2866,7 @@ Goals: performance at >5M edges; external queryability; ecosystem adoption.
 |-----------|---------|--------|
 | Apache Lance | Apache 2.0 | ✅ Approved |
 | tantivy-py | MIT | ✅ Approved |
-| Custom graph layer | Engram proprietary | ✅ |
+| Custom graph layer | Waystone proprietary | ✅ |
 | PyO3 (if Rust extension) | MIT/Apache 2.0 | ✅ Approved |
 
 ---
@@ -2890,12 +2890,12 @@ Auditing of the widely-used OmniDocBench found **2,580 annotation errors out of 
 | Formula recognition | No model exceeded 67% — universal weak point |
 | Degradation robustness | General VLMs degrade more gracefully than pipeline specialists |
 
-### Engram Implications
-1. **Graph quality is bounded by parse quality.** Engram's LLM extraction pass receives whatever text the parser produces — bad parses propagate into the graph.
+### Waystone Implications
+1. **Graph quality is bounded by parse quality.** Waystone's LLM extraction pass receives whatever text the parser produces — bad parses propagate into the graph.
 2. **OmniDocBench training contamination.** Any model trained/eval'd against OmniDocBench may have absorbed its errors. Numeric and structured facts in tables are likely the most affected category (noise in annotation ∝ visual complexity).
-3. **Small specialist parser as pre-processor.** A ≤4B param document parser before Engram's LLM extraction pass could improve node quality at negligible cost increase. Candidate integration point: `engram extract` preprocessing pipeline.
-4. **Formula/table → numeric recall gap.** The ≤67% formula recall ceiling maps directly to the pattern of numeric-threshold recall failures seen in LOCOMO (q_pipe_03-style questions). Root cause may be upstream, not in Engram's extraction prompt.
-5. **Action item:** Evaluate top-ranked small specialist parsers as optional `--parser` flag for `engram extract` (see candidate list below).
+3. **Small specialist parser as pre-processor.** A ≤4B param document parser before Waystone's LLM extraction pass could improve node quality at negligible cost increase. Candidate integration point: `waystone extract` preprocessing pipeline.
+4. **Formula/table → numeric recall gap.** The ≤67% formula recall ceiling maps directly to the pattern of numeric-threshold recall failures seen in LOCOMO (q_pipe_03-style questions). Root cause may be upstream, not in Waystone's extraction prompt.
+5. **Action item:** Evaluate top-ranked small specialist parsers as optional `--parser` flag for `waystone extract` (see candidate list below).
 
 ### Candidate Small Parsers for `--parser` Integration (2026-05-11)
 
@@ -2912,7 +2912,7 @@ All three exceed Gemini 3 Pro (90.33) at 20–250× fewer parameters.
 **Formula recognition standout:** MinerU2.5-Pro scores 97.29 CDM on formula extraction — directly relevant to LOCOMO q_pipe_03-style numeric recall failures. This is the pre-processor to target for that class of failures.
 
 **Recommended integration plan:**
-- `engram extract --parser glm-ocr doc.pdf` → GLM-OCR converts to clean markdown → existing LLM extraction unchanged
+- `waystone extract --parser glm-ocr doc.pdf` → GLM-OCR converts to clean markdown → existing LLM extraction unchanged
 - Default tier: GLM-OCR (MIT, 0.9B, 1.86 pages/sec, consumer GPU compatible)
 - Quality tier: MinerU2.5-Pro (SOTA accuracy, especially formula/table)
 - Text-only inputs (no `--parser` flag) — zero change to existing workflow

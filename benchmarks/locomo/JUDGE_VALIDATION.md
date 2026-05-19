@@ -17,7 +17,7 @@ judges against each other or against human ground truth.
 
 ## Observed Results (April 2026)
 
-Both judges run on `engram_default_topk100`, `conv-26`, 199 questions:
+Both judges run on `waystone_default_topk100`, `conv-26`, 199 questions:
 
 | Model | LLM Accuracy | n | Notes |
 |-------|-------------|---|-------|
@@ -38,7 +38,7 @@ and walks you through disagreements interactively.
 ```bash
 python3.13 -m benchmarks.locomo.spot_check \
   --dataset benchmarks/locomo/data/locomo10.json \
-  --config engram_default_topk100 \
+  --config waystone_default_topk100 \
   --conv conv-26 \
   --model-a "local:qwen/qwen3-8b" \
   --model-b "local:qwen/qwen3.5-9b" \
@@ -48,7 +48,7 @@ python3.13 -m benchmarks.locomo.spot_check \
 ### What it does
 
 1. Replays retrieval for all QA pairs in the conversation (DB reads, no extraction)
-2. Scores each pair with both judge models (uses `~/.cache/engram_judge_cache.json` — zero new API calls if already scored)
+2. Scores each pair with both judge models (uses `~/.cache/waystone_judge_cache.json` — zero new API calls if already scored)
 3. Prints a summary: agreement rate, disagreement count, which direction each disagreement goes
 4. Walks you through each disagreement one at a time, showing:
    - Question
@@ -67,7 +67,7 @@ python3.13 -m benchmarks.locomo.spot_check \
 
 ## Judge Cache
 
-All judge verdicts are cached to `~/.cache/engram_judge_cache.json`.
+All judge verdicts are cached to `~/.cache/waystone_judge_cache.json`.
 
 - Key: `sha256(model + "\x00" + question + "\x00" + answer + "\x00" + context)[:24]`
 - Value: float score (0.0, 0.5, or 1.0)
@@ -130,7 +130,7 @@ better-calibrated judge.
 # Then re-score just those with Gemini:
 python3.13 -m benchmarks.locomo.spot_check \
   --dataset benchmarks/locomo/data/locomo10.json \
-  --config engram_default_topk100 \
+  --config waystone_default_topk100 \
   --conv conv-26 \
   --model-a "local:qwen/qwen3-8b" \
   --model-b "gemini-2.5-flash-lite" \

@@ -1,19 +1,19 @@
-"""Engram memory provider plugin for Hermes Agent.
+"""Waystone memory provider plugin for Hermes Agent.
 
 Implements the Hermes MemoryProvider interface to provide structured,
-DAG-based long-term memory backed by an Engram knowledge graph.
+DAG-based long-term memory backed by a Waystone knowledge graph.
 
 Installation (into a Hermes Agent installation):
-    cp -r hermes_plugin/ /path/to/hermes-agent/plugins/memory/engram/
-    pip install engram  # or pip install -e /path/to/engram
+    cp -r hermes_plugin/ /path/to/hermes-agent/plugins/memory/waystone/
+    pip install waystone  # or pip install -e /path/to/waystone
 
 Configuration (hermes memory setup, or set env vars):
-    ENGRAM_PROJECT   — project name (required)
-    ENGRAM_DB_PATH   — explicit path to context.db (optional; overrides project lookup)
-    ENGRAM_CONFIG    — path to Engram config.yaml (optional)
-    ENGRAM_TOP_K     — max nodes per retrieval (default: 10)
-    ENGRAM_HOPS      — BFS traversal depth (default: 3)
-    ENGRAM_EXTRACT   — set to "0" to disable auto-extraction on sync_turn (default: enabled)
+    WAYSTONE_PROJECT   — project name (required)
+    WAYSTONE_DB_PATH   — explicit path to context.db (optional; overrides project lookup)
+    WAYSTONE_CONFIG    — path to Waystone config.yaml (optional)
+    WAYSTONE_TOP_K     — max nodes per retrieval (default: 10)
+    WAYSTONE_HOPS      — BFS traversal depth (default: 3)
+    WAYSTONE_EXTRACT   — set to "0" to disable auto-extraction on sync_turn (default: enabled)
 """
 
 from __future__ import annotations
@@ -47,55 +47,55 @@ def _get_base():
 
 
 # ---------------------------------------------------------------------------
-# EngramMemoryProvider
+# WaystoneMemoryProvider
 # ---------------------------------------------------------------------------
 
-class EngramMemoryProvider(_get_base()):
-    """Hermes MemoryProvider backed by an Engram knowledge graph.
+class WaystoneMemoryProvider(_get_base()):
+    """Hermes MemoryProvider backed by a Waystone knowledge graph.
 
     - prefetch(): BFS retrieval injects structured context before each LLM call
     - sync_turn(): incremental extraction runs in background after each turn
-    - Tools: engram_query (semantic search), engram_recall (full node dump by tags)
+    - Tools: waystone_query (semantic search), waystone_recall (full node dump by tags)
     """
 
     @property
     def name(self) -> str:
-        return "engram"
+        return "waystone"
 
     # ------------------------------------------------------------------
     # Configuration
     # ------------------------------------------------------------------
 
-    def _load_engram_config(self) -> dict:
-        """Load Engram config from file or fall back to defaults."""
-        from engram.config import load_config
-        config_path = os.environ.get("ENGRAM_CONFIG") or self._config.get("config_path")
+    def _load_waystone_config(self) -> dict:
+        """Load Waystone config from file or fall back to defaults."""
+        from waystone.config import load_config
+        config_path = os.environ.get("WAYSTONE_CONFIG") or self._config.get("config_path")
         return load_config(config_path)
 
     def _resolve_db_path(self) -> Path:
         """Resolve the SQLite DB path for the configured project."""
-        explicit = os.environ.get("ENGRAM_DB_PATH") or self._config.get("db_path")
+        explicit = os.environ.get("WAYSTONE_DB_PATH") or self._config.get("db_path")
         if explicit:
             return Path(explicit).expanduser()
-        from engram.config import get_db_path
-        return get_db_path(self._engram_config, self._project)
+        from waystone.config import get_db_path
+        return get_db_path(self._waystone_config, self._project)
 
     # ------------------------------------------------------------------
     # Required abstract methods
     # ------------------------------------------------------------------
 
     def is_available(self) -> bool:
-        """Return True if the configured Engram project DB exists."""
+        """Return True if the configured Waystone project DB exists."""
         try:
-            self._load_engram_config()
+            self._load_waystone_config()
         except Exception:
             return False
-        project = os.environ.get("ENGRAM_PROJECT") or self._config.get("project", "")
+        project = os.environ.get("WAYSTONE_PROJECT") or self._config.get("project", "")
         if not project:
             return False
         try:
-            from engram.config import load_config, get_db_path
-            cfg = load_config(os.environ.get("ENGRAM_CONFIG") or self._config.get("config_path"))
+            from waystone.config import load_config, get_db_path
+            cfg = load_config(os.environ.get("WAYSTONE_CONFIG") or self._config.get("config_path"))
             db = get_db_path(cfg, project)
             return db.exists()
         except Exception:
@@ -112,66 +112,66 @@ class EngramMemoryProvider(_get_base()):
         self._session_id = session_id
         self._platform = kwargs.get("platform", "cli")
 
-        # Load persisted config from $HERMES_HOME/engram.json (or env vars)
-        config_file = self._hermes_home / "engram.json"
+        # Load persisted config from $HERMES_HOME/waystone.json (or env vars)
+        config_file = self._hermes_home / "waystone.json"
         self._config: dict = {}
         if config_file.exists():
             try:
                 self._config = json.loads(config_file.read_text())
             except Exception as e:
-                log.warning("engram: failed to read %s: %s", config_file, e)
+                log.warning("waystone: failed to read %s: %s", config_file, e)
 
         # Resolve project name
         self._project = (
-            os.environ.get("ENGRAM_PROJECT")
+            os.environ.get("WAYSTONE_PROJECT")
             or self._config.get("project")
             or ""
         )
         if not self._project:
-            log.warning("engram: ENGRAM_PROJECT not set — provider disabled")
+            log.warning("waystone: WAYSTONE_PROJECT not set — provider disabled")
             self._store = None
             return
 
-        # Load Engram config and open store
+        # Load Waystone config and open store
         try:
-            self._engram_config = self._load_engram_config()
+            self._waystone_config = self._load_waystone_config()
             db_path = self._resolve_db_path()
-            from engram.store import GraphStore
+            from waystone.store import GraphStore
             self._store = GraphStore(db_path)
         except Exception as e:
-            log.error("engram: failed to open graph store: %s", e)
+            log.error("waystone: failed to open graph store: %s", e)
             self._store = None
             return
 
         # Retrieval settings
         self._top_k = int(
-            os.environ.get("ENGRAM_TOP_K")
+            os.environ.get("WAYSTONE_TOP_K")
             or self._config.get("top_k")
-            or self._engram_config.get("defaults", {}).get("top_k", 10)
+            or self._waystone_config.get("defaults", {}).get("top_k", 10)
         )
         self._hops = int(
-            os.environ.get("ENGRAM_HOPS")
+            os.environ.get("WAYSTONE_HOPS")
             or self._config.get("hops")
-            or self._engram_config.get("defaults", {}).get("hops", 3)
+            or self._waystone_config.get("defaults", {}).get("hops", 3)
         )
         self._auto_extract = (
-            os.environ.get("ENGRAM_EXTRACT", "1") != "0"
+            os.environ.get("WAYSTONE_EXTRACT", "1") != "0"
             and self._config.get("auto_extract", True)
         )
 
         # Extraction buffer and threading
-        from engram.extractor import ExtractionBuffer
+        from waystone.extractor import ExtractionBuffer
         self._buffer = ExtractionBuffer(
-            min_turns=self._engram_config.get("incremental", {}).get("min_turns", 3),
-            min_words=self._engram_config.get("incremental", {}).get("min_words", 200),
-            max_turns=self._engram_config.get("incremental", {}).get("max_turns", 10),
+            min_turns=self._waystone_config.get("incremental", {}).get("min_turns", 3),
+            min_words=self._waystone_config.get("incremental", {}).get("min_words", 200),
+            max_turns=self._waystone_config.get("incremental", {}).get("max_turns", 10),
         )
         self._buffer_lock = threading.Lock()
         self._extract_thread: threading.Thread | None = None
         self._shutdown_event = threading.Event()
 
         # Persist buffer to disk for crash recovery
-        self._buffer_dir = Path.home() / ".engram" / "buffer" / self._project
+        self._buffer_dir = Path.home() / ".waystone" / "buffer" / self._project
         self._buffer_dir.mkdir(parents=True, exist_ok=True)
         self._buffer_file = self._buffer_dir / f"{session_id}.txt"
         self._load_persisted_buffer()
@@ -186,10 +186,10 @@ class EngramMemoryProvider(_get_base()):
         self._error_lock = threading.Lock()
 
         # Thread pool for extraction with timeout enforcement
-        self._extraction_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="engram-extract")
+        self._extraction_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="waystone-extract")
 
         log.info(
-            "engram: initialised — project=%s top_k=%d hops=%d auto_extract=%s",
+            "waystone: initialised — project=%s top_k=%d hops=%d auto_extract=%s",
             self._project, self._top_k, self._hops, self._auto_extract,
         )
 
@@ -197,9 +197,9 @@ class EngramMemoryProvider(_get_base()):
         """Return OpenAI-format tool definitions exposed to Hermes."""
         return [
             {
-                "name": "engram_query",
+                "name": "waystone_query",
                 "description": (
-                    "Search the Engram knowledge graph for facts relevant to a task or question. "
+                    "Search the Waystone knowledge graph for facts relevant to a task or question. "
                     "Returns structured context: decisions, constraints, implementations, and more. "
                     "Use this when you need to recall project-specific facts, past decisions, or "
                     "architectural context."
@@ -220,7 +220,7 @@ class EngramMemoryProvider(_get_base()):
                 },
             },
             {
-                "name": "engram_recall",
+                "name": "waystone_recall",
                 "description": (
                     "Retrieve all active knowledge graph nodes matching one or more tags. "
                     "Useful for 'show me everything about X' queries where BFS traversal "
@@ -245,23 +245,23 @@ class EngramMemoryProvider(_get_base()):
     # ------------------------------------------------------------------
 
     def system_prompt_block(self) -> str:
-        """Inject a brief note into the system prompt about Engram."""
+        """Inject a brief note into the system prompt about Waystone."""
         if not self._store:
             return ""
         try:
             stats = self._store.get_stats()
             block = (
-                f"[Engram memory: {stats['node_count']} nodes, project '{self._project}'. "
-                f"Call engram_query to search project knowledge.]"
+                f"[Waystone memory: {stats['node_count']} nodes, project '{self._project}'. "
+                f"Call waystone_query to search project knowledge.]"
             )
             # Add error warning if extraction failed recently
             with self._error_lock:
                 if self._last_error:
-                    block += f"\n[Engram warning: last extraction failed — {self._last_error}. Context may be incomplete.]"
+                    block += f"\n[Waystone warning: last extraction failed — {self._last_error}. Context may be incomplete.]"
                     self._last_error = None  # Clear after injection (show once)
             return block
         except Exception:
-            return "[Engram memory: active]"
+            return "[Waystone memory: active]"
 
     def prefetch(self, query: str, session_id: str | None = None) -> str:
         """Retrieve relevant context before the LLM call.
@@ -272,8 +272,8 @@ class EngramMemoryProvider(_get_base()):
         if not self._store:
             return ""
         try:
-            from engram.retriever import retrieve
-            strategies = self._engram_config.get("strategies", {})
+            from waystone.retriever import retrieve
+            strategies = self._waystone_config.get("strategies", {})
             result = retrieve(
                 self._store,
                 query,
@@ -283,7 +283,7 @@ class EngramMemoryProvider(_get_base()):
             )
             return result or ""
         except Exception as e:
-            log.warning("engram: prefetch failed: %s", e)
+            log.warning("waystone: prefetch failed: %s", e)
             return ""
 
     def queue_prefetch(self, query: str, session_id: str | None = None) -> None:
@@ -342,19 +342,19 @@ class EngramMemoryProvider(_get_base()):
             self._extract_thread.join(timeout=30)
 
     def handle_tool_call(self, tool_name: str, args: dict, **kwargs) -> str:
-        """Dispatch Engram tool calls from the LLM.
+        """Dispatch Waystone tool calls from the LLM.
 
         Returns a JSON string (per Hermes contract).
         """
         try:
-            if tool_name == "engram_query":
+            if tool_name == "waystone_query":
                 return self._handle_query(args)
-            elif tool_name == "engram_recall":
+            elif tool_name == "waystone_recall":
                 return self._handle_recall(args)
             else:
                 return json.dumps({"error": f"Unknown tool: {tool_name}"})
         except Exception as e:
-            log.error("engram: tool call %s failed: %s", tool_name, e)
+            log.error("waystone: tool call %s failed: %s", tool_name, e)
             return json.dumps({"error": str(e)})
 
     def shutdown(self) -> None:
@@ -383,31 +383,31 @@ class EngramMemoryProvider(_get_base()):
         return [
             {
                 "key": "project",
-                "description": "Engram project name",
+                "description": "Waystone project name",
                 "required": True,
                 "secret": False,
-                "env_var": "ENGRAM_PROJECT",
+                "env_var": "WAYSTONE_PROJECT",
             },
             {
                 "key": "db_path",
                 "description": "Explicit path to context.db (optional — overrides project lookup)",
                 "required": False,
                 "secret": False,
-                "env_var": "ENGRAM_DB_PATH",
+                "env_var": "WAYSTONE_DB_PATH",
             },
             {
                 "key": "config_path",
-                "description": "Path to Engram config.yaml (optional)",
+                "description": "Path to Waystone config.yaml (optional)",
                 "required": False,
                 "secret": False,
-                "env_var": "ENGRAM_CONFIG",
+                "env_var": "WAYSTONE_CONFIG",
             },
             {
                 "key": "top_k",
                 "description": "Max nodes per retrieval query (default: 10)",
                 "required": False,
                 "secret": False,
-                "env_var": "ENGRAM_TOP_K",
+                "env_var": "WAYSTONE_TOP_K",
                 "default": 10,
             },
             {
@@ -415,7 +415,7 @@ class EngramMemoryProvider(_get_base()):
                 "description": "BFS traversal depth (default: 3)",
                 "required": False,
                 "secret": False,
-                "env_var": "ENGRAM_HOPS",
+                "env_var": "WAYSTONE_HOPS",
                 "default": 3,
             },
             {
@@ -423,16 +423,16 @@ class EngramMemoryProvider(_get_base()):
                 "description": "Extract facts from turns into the graph automatically (default: true)",
                 "required": False,
                 "secret": False,
-                "env_var": "ENGRAM_EXTRACT",
+                "env_var": "WAYSTONE_EXTRACT",
                 "default": True,
             },
         ]
 
     def save_config(self, values: dict, hermes_home: str) -> None:
-        """Write provider config to $HERMES_HOME/engram.json."""
-        config_file = Path(hermes_home) / "engram.json"
+        """Write provider config to $HERMES_HOME/waystone.json."""
+        config_file = Path(hermes_home) / "waystone.json"
         config_file.write_text(json.dumps(values, indent=2))
-        log.info("engram: config saved to %s", config_file)
+        log.info("waystone: config saved to %s", config_file)
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -449,9 +449,9 @@ class EngramMemoryProvider(_get_base()):
                     for turn in turns:
                         if turn.strip():
                             self._buffer.add(turn)
-                    log.info("engram: restored %d buffered turns from %s", len(turns), self._buffer_file)
+                    log.info("waystone: restored %d buffered turns from %s", len(turns), self._buffer_file)
             except Exception as e:
-                log.warning("engram: failed to restore buffer from %s: %s", self._buffer_file, e)
+                log.warning("waystone: failed to restore buffer from %s: %s", self._buffer_file, e)
 
     def _persist_buffer(self) -> None:
         """Save in-memory buffer to disk."""
@@ -461,7 +461,7 @@ class EngramMemoryProvider(_get_base()):
             content = "\n---TURN_SEP---\n".join(self._buffer.buffer)
             self._buffer_file.write_text(content)
         except Exception as e:
-            log.warning("engram: failed to persist buffer to %s: %s", self._buffer_file, e)
+            log.warning("waystone: failed to persist buffer to %s: %s", self._buffer_file, e)
 
     def _clear_persisted_buffer(self) -> None:
         """Delete buffer file after successful extraction."""
@@ -471,13 +471,13 @@ class EngramMemoryProvider(_get_base()):
             if self._buffer_file.exists():
                 self._buffer_file.unlink()
         except Exception as e:
-            log.warning("engram: failed to delete buffer file %s: %s", self._buffer_file, e)
+            log.warning("waystone: failed to delete buffer file %s: %s", self._buffer_file, e)
 
     def _handle_query(self, args: dict) -> str:
         query = args.get("query", "")
         top_k = int(args.get("top_k") or self._top_k)
-        from engram.retriever import retrieve
-        strategies = self._engram_config.get("strategies", {})
+        from waystone.retriever import retrieve
+        strategies = self._waystone_config.get("strategies", {})
         result = retrieve(self._store, query, hops=self._hops, top_k=top_k, strategies=strategies)
         return json.dumps({"context": result or "(no results)", "project": self._project})
 
@@ -504,11 +504,11 @@ class EngramMemoryProvider(_get_base()):
                     loop.close()
             except TimeoutError:
                 msg = "extraction timed out after 30s — fact was not stored. Check LLM endpoint."
-                log.warning("engram: %s", msg)
+                log.warning("waystone: %s", msg)
                 with self._error_lock:
                     self._last_error = msg
             except Exception as e:
-                log.error("engram: background extraction failed: %s", e)
+                log.error("waystone: background extraction failed: %s", e)
                 with self._error_lock:
                     self._last_error = str(e)[:100]  # Truncate long error messages
 
@@ -517,7 +517,7 @@ class EngramMemoryProvider(_get_base()):
         self._extract_thread = threading.Thread(
             target=lambda: self._wait_extraction(future),
             daemon=True,
-            name="engram-extract"
+            name="waystone-extract"
         )
         self._extract_thread.start()
 
@@ -527,33 +527,33 @@ class EngramMemoryProvider(_get_base()):
             future.result(timeout=30)
         except TimeoutError:
             msg = "extraction timed out after 30s — fact was not stored. Check LLM endpoint."
-            log.warning("engram: %s", msg)
+            log.warning("waystone: %s", msg)
             with self._error_lock:
                 self._last_error = msg
         except Exception as e:
-            log.error("engram: extraction failed: %s", e)
+            log.error("waystone: extraction failed: %s", e)
             with self._error_lock:
                 self._last_error = str(e)[:100]
 
     async def _do_extract(self, text: str) -> None:
         """Run LLM extraction and merge results into the graph."""
-        from engram.extractor import extract
-        from engram.store import GraphStore
+        from waystone.extractor import extract
+        from waystone.store import GraphStore
 
         # Re-open store in this thread (SQLite is not thread-safe across threads)
         db_path = self._resolve_db_path()
         store = GraphStore(db_path)
         try:
-            result = await extract(text, self._engram_config, store=store)
+            result = await extract(text, self._waystone_config, store=store)
             nodes = result.get("nodes", [])
             edges = result.get("edges", [])
             if nodes:
                 store.merge_extraction(nodes, edges)
-                log.info("engram: extracted %d nodes from turn buffer", len(nodes))
+                log.info("waystone: extracted %d nodes from turn buffer", len(nodes))
                 # Clear persisted buffer on successful extraction
                 self._clear_persisted_buffer()
         except Exception as e:
-            log.warning("engram: extraction error: %s", e)
+            log.warning("waystone: extraction error: %s", e)
             with self._error_lock:
                 self._last_error = str(e)[:100]
         finally:
@@ -566,4 +566,4 @@ class EngramMemoryProvider(_get_base()):
 
 def register(ctx) -> None:
     """Called by Hermes plugin loader to register this provider."""
-    ctx.register_memory_provider(EngramMemoryProvider())
+    ctx.register_memory_provider(WaystoneMemoryProvider())

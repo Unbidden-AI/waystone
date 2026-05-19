@@ -22,13 +22,13 @@ Add to your editor's MCP config:
     "waystone": {
       "command": "waystone",
       "args": ["mcp-serve"],
-      "env": { "ENGRAM_PROJECT": "my-project" }
+      "env": { "WAYSTONE_PROJECT": "my-project" }
     }
   }
 }
 ```
 
-Restart your editor. `engram_query`, `engram_extract`, and `engram_stats` appear as tools. Your agent pulls context when it needs it.
+Restart your editor. `waystone_query`, `waystone_extract`, and `waystone_stats` appear as tools. Your agent pulls context when it needs it.
 
 ### Option 2: Claude Code hooks (zero manual calls)
 
@@ -65,7 +65,7 @@ waystone show <project>              # view project stats
 
 **At session end** — `waystone extract` reads the conversation transcript and pulls structured facts: decisions, constraints, implementations, lessons learned, open questions. These are stored as nodes in a local SQLite knowledge graph (`~/.waystone/`). Superseded facts are retired automatically — if a decision changes, the graph reflects the current state.
 
-**At session start** — `engram_query` (or a hook) runs BFS traversal from the most relevant entry points and surfaces the top 10–25 facts. Only what's relevant to the current context, not everything ever stored.
+**At session start** — `waystone_query` (or a hook) runs BFS traversal from the most relevant entry points and surfaces the top 10–25 facts. Only what's relevant to the current context, not everything ever stored.
 
 ## Benchmarks
 

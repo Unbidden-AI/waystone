@@ -36,7 +36,7 @@ class ContextManager:
         Parameters
         ----------
         cfg:
-            ``orchestrator.context`` config dict.
+            ``pilot.context`` config dict.
         store:
             Open GraphStore for the current project.
         project_name:

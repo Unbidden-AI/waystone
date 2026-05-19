@@ -1,16 +1,16 @@
 # Benchmarking Strategy
 
-*How to quantify Engram's accuracy, and why it matters strategically.*
+*How to quantify Waystone's accuracy, and why it matters strategically.*
 
 ---
 
 ## The Core Question
 
-Engram scores 93–96% recall on the software_dev benchmark (`eval_questions.yaml`, 23 questions across three transcripts). The question this doesn't answer: **is that a property of the graph approach, or a property of technical transcripts being easy to extract?**
+Waystone scores 93–96% recall on the software_dev benchmark (`eval_questions.yaml`, 23 questions across three transcripts). The question this doesn't answer: **is that a property of the graph approach, or a property of technical transcripts being easy to extract?**
 
 Software dev conversations are unusually amenable to this kind of extraction. They're dense with named entities, specific values, and explicit decisions — "JWT, RS256, 15-minute expiry" leaves little ambiguity. Most memory systems would perform reasonably well on that content.
 
-LOCOMO is the test that separates the approaches. Personal episodic conversation is ambiguous, temporally diffuse, and full of implicit context — exactly the conditions where architectural choices matter. If Engram scores well on LOCOMO, the graph approach is genuinely superior to vector-based alternatives. If it doesn't, Engram is a strong niche product with a narrow moat.
+LOCOMO is the test that separates the approaches. Personal episodic conversation is ambiguous, temporally diffuse, and full of implicit context — exactly the conditions where architectural choices matter. If Waystone scores well on LOCOMO, the graph approach is genuinely superior to vector-based alternatives. If it doesn't, Waystone is a strong niche product with a narrow moat.
 
 Both outcomes are useful to know. They imply different positioning, different target customers, and a different Phase 2 story.
 
@@ -29,7 +29,7 @@ The `episodic_personal` domain profile is the prerequisite for running LOCOMO fa
 | Zep | ~72–75% | Graph + vector hybrid (Neo4j + pgvector) |
 | Mem0 | ~87–90% | LLM-generated memory cards + vector search |
 | Full context (oracle) | ~92–95% | No compression, full transcript in context |
-| **Engram target** | ≥ 87% | Graph + BFS + SQLite |
+| **Waystone target** | ≥ 87% | Graph + BFS + SQLite |
 
 See `LOCOMO_PLAN.md` for the specific gaps and phased improvement plan.
 
@@ -51,7 +51,7 @@ The 93–96% recall number from `eval_questions.yaml` is essentially a custom be
 
 ### 1. RAGAS Metrics (medium effort, recognized framework)
 
-Run Engram's retrieval output through RAGAS to get standardized scores:
+Run Waystone's retrieval output through RAGAS to get standardized scores:
 - **Context precision**: of retrieved nodes, how many were actually relevant?
 - **Context recall**: of relevant facts, how many were retrieved?
 - **Faithfulness**: does the retrieval accurately reflect what's in the graph?
@@ -83,7 +83,7 @@ Framing: "Equivalent recall at 30% fewer tokens than full-context injection" is 
 
 Publish the three software_dev transcripts, 23 eval questions, and scoring methodology as an open benchmark. Call it something like "DevMemBench."
 
-Even a small, well-documented benchmark with publicly available transcripts and ground-truth answers is citable. If it's good, other systems adopt it for comparison. That gives Engram authority in the dev-specific niche that no competitor currently has.
+Even a small, well-documented benchmark with publicly available transcripts and ground-truth answers is citable. If it's good, other systems adopt it for comparison. That gives Waystone authority in the dev-specific niche that no competitor currently has.
 
 ---
 

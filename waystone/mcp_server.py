@@ -322,7 +322,7 @@ def waystone_stats(
 
 
 @mcp.tool()
-def engram_list_projects() -> str:
+def waystone_list_projects() -> str:
     """List all available Waystone projects on this machine."""
     try:
         config = _load_config()
@@ -330,7 +330,7 @@ def engram_list_projects() -> str:
         if is_remote(config):
             client = make_remote_client(config)
             projects = asyncio.run(client.list_projects())
-            log.debug(f"engram_list_projects: project_count={len(projects)}, remote=true")
+            log.debug(f"waystone_list_projects: project_count={len(projects)}, remote=true")
             if not projects:
                 return "No projects found on remote server."
             lines = [f"Available projects ({len(projects)}):"]
@@ -351,7 +351,7 @@ def engram_list_projects() -> str:
         if not projects:
             return "No projects found. Run 'waystone init <project>' to create one."
 
-        log.debug(f"engram_list_projects: project_count={len(projects)}")
+        log.debug(f"waystone_list_projects: project_count={len(projects)}")
         lines = [f"Available projects ({len(projects)}):"]
         for name in projects:
             db_path = get_db_path(config, name)
@@ -361,7 +361,7 @@ def engram_list_projects() -> str:
             lines.append(f"  {name}  ({stats['node_count']} nodes, {stats['edge_count']} edges)")
         return "\n".join(lines)
     except Exception as e:
-        log.error(f"engram_list_projects failed: {e}", exc_info=True)
+        log.error(f"waystone_list_projects failed: {e}", exc_info=True)
         try:
             import sentry_sdk
             if sentry_sdk.is_initialized():

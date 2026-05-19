@@ -1,6 +1,6 @@
 # LOCOMO Benchmark
 
-*Engram vs. the field — dataset overview, current results, and improvement roadmap.*
+*Waystone vs. the field — dataset overview, current results, and improvement roadmap.*
 
 ---
 
@@ -29,9 +29,9 @@
 
 | Config | Keyword | LLM Judge | Avg tokens |
 |---|---|---|---|
-| `engram_default` | **57.3%** | **48.7%** | 746 |
-| `engram_semantic` (vector only) | — | 46.2% | — |
-| `engram_combined` (keyword + vector) | — | 55.3% | — |
+| `waystone_default` | **57.3%** | **48.7%** | 746 |
+| `waystone_semantic` (vector only) | — | 46.2% | — |
+| `waystone_combined` (keyword + vector) | — | 55.3% | — |
 
 **Why LLM score (48.7%) < keyword score (57.3%)**: LLM judge penalizes partial context; keyword recall is generous on word overlap. The LLM score is the truthful one.
 
@@ -47,7 +47,7 @@
 | **Zep** (corrected, self-reported) | **75.1% ± 0.17** | After removing adversarial category; Mem0's re-eval of Zep puts it at ~58% (disputed) |
 | **Full context** | ~73% | Entire transcript injected |
 | Mem0 graph (corrected) | **68.4%** | Independently measured; self-reported 87–90% is disputed |
-| **Engram (us, conv-26)** | **48.7%** (LLM) | `engram_default`, April 2026 |
+| **Waystone (us, conv-26)** | **48.7%** (LLM) | `waystone_default`, April 2026 |
 
 **Target**: ≥ 75% (beat Zep), stretch goal ≥ 89% (match Hindsight)
 
@@ -59,7 +59,7 @@ Zep originally published **84% accuracy** on LOCOMO, but Mem0's co-founder filed
 
 Mem0 re-ran Zep with the correct methodology and reported **58.44% ± 0.20**. Zep disputed this and published a corrected self-evaluation of **75.14% ± 0.17**, attributing the gap to three implementation errors in Mem0's test harness (user-model misconfiguration, timestamp handling, sequential vs. parallel search).
 
-**What this means for Engram**: always exclude category 5 (`--categories 1 2 3 4`), run 3+ trials and report mean ± std, and document config/domain/extraction model explicitly when publishing scores.
+**What this means for Waystone**: always exclude category 5 (`--categories 1 2 3 4`), run 3+ trials and report mean ± std, and document config/domain/extraction model explicitly when publishing scores.
 
 ---
 
@@ -78,7 +78,7 @@ benchmarks/locomo/
     └── token_counter.py         # TokenBudget, estimate_tokens()
 ```
 
-**Domain profile** (`episodic_personal`) is fully defined in `engram/domain_profiles.py`:
+**Domain profile** (`episodic_personal`) is fully defined in `waystone/domain_profiles.py`:
 - Node types: `event`, `person`, `place`, `fact`, `plan`, `outcome`, `preference`, `relationship_update`
 - Edge relations: `involves`, `located_at`, `follows`, `updates`, `references`
 - `node_types_note` includes the anchor-node rule: every named person gets exactly one `person` node, and every fact gets that person's name in its tags.
@@ -87,7 +87,7 @@ benchmarks/locomo/
 ```bash
 python -m benchmarks.locomo.harness \
   --dataset benchmarks/locomo/data/locomo10.json \
-  --configs full_context engram_default \
+  --configs full_context waystone_default \
   --split dev \
   --categories 1 2 3 4 \
   --llm-judge \
@@ -98,7 +98,7 @@ python -m benchmarks.locomo.harness \
 ```bash
 python -m benchmarks.locomo.harness \
   --dataset benchmarks/locomo/data/locomo10.json \
-  --configs engram_default <new_config> \
+  --configs waystone_default <new_config> \
   --quick
 ```
 
@@ -136,7 +136,7 @@ python -m benchmarks.locomo.harness \
 
 ## Root Cause Analysis
 
-Engram's architecture is sound (DAG + BFS + strategy pipeline), but five gaps are specific to **episodic personal conversations**:
+Waystone's architecture is sound (DAG + BFS + strategy pipeline), but five gaps are specific to **episodic personal conversations**:
 
 1. **Entity-centric retrieval incomplete** — Queries like "What did Sarah eat?" fail because "eat" and "food/meal" are not synonyms in the keyword index. Semantic search actively hurts (46% vs 57%) because generic embeddings can't capture entity-specific context.
 
@@ -153,7 +153,7 @@ Engram's architecture is sound (DAG + BFS + strategy pipeline), but five gaps ar
 ## Ranked Improvement Opportunities
 
 ### 1. Entity-Scoped Query Expansion (+3–5%, 1–2 days)
-**File**: `engram/retriever.py:extract_keywords()`
+**File**: `waystone/retriever.py:extract_keywords()`
 
 Enhance keyword extraction to detect named entities (capitalized tokens) and expand queries with LOCOMO-specific verb synonyms:
 - "eat" → ["eat", "consume", "food", "meal", "ate"]
@@ -184,7 +184,7 @@ high_overlap = list(dict.fromkeys(high_overlap + person_anchors))
 ---
 
 ### 3. Temporal Proximity Boosting (+3–5%, 3–4 days)
-**Files**: `engram/store.py`, `retriever.py:assemble_markdown()`
+**Files**: `waystone/store.py`, `retriever.py:assemble_markdown()`
 
 Two parts:
 1. **Schema**: Add `event_date TEXT` column to nodes table (`ALTER TABLE nodes ADD COLUMN event_date TEXT`) — populated from `layer1_rules` rule 5 date resolution
@@ -229,7 +229,7 @@ Track `session_id` on nodes at extraction time. For single-hop QA (where `releva
 ---
 
 ### 7. Extraction Prompt Refinement (+0–2%, 1–2 days)
-**File**: `engram/domain_profiles.py:EPISODIC_PERSONAL.extraction_examples`
+**File**: `waystone/domain_profiles.py:EPISODIC_PERSONAL.extraction_examples`
 
 Add 2–3 more targeted examples for LOCOMO failure patterns:
 - Duration facts ("X years together", "met 5 months ago") → `relationship_update` nodes
@@ -239,12 +239,12 @@ Add 2–3 more targeted examples for LOCOMO failure patterns:
 ---
 
 ### 8. Semantic Dedup Threshold Tuning (+1–3%, <1 day)
-Ablations already defined (`engram_dedup95`, `engram_dedup97`). Run them and compare. Default 0.92 may be over-merging LOCOMO's personal facts where same-topic variants carry different temporal anchors.
+Ablations already defined (`waystone_dedup95`, `waystone_dedup97`). Run them and compare. Default 0.92 may be over-merging LOCOMO's personal facts where same-topic variants carry different temporal anchors.
 
 ---
 
 ### 9. Retrieval Context Tail — Short-Term Window (+1–3%, <1 day)
-`engram_prior20` config already implemented (`prior_turns_window=20`). Enable and benchmark — tests whether a recency window complements graph retrieval for recent events not yet well-represented in the graph.
+`waystone_prior20` config already implemented (`prior_turns_window=20`). Enable and benchmark — tests whether a recency window complements graph retrieval for recent events not yet well-represented in the graph.
 
 ---
 
@@ -274,7 +274,7 @@ Track query-time hits per fact across runs; use as a ranking signal. Requires mu
 
 | After | Keyword | LLM Judge | vs Competitor |
 |---|---|---|---|
-| Current (engram_default) | 57.3% | 48.7% | — |
+| Current (waystone_default) | 57.3% | 48.7% | — |
 | After #1–3 (4–7 days) | ~63–67% | ~70–75% | Beat Zep (75.1%) |
 | After #1–6 (9–15 days) | ~68–75% | ~75–82% | Approach MemMachine (84.9%) |
 | After all (BM25 + #1–9) | ~78–85% | ~85–90% | Match Hindsight (89.6%) |

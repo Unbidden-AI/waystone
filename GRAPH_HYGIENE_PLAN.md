@@ -29,10 +29,10 @@ Add Rule 14 to both `EXTRACTION_PROMPT` and `INCREMENTAL_EXTRACTION_PROMPT` in `
 
 **Root cause:** There's no CLI command to selectively remove nodes by age, confidence, or source. Manual deletion requires raw SQLite access.
 
-**Fix: `engram prune` command**
+**Fix: `waystone prune` command**
 
 ```
-engram prune <project> [--older-than DAYS] [--confidence-below FLOAT]
+waystone prune <project> [--older-than DAYS] [--confidence-below FLOAT]
                     [--source PATTERN] [--execute]
 ```
 
@@ -42,9 +42,9 @@ engram prune <project> [--older-than DAYS] [--confidence-below FLOAT]
 - `--source` does substring match on `source_transcript` (e.g. `live` matches `live:0`, `live:12`, etc.)
 
 **Immediate use cases:**
-- `engram prune ContextBroker --source live --execute` → remove all orchestrator-session noise
-- `engram prune ContextBroker --older-than 180 --confidence-below 0.4 --execute` → purge stale low-signal nodes
-- `engram prune ContextBroker --older-than 90 --dry-run` → audit before committing
+- `waystone prune ContextBroker --source live --execute` → remove all orchestrator-session noise
+- `waystone prune ContextBroker --older-than 180 --confidence-below 0.4 --execute` → purge stale low-signal nodes
+- `waystone prune ContextBroker --older-than 90 --dry-run` → audit before committing
 
 **Implementation:**
 - `store.py`: add `prune_nodes(older_than_days, confidence_below, source_pattern, dry_run) -> list[str]`
@@ -55,12 +55,12 @@ engram prune <project> [--older-than DAYS] [--confidence-below FLOAT]
 ## What this does NOT fix
 
 - Hallucinated facts that look like legitimate project facts (no automated way to detect)
-- Synthesis near-duplicate nodes (addressed by `engram reconcile` + dedup)
+- Synthesis near-duplicate nodes (addressed by `waystone reconcile` + dedup)
 - Retrieval quality degradation at 20K+ nodes (addressed later by vector DB)
 
 ---
 
-## Future: `engram stats` (not in scope now)
+## Future: `waystone stats` (not in scope now)
 
 A graph health dashboard showing:
 - Node count by age bucket (< 7d, 7-30d, 30-90d, 90d+)

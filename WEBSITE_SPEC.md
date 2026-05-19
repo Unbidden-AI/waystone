@@ -1,7 +1,7 @@
 # Website Spec — unbidden.ai
 
 **Company:** Unbidden AI
-**Product:** Engram
+**Product:** Waystone
 **Domain:** unbidden.ai
 **Stage:** Pre-launch
 
@@ -11,15 +11,15 @@
 
 ```
 unbidden.ai/                        → Company home
-unbidden.ai/engram                  → Product page
+unbidden.ai/waystone               → Product page
 unbidden.ai/pricing                 → Pricing tiers
 unbidden.ai/docs/                   → Docs landing
 unbidden.ai/docs/quickstart         → 5-minute getting started
 unbidden.ai/docs/mcp                → MCP server reference
-unbidden.ai/docs/mcp/tools          → MCP tool reference (engram_query, etc.)
+unbidden.ai/docs/mcp/tools          → MCP tool reference (waystone_query, etc.)
 unbidden.ai/docs/mcp/clients        → Per-client config (Claude Code, Cursor, etc.)
 unbidden.ai/docs/api                → REST API reference
-unbidden.ai/docs/cli                → CLI (engram) reference
+unbidden.ai/docs/cli                → CLI (waystone) reference
 unbidden.ai/docs/config             → config.yaml reference
 unbidden.ai/docs/integrations/      → Per-integration guides
 unbidden.ai/blog/                   → Technical posts
@@ -35,35 +35,35 @@ unbidden.ai/changelog               → Product updates
 **Above the fold:**
 - Tagline: *"AI that remembers. Context that compounds."*
 - Subhead: *"Unbidden builds memory infrastructure for AI development workflows. Your AI gets smarter the longer it works with you."*
-- Single CTA: `Try Engram →`
+- Single CTA: `Try Waystone →`
 - No pricing on home.
 
 **Below the fold:**
 - Problem one-liner: *"Every AI session starts from zero. Unbidden fixes that."*
-- Product card: Engram
+- Product card: Waystone
 - Footer: GitHub, docs, pricing, blog, contact
 
 **Tone:** Technical, confident, not startup-bro. Written by a developer who is tired of bad tooling.
 
 ---
 
-### `/engram` — Product Page
+### `/waystone` — Product Page
 
 **1. Hero**
-> *"Your AI forgets everything between sessions. Engram doesn't."*
+> *"Your AI forgets everything between sessions. Waystone doesn't."*
 
 Subhead: *"Persistent memory for AI-assisted development. Works with any OpenAI-compatible model via MCP or REST API."*
 CTAs: `Get Started (free)` | `View Docs`
 
 **2. Problem section — three cards:**
-- *Local model users:* "Your 4K context fills up at turn 15. Engram extends it to unlimited."
-- *API teams:* "You're paying for every token in history. Engram cuts that by 60–80%."
-- *Long-running projects:* "Week 6 AI contradicts week 1 decisions. Engram prevents that."
+- *Local model users:* "Your 4K context fills up at turn 15. Waystone extends it to unlimited."
+- *API teams:* "You're paying for every token in history. Waystone cuts that by 60–80%."
+- *Long-running projects:* "Week 6 AI contradicts week 1 decisions. Waystone prevents that."
 
 **3. How it works — three steps:**
-1. Connect Engram to your AI editor via MCP or REST API
-2. Engram automatically extracts and stores what matters from every session
-3. Next session, Engram surfaces only what's relevant — not everything, not nothing
+1. Connect Waystone to your AI editor via MCP or REST API
+2. Waystone automatically extracts and stores what matters from every session
+3. Next session, Waystone surfaces only what's relevant — not everything, not nothing
 
 **4. Social proof (fill post-launch):**
 - "95% recall across 23 benchmark questions"
@@ -102,7 +102,7 @@ Slim footer bar on all pages: *"Get the benchmark report + release notes → [em
 - **Lead magnet:** Cost calculator breakdown PDF or benchmark methodology doc
 - **Tool:** Buttondown or Resend (not Mailchimp)
 - **Drip sequence:**
-  1. Immediate: lead magnet + 3-bullet Engram summary
+  1. Immediate: lead magnet + 3-bullet Waystone summary
   2. Day 4: cost math blog post (value, no ask)
   3. Day 10: soft CTA to try free tier
 
@@ -123,23 +123,23 @@ Grid of doc sections with brief descriptions. Highlights:
 
 ### `/docs/quickstart`
 
-**Goal:** Working Engram integration in under 5 minutes.
+**Goal:** Working Waystone integration in under 5 minutes.
 
 ```bash
 # 1. Install
-pip install engram   # or: npm install -g engram
+pip install waystone   # or: npm install -g waystone
 
 # 2. Initialize a project
-engram init my-project
+waystone init my-project
 
 # 3. Extract a transcript
-engram extract my-project transcript.txt
+waystone extract my-project transcript.txt
 
 # 4. Query
-engram query my-project "what auth approach did we decide on?"
+waystone query my-project "what auth approach did we decide on?"
 
 # 5. Start MCP server (for editor integration)
-engram mcp-serve
+waystone mcp-serve
 ```
 
 Then: link to the relevant client integration page.
@@ -148,15 +148,15 @@ Then: link to the relevant client integration page.
 
 ### `/docs/mcp` — MCP Server Overview
 
-Engram exposes a Model Context Protocol server that registers tools your AI editor calls automatically.
+Waystone exposes a Model Context Protocol server that registers tools your AI editor calls automatically.
 
 **Transport modes:**
 | Mode | Command | Use case |
 |------|---------|----------|
-| stdio | `engram mcp-serve` | Claude Code, Cursor, Windsurf (default) |
-| SSE | `engram serve --host 0.0.0.0 --port 8000` | Remote/networked clients |
+| stdio | `waystone mcp-serve` | Claude Code, Cursor, Windsurf (default) |
+| SSE | `waystone serve --host 0.0.0.0 --port 8000` | Remote/networked clients |
 
-**Authentication:** API key via `ENGRAM_API_KEY` env var (hosted mode) or none required (local mode).
+**Authentication:** API key via `WAYSTONE_API_KEY` env var (hosted mode) or none required (local mode).
 
 **Compatibility:**
 
@@ -177,12 +177,12 @@ The MCP server registers four tools. All tools auto-detect the active project fr
 
 ---
 
-#### `engram_query`
+#### `waystone_query`
 
 Retrieve relevant context from the project memory for a given task.
 
 ```
-engram_query(task, project?, cwd?, hops?, top_k?)
+waystone_query(task, project?, cwd?, hops?, top_k?)
 ```
 
 | Parameter | Type | Default | Description |
@@ -210,12 +210,12 @@ engram_query(task, project?, cwd?, hops?, top_k?)
 
 ---
 
-#### `engram_extract`
+#### `waystone_extract`
 
 Extract facts from text and merge them into the project memory.
 
 ```
-engram_extract(text, project?, cwd?, source_name?, verify?)
+waystone_extract(text, project?, cwd?, source_name?, verify?)
 ```
 
 | Parameter | Type | Default | Description |
@@ -239,12 +239,12 @@ Density: 2.3/1kc  Avg tags: 2.1
 
 ---
 
-#### `engram_stats`
+#### `waystone_stats`
 
 Get memory statistics for the project.
 
 ```
-engram_stats(project?, cwd?)
+waystone_stats(project?, cwd?)
 ```
 
 | Parameter | Type | Default | Description |
@@ -256,12 +256,12 @@ engram_stats(project?, cwd?)
 
 ---
 
-#### `engram_list_projects`
+#### `waystone_list_projects`
 
-List all projects in the current Engram store.
+List all projects in the current Waystone store.
 
 ```
-engram_list_projects()
+waystone_list_projects()
 ```
 
 **Returns:** Project names with node counts and edge counts.
@@ -277,11 +277,11 @@ Add to `~/.claude/settings.json`:
 ```json
 {
   "mcpServers": {
-    "engram": {
-      "command": "engram",
+    "waystone": {
+      "command": "waystone",
       "args": ["mcp-serve"],
       "env": {
-        "ENGRAM_PROJECT": "my-project"
+        "WAYSTONE_PROJECT": "my-project"
       }
     }
   }
@@ -290,11 +290,11 @@ Add to `~/.claude/settings.json`:
 
 **Recommended agent instructions** (add to your CLAUDE.md or system prompt):
 ```
-## Memory (Engram)
-At the start of each session, call engram_query with a description of the current task.
-After completing significant work or before ending a session, call engram_extract with
+## Memory (Waystone)
+At the start of each session, call waystone_query with a description of the current task.
+After completing significant work or before ending a session, call waystone_extract with
 a summary of what was built, decided, or changed.
-Do not write to MEMORY.md — use Engram tools instead.
+Do not write to MEMORY.md — use Waystone tools instead.
 ```
 
 **Hooks (zero-friction auto-query):**
@@ -308,7 +308,7 @@ Add to `~/.claude/settings.json` hooks section to automatically query at session
         "matcher": "",
         "hooks": [{
           "type": "command",
-          "command": "engram last-context --raw"
+          "command": "waystone last-context --raw"
         }]
       }
     ]
@@ -325,11 +325,11 @@ Add to `.cursor/mcp.json` in your project root (or global `~/.cursor/mcp.json`):
 ```json
 {
   "mcpServers": {
-    "engram": {
-      "command": "engram",
+    "waystone": {
+      "command": "waystone",
       "args": ["mcp-serve"],
       "env": {
-        "ENGRAM_PROJECT": "my-project"
+        "WAYSTONE_PROJECT": "my-project"
       }
     }
   }
@@ -345,8 +345,8 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 ```json
 {
   "mcpServers": {
-    "engram": {
-      "command": "engram",
+    "waystone": {
+      "command": "waystone",
       "args": ["mcp-serve"]
     }
   }
@@ -362,27 +362,27 @@ Add to `openclaw.json`:
 ```json
 {
   "mcpServers": {
-    "engram": {
-      "command": "engram",
+    "waystone": {
+      "command": "waystone",
       "args": ["mcp-serve"]
     }
   }
 }
 ```
 
-**Replace** `write to MEMORY.md` instructions with `call engram_extract`.
-**Add** `call engram_query at session start` to your agent instructions.
+**Replace** `write to MEMORY.md` instructions with `call waystone_extract`.
+**Add** `call waystone_query at session start` to your agent instructions.
 
 To import existing `MEMORY.md`:
 ```bash
-engram extract my-project MEMORY.md
+waystone extract my-project MEMORY.md
 ```
 
 ---
 
 ### `/docs/api` — REST API Reference
 
-Base URL: `https://api.engram.unbidden.ai` (hosted) or `http://localhost:8000` (self-hosted via `engram serve`)
+Base URL: `https://api.waystone.unbidden.ai` (hosted) or `http://localhost:8000` (self-hosted via `waystone serve`)
 
 Authentication: `Authorization: Bearer <api-key>` header on all requests except `/v1/health`.
 
@@ -497,10 +497,10 @@ Export the full project memory as JSON.
 
 ---
 
-### `/docs/cli` — CLI Reference (`engram`)
+### `/docs/cli` — CLI Reference (`waystone`)
 
-Install: `pip install engram`
-All commands: `engram --help`
+Install: `pip install waystone`
+All commands: `waystone --help`
 
 ---
 
@@ -508,18 +508,18 @@ All commands: `engram --help`
 
 | Command | Description |
 |---------|-------------|
-| `engram init <project>` | Initialize a new project |
-| `engram extract <project> <file>` | Extract facts from a transcript or document |
-| `engram query <project> "<task>"` | Retrieve relevant context |
-| `engram show <project>` | Browse stored nodes |
-| `engram export <project>` | Export memory to JSON/markdown |
+| `waystone init <project>` | Initialize a new project |
+| `waystone extract <project> <file>` | Extract facts from a transcript or document |
+| `waystone query <project> "<task>"` | Retrieve relevant context |
+| `waystone show <project>` | Browse stored nodes |
+| `waystone export <project>` | Export memory to JSON/markdown |
 
 ---
 
-#### `engram extract` — options
+#### `waystone extract` — options
 
 ```bash
-engram extract my-project transcript.txt [OPTIONS]
+waystone extract my-project transcript.txt [OPTIONS]
 ```
 
 | Option | Description |
@@ -535,10 +535,10 @@ engram extract my-project transcript.txt [OPTIONS]
 
 ---
 
-#### `engram query` — options
+#### `waystone query` — options
 
 ```bash
-engram query my-project "what auth approach?" [OPTIONS]
+waystone query my-project "what auth approach?" [OPTIONS]
 ```
 
 | Option | Description |
@@ -557,10 +557,10 @@ engram query my-project "what auth approach?" [OPTIONS]
 
 | Command | Description |
 |---------|-------------|
-| `engram synthesize <project>` | Create cross-cutting summary nodes from stored memory |
-| `engram reconcile <project>` | Merge near-duplicate nodes |
-| `engram prune <project>` | Remove low-confidence or stale nodes (dry-run by default) |
-| `engram feedback <project>` | Rate nodes to improve retrieval quality |
+| `waystone synthesize <project>` | Create cross-cutting summary nodes from stored memory |
+| `waystone reconcile <project>` | Merge near-duplicate nodes |
+| `waystone prune <project>` | Remove low-confidence or stale nodes (dry-run by default) |
+| `waystone feedback <project>` | Rate nodes to improve retrieval quality |
 
 ---
 
@@ -568,9 +568,9 @@ engram query my-project "what auth approach?" [OPTIONS]
 
 | Command | Description |
 |---------|-------------|
-| `engram onboard <project>` | Import recent Claude Code sessions automatically |
-| `engram import-claude-sessions <project>` | Import specific session files |
-| `engram extract-replay <project> <file>` | Replay a transcript turn-by-turn (for benchmarking) |
+| `waystone onboard <project>` | Import recent Claude Code sessions automatically |
+| `waystone import-claude-sessions <project>` | Import specific session files |
+| `waystone extract-replay <project> <file>` | Replay a transcript turn-by-turn (for benchmarking) |
 
 ---
 
@@ -578,18 +578,18 @@ engram query my-project "what auth approach?" [OPTIONS]
 
 | Command | Description |
 |---------|-------------|
-| `engram mcp-serve` | Start MCP server (stdio transport, default) |
-| `engram serve` | Start REST API server |
-| `engram hook-init <project>` | Install Claude Code hooks in the current project |
-| `engram last-context` | Print last retrieved context (used by hooks) |
-| `engram doctor` | Diagnose installation and config issues |
-| `engram pause` / `engram resume` | Pause/resume background extraction |
+| `waystone mcp-serve` | Start MCP server (stdio transport, default) |
+| `waystone serve` | Start REST API server |
+| `waystone hook-init <project>` | Install Claude Code hooks in the current project |
+| `waystone last-context` | Print last retrieved context (used by hooks) |
+| `waystone doctor` | Diagnose installation and config issues |
+| `waystone pause` / `waystone resume` | Pause/resume background extraction |
 
 ---
 
 ### `/docs/config` — Configuration Reference
 
-Engram looks for `config.yaml` in `~/.config/engram/config.yaml` (or path passed via `--config`).
+Waystone looks for `config.yaml` in `~/.config/waystone/config.yaml` (or path passed via `--config`).
 
 ```yaml
 # LLM provider for extraction
@@ -600,7 +600,7 @@ llm:
 
 # Storage
 storage:
-  path: ~/.engram           # where the memory store is located
+  path: ~/.waystone           # where the memory store is located
 
 # Retrieval defaults
 defaults:
@@ -617,8 +617,8 @@ strategies:
 
 # Remote API mode (optional — omit for local-only)
 remote:
-  url: https://api.engram.unbidden.ai
-  api_key: ""               # or set ENGRAM_API_KEY env var
+  url: https://api.waystone.unbidden.ai
+  api_key: ""               # or set WAYSTONE_API_KEY env var
 ```
 
 ---
@@ -627,29 +627,29 @@ remote:
 
 ### `/docs/faq` — Frequently Asked Questions
 
-Also rendered as a collapsible section on the `/engram` product page.
+Also rendered as a collapsible section on the `/waystone` product page.
 
 ---
 
 **Q: How is this different from RAG?**
-RAG retrieves from a document corpus — you put documents in, it fetches chunks when asked. Engram builds memory from *conversations* — it watches what you're working on, extracts decisions and facts as you go, and surfaces them in future sessions automatically. It's session memory, not document search.
+RAG retrieves from a document corpus — you put documents in, it fetches chunks when asked. Waystone builds memory from *conversations* — it watches what you're working on, extracts decisions and facts as you go, and surfaces them in future sessions automatically. It's session memory, not document search.
 
 ---
 
 **Q: How is this different from the built-in memory in Claude Code or ChatGPT?**
-Built-in memory tools summarize old context or drop it when the context window fills. This means architectural decisions from early in a project eventually disappear. Engram extracts structured facts — it doesn't summarize or discard. A decision from week 1 retrieves just as accurately in week 12 as it did on day 2.
+Built-in memory tools summarize old context or drop it when the context window fills. This means architectural decisions from early in a project eventually disappear. Waystone extracts structured facts — it doesn't summarize or discard. A decision from week 1 retrieves just as accurately in week 12 as it did on day 2.
 
 ---
 
 **Q: Does it work with local models (Ollama, LM Studio)?**
-Yes. Engram works with any OpenAI-compatible endpoint. Local models can be used for both extraction and your downstream AI assistant. Gemini Flash is the recommended extraction model for accuracy; local extraction is supported and documented.
+Yes. Waystone works with any OpenAI-compatible endpoint. Local models can be used for both extraction and your downstream AI assistant. Gemini Flash is the recommended extraction model for accuracy; local extraction is supported and documented.
 
 ---
 
 **Q: Does my conversation data leave my machine?**
 **Local mode:** Nothing leaves your machine. The MCP server runs locally, extraction calls your configured endpoint, and the memory store is a local SQLite file.
 
-**Hosted API mode:** Session text is sent to the Engram API for extraction and stored in your project's database on Unbidden's servers. See the privacy policy for full details.
+**Hosted API mode:** Session text is sent to the Waystone API for extraction and stored in your project's database on Unbidden's servers. See the privacy policy for full details.
 
 ---
 
@@ -664,7 +664,7 @@ Claude Code, Cursor, Windsurf, Continue.dev, OpenClaw, and any editor with MCP s
 ---
 
 **Q: What languages and frameworks does it work with?**
-All of them. Engram stores decisions and context from your *conversations* — it doesn't read your code directly. If you're discussing Python, Rust, or SQL schema design, the facts extracted are language-agnostic.
+All of them. Waystone stores decisions and context from your *conversations* — it doesn't read your code directly. If you're discussing Python, Rust, or SQL schema design, the facts extracted are language-agnostic.
 
 ---
 
@@ -679,7 +679,7 @@ Yes, on the Team tier. Up to 10 users can query and contribute to the same proje
 ---
 
 **Q: What happens to old facts when I change direction?**
-When a new decision supersedes an old one, Engram marks the old fact as retired. It stops appearing in retrieval. You see the current state of the project — not a history of every decision including ones you've reversed.
+When a new decision supersedes an old one, Waystone marks the old fact as retired. It stops appearing in retrieval. You see the current state of the project — not a history of every decision including ones you've reversed.
 
 ---
 
@@ -689,9 +689,9 @@ When a new decision supersedes an old one, Engram marks the old fact as retired.
 ---
 
 **Q: Can I import my existing MEMORY.md or conversation history?**
-Yes. `engram extract` can process any text file — including `MEMORY.md`, exported chat logs, spec docs, or meeting notes. Run it once to seed your project with existing context before switching to automated extraction.
+Yes. `waystone extract` can process any text file — including `MEMORY.md`, exported chat logs, spec docs, or meeting notes. Run it once to seed your project with existing context before switching to automated extraction.
 
-For Claude Code users: `engram onboard` or `engram import-claude-sessions` will automatically find and import your recent Claude Code session transcripts.
+For Claude Code users: `waystone onboard` or `waystone import-claude-sessions` will automatically find and import your recent Claude Code session transcripts.
 
 ---
 
@@ -701,12 +701,12 @@ The extraction model (Gemini Flash) costs ~$0.15/1M tokens. A typical 50-turn se
 ---
 
 **Q: Is there a self-hosted option for the API server?**
-Yes. `engram serve` starts the full REST API server locally or on your own infrastructure. The server code is open source. Self-hosting gives you full data control and no rate limits.
+Yes. `waystone serve` starts the full REST API server locally or on your own infrastructure. The server code is open source. Self-hosting gives you full data control and no rate limits.
 
 ---
 
 **Q: How do I cancel or export my data?**
-You can cancel at any time from the billing page — no lock-in. Your memory is always exportable via `engram export` or `GET /v1/projects/{project}/export`. Data is returned as portable JSON.
+You can cancel at any time from the billing page — no lock-in. Your memory is always exportable via `waystone export` or `GET /v1/projects/{project}/export`. Data is returned as portable JSON.
 
 ---
 
@@ -716,7 +716,7 @@ Default: Gemini Flash (`gemini-2.0-flash`) — fast, cheap, and accurate for fac
 ---
 
 **Q: Will it slow down my AI editor?**
-No. The MCP server runs as a background process. `engram_query` typically returns in under 500ms for projects with thousands of nodes. Extraction (`engram_extract`) runs asynchronously at session end — it doesn't block your workflow.
+No. The MCP server runs as a background process. `waystone_query` typically returns in under 500ms for projects with thousands of nodes. Extraction (`waystone_extract`) runs asynchronously at session end — it doesn't block your workflow.
 
 ---
 
@@ -724,7 +724,7 @@ No. The MCP server runs as a background process. `engram_query` typically return
 
 - Dark background, monospace accent font
 - No carousels, no animations, no gradients
-- Code snippet in the hero (a single `engram mcp-serve` or MCP config block)
+- Code snippet in the hero (a single `waystone mcp-serve` or MCP config block)
 - One accent color (not blue)
 - Mobile-responsive, desktop-first
 - Docs: rendered from in-repo markdown — no docs platform until needed
@@ -734,7 +734,7 @@ No. The MCP server runs as a background process. `engram_query` typically return
 ## Open Items
 
 - [ ] Finalize install method (pip? npm? binary?)
-- [ ] Confirm `ENGRAM_API_KEY` is the correct env var name for hosted mode
+- [ ] Confirm `WAYSTONE_API_KEY` is the correct env var name for hosted mode
 - [ ] Write Quickstart page from `GETTING_STARTED.md`
 - [ ] Record 30-second demo GIF for product page hero
-- [x] Decide: hosted API domain — `api.engram.unbidden.ai` (decided 2026-05-13)
+- [x] Decide: hosted API domain — `api.waystone.unbidden.ai` (decided 2026-05-13)

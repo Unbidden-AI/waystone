@@ -41,10 +41,10 @@ DEFAULTS = {
     "domain": {
         "name": "software_dev",
     },
-    "orchestrator": {
+    "pilot": {
         "system_prompt": {
             "static": """\
-You are the Waystone Orchestrator — an assistant for the Waystone project (a DAG-based \
+You are the Waystone Pilot — an assistant for the Waystone project (a DAG-based \
 context intelligence layer for LLM workflows that extracts facts from transcripts into \
 a knowledge graph and retrieves relevant subgraphs per turn). Do not describe your \
 underlying model or training. The **Project Knowledge** section below is retrieved live \
@@ -154,7 +154,7 @@ def get_api_key(config: dict) -> str | None:
 
 
 def make_remote_client(config: dict):
-    """Build a RemoteEngram from config."""
+    """Build a RemoteContextBroker from config."""
     from .remote_client import RemoteContextBroker  # local import to avoid circular dep
 
     return RemoteContextBroker(

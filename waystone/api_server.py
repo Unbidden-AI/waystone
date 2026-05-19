@@ -38,10 +38,11 @@ from .billing import (
     open_admin_db,
     retry_dead_letter_emails,
     revoke_key_by_email,
+    revoke_key_by_stripe_customer,
     send_key_email,
-    tier_from_variant,
+    tier_from_price,
     validate_key,
-    verify_ls_signature,
+    verify_stripe_signature,
     RateLimiter,
 )
 from .config import load_config
@@ -60,10 +61,10 @@ async def lifespan(app: FastAPI):
     # Startup: initialize Sentry
     init_sentry()
 
-    # Startup: check for missing LS_WEBHOOK_SECRET in production mode
-    if _USE_ADMIN_DB and not os.environ.get("LS_WEBHOOK_SECRET", ""):
+    # Startup: check for missing STRIPE_WEBHOOK_SECRET in production mode
+    if _USE_ADMIN_DB and not os.environ.get("STRIPE_WEBHOOK_SECRET", ""):
         log.warning(
-            "WARNING: LS_WEBHOOK_SECRET is not set. LemonSqueezy webhooks will be rejected — "
+            "WARNING: STRIPE_WEBHOOK_SECRET is not set. Stripe webhooks will be rejected — "
             "customers who pay will not receive API keys."
         )
     yield
@@ -182,7 +183,7 @@ def _check_auth(
          Returns a synthetic dict with tier="local".
       3. Otherwise — open access (local dev). Returns {"tier": "local"}.
 
-    Rate limiting is enforced only when CB_USE_ADMIN_DB=1 and LS_WEBHOOK_SECRET is set.
+    Rate limiting is enforced only when CB_USE_ADMIN_DB=1 and STRIPE_WEBHOOK_SECRET is set.
     """
     if _USE_ADMIN_DB:
         if not creds:
@@ -194,7 +195,7 @@ def _check_auth(
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or revoked API key")
 
         # Check rate limit only if we have a webhook secret (production mode)
-        if os.environ.get("LS_WEBHOOK_SECRET", ""):
+        if os.environ.get("STRIPE_WEBHOOK_SECRET", ""):
             tier = key_info.get("tier", "free")
             allowed, reason, remaining_minute, remaining_day = _rate_limiter.check(
                 creds.credentials, tier
@@ -639,7 +640,7 @@ async def chat_completions(
     req: ChatCompletionRequest,
     key_info: AuthDep,
     raw_response: Response,
-    x_engram_project: str | None = Header(default=None, alias="X-Waystone-Project"),
+    x_waystone_project: str | None = Header(default=None, alias="X-Waystone-Project"),
 ) -> Response:
     """OpenAI-compatible chat completions proxy with Waystone context injection.
 
@@ -658,8 +659,8 @@ async def chat_completions(
     messages: list[dict] = [{"role": m.role, "content": m.content} for m in req.messages]
 
     # --- context injection ---------------------------------------------------
-    if x_engram_project:
-        db_path = _get_db_path(config, key_info, x_engram_project)
+    if x_waystone_project:
+        db_path = _get_db_path(config, key_info, x_waystone_project)
         if db_path.exists():
             query = next(
                 (m.content for m in reversed(req.messages) if m.role == "user"),
@@ -677,7 +678,7 @@ async def chat_completions(
                     )
                     if result.markdown:
                         context_block = (
-                            f"## Waystone Project Knowledge ({x_engram_project})\n\n"
+                            f"## Waystone Project Knowledge ({x_waystone_project})\n\n"
                             f"{result.markdown}"
                         )
                         if messages and messages[0]["role"] == "system":
@@ -738,32 +739,35 @@ async def chat_completions(
 
 
 # ---------------------------------------------------------------------------
-# LemonSqueezy webhook
+# Stripe webhook
 # ---------------------------------------------------------------------------
 
-@app.post("/webhooks/lemonsqueezy", status_code=status.HTTP_200_OK)
-async def lemonsqueezy_webhook(request: Request) -> dict:
-    """Handle LemonSqueezy subscription lifecycle events.
+@app.post("/webhooks/stripe", status_code=status.HTTP_200_OK)
+async def stripe_webhook(request: Request) -> dict:
+    """Handle Stripe subscription lifecycle events.
 
     Events handled:
-      subscription_created  → provision API key + email customer
-      subscription_cancelled → revoke all keys for email
-      order_created         → provision one-time purchase key (future)
+      checkout.session.completed     → provision API key + email customer
+      customer.subscription.deleted  → revoke keys for Stripe customer
 
-    Signature verification requires LS_WEBHOOK_SECRET env var.
+    Signature verification requires STRIPE_WEBHOOK_SECRET env var.
     If unset, the endpoint rejects all requests (fail-safe).
+
+    Tier is determined from metadata.price_id if set on the checkout session.
+    For Payment Links (which don't embed metadata), the handler fetches line
+    items via the Stripe API using STRIPE_SECRET_KEY to read the price ID.
+    Falls back to "pro" if tier cannot be determined (safe: all paid plans).
     """
-    # Check if webhook secret is configured before processing
-    if not os.environ.get("LS_WEBHOOK_SECRET", ""):
+    if not os.environ.get("STRIPE_WEBHOOK_SECRET", ""):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Webhook secret not configured — contact support",
         )
 
     body = await request.body()
-    signature = request.headers.get("X-Signature", "")
+    sig_header = request.headers.get("Stripe-Signature", "")
 
-    if not verify_ls_signature(body, signature):
+    if not verify_stripe_signature(body, sig_header):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid webhook signature")
 
     try:
@@ -772,37 +776,58 @@ async def lemonsqueezy_webhook(request: Request) -> dict:
     except Exception:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid JSON payload")
 
-    event = payload.get("meta", {}).get("event_name", "")
-    attrs = payload.get("data", {}).get("attributes", {})
+    event_type = payload.get("type", "")
+    obj = payload.get("data", {}).get("object", {})
 
-    if event == "subscription_created":
-        email = attrs.get("user_email", "")
-        variant_id = str(attrs.get("variant_id", ""))
-        tier = tier_from_variant(variant_id)
+    if event_type == "checkout.session.completed":
+        email = obj.get("customer_email", "")
+        customer_id = obj.get("customer", "")
+        metadata = obj.get("metadata") or {}
+        price_id = metadata.get("price_id", "")
+
+        # Payment Links don't embed metadata.price_id — fall back to fetching
+        # the first line item from the Stripe API to determine the price.
+        if not price_id:
+            secret_key = os.environ.get("STRIPE_SECRET_KEY", "")
+            session_id = obj.get("id", "")
+            if secret_key and session_id:
+                try:
+                    import stripe as _stripe
+                    _stripe.api_key = secret_key
+                    items = _stripe.checkout.Session.list_line_items(session_id, limit=1)
+                    if items and items.data:
+                        price_obj = items.data[0].price
+                        if price_obj:
+                            price_id = price_obj.id
+                except Exception:
+                    pass  # degraded gracefully — tier defaults to "pro" below
+
+        tier = tier_from_price(price_id) if price_id else metadata.get("tier", "pro")
 
         if not email:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Missing user_email")
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Missing customer_email",
+            )
 
         conn = open_admin_db()
-        raw_key = create_key(conn, email=email, tier=tier)
-
-        # Try to send the key; on failure, queue for retry
+        raw_key = create_key(conn, email=email, tier=tier, stripe_customer_id=customer_id)
         send_key_email(email, raw_key, tier, admin_conn=conn)
         conn.close()
 
-        return {"ok": True, "event": event, "tier": tier}
+        return {"ok": True, "event": event_type, "tier": tier}
 
-    elif event == "subscription_cancelled":
-        email = attrs.get("user_email", "")
-        if email:
+    elif event_type == "customer.subscription.deleted":
+        customer_id = obj.get("customer", "")
+        if customer_id:
             conn = open_admin_db()
-            count = revoke_key_by_email(conn, email)
+            count = revoke_key_by_stripe_customer(conn, customer_id)
             conn.close()
-            return {"ok": True, "event": event, "revoked": count}
-        return {"ok": True, "event": event, "revoked": 0}
+            return {"ok": True, "event": event_type, "revoked": count}
+        return {"ok": True, "event": event_type, "revoked": 0}
 
     # Unknown events are acknowledged but ignored
-    return {"ok": True, "event": event, "ignored": True}
+    return {"ok": True, "event": event_type, "ignored": True}
 
 
 # ---------------------------------------------------------------------------

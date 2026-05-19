@@ -1,4 +1,4 @@
-"""CLI entry point for the Waystone Orchestrator (interactive REPL + headless mode)."""
+"""CLI entry point for the Waystone Pilot (interactive REPL + headless mode)."""
 
 from __future__ import annotations
 
@@ -55,7 +55,7 @@ Commands:
   /quit       Exit
 """
 
-_BANNER = "Waystone Orchestrator — type /help for commands, Ctrl-C to exit."
+_BANNER = "Waystone Pilot — type /help for commands, Ctrl-C to exit."
 
 
 def _setup_logging(verbose: bool) -> None:
@@ -191,7 +191,7 @@ def main(
     """Start an orchestrator session for PROJECT.
 
     PROJECT is the name of a Waystone project (same namespace used by
-    ``waystone init`` / ``waystone extract``).  The orchestrator loads the
+    ``waystone init`` / ``waystone extract``).  The pilot loads the
     project's graph store, retrieves relevant graph context on every turn,
     and compacts old messages back into the graph automatically.
 

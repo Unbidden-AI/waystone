@@ -373,7 +373,7 @@ async def call_llm(
     system:
         System prompt string.
     cfg:
-        ``orchestrator.llm`` config dict (model, temperature, max_tokens, …).
+        ``pilot.llm`` config dict (model, temperature, max_tokens, …).
     tools:
         List of tool names to enable (schemas built automatically).
 

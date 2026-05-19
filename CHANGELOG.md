@@ -5,11 +5,11 @@ All notable changes to Context Broker are documented here.
 ## [Unreleased]
 
 ### Added
-- `orchestrator/` package skeleton — model-agnostic conversation manager with proactive compaction
-- `tests/test_orchestrator/` — test directory for orchestrator modules
+- `pilot/` package skeleton — model-agnostic conversation manager with proactive compaction
+- `tests/test_pilot/` — test directory for orchestrator modules
 - `litellm>=1.40` and `tiktoken>=0.7` dependencies
-- `orchestrator:` configuration section in `config.yaml` with full schema
-- `ORCHESTRATOR_PLAN.md` — architecture and module design for the orchestrator
+- `pilot:` configuration section in `config.yaml` with full schema
+- `PILOT_PLAN.md` — architecture and module design for the orchestrator
 - `DEVELOPMENT_PLAN.md` — agent workflow, milestones, and process conventions
 
 ---
@@ -20,25 +20,25 @@ All notable changes to Context Broker are documented here.
 
 **Core**
 - DAG-based graph store (`GraphStore`) backed by SQLite with WAL mode for concurrent access
-- LLM-based extraction via any OpenAI-compatible endpoint (`engram extract`)
-- BFS graph traversal with configurable depth (`engram query --hops`)
+- LLM-based extraction via any OpenAI-compatible endpoint (`waystone extract`)
+- BFS graph traversal with configurable depth (`waystone query --hops`)
 - Strategy pipeline: `superseded_pruning`, `confidence_threshold`, `recency_decay`, `token_budget`, `relevance_scoring`
-- Incremental per-turn extraction (`engram extract-replay`)
-- Graph reconciliation to find missed supersedes edges (`engram reconcile`)
+- Incremental per-turn extraction (`waystone extract-replay`)
+- Graph reconciliation to find missed supersedes edges (`waystone reconcile`)
 - Structured logging in all library modules (`logging.getLogger(__name__)`)
 
 **CLI commands**
-- `engram init <project>` — create a new project
-- `engram extract <project> <file>` — extract from transcript (50 MB guard, `--verify` flag)
-- `engram extract-replay <project> <file>` — turn-by-turn incremental extraction
-- `engram query <project> "<task>"` — retrieve relevant context as markdown
-- `engram show <project>` — list all nodes
-- `engram export <project>` — export graph to markdown
-- `engram reconcile <project>` — find and add missed supersedes edges (`--dry-run`)
-- `engram onboard` — interactive import of recent Claude Code sessions
-- `engram import-claude-sessions` — batch import Claude Code `.jsonl` sessions
-- `engram doctor` — preflight check: config, API key, LLM reachability, DB state, hooks
-- `engram mcp-serve` — start the MCP server on stdio
+- `waystone init <project>` — create a new project
+- `waystone extract <project> <file>` — extract from transcript (50 MB guard, `--verify` flag)
+- `waystone extract-replay <project> <file>` — turn-by-turn incremental extraction
+- `waystone query <project> "<task>"` — retrieve relevant context as markdown
+- `waystone show <project>` — list all nodes
+- `waystone export <project>` — export graph to markdown
+- `waystone reconcile <project>` — find and add missed supersedes edges (`--dry-run`)
+- `waystone onboard` — interactive import of recent Claude Code sessions
+- `waystone import-claude-sessions` — batch import Claude Code `.jsonl` sessions
+- `waystone doctor` — preflight check: config, API key, LLM reachability, DB state, hooks
+- `waystone mcp-serve` — start the MCP server on stdio
 
 **MCP server** (`context_broker/mcp_server.py`)
 - `context_broker_query` — retrieve context for a task
