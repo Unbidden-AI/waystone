@@ -22,7 +22,7 @@ class SystemPromptBuilder:
 
     The prompt has two parts:
 
-    1. **Static** — fixed instructions from ``orchestrator.system_prompt.static``
+    1. **Static** — fixed instructions from ``pilot.system_prompt.static``
        in config.yaml (role description, tone, rules).
 
     2. **Dynamic** — graph context retrieved by ``ContextManager.retrieve_context()``
@@ -31,7 +31,7 @@ class SystemPromptBuilder:
 
     Usage::
 
-        builder = SystemPromptBuilder(cfg["orchestrator"]["system_prompt"])
+        builder = SystemPromptBuilder(cfg["pilot"]["system_prompt"])
         system_text = builder.build(context_markdown, task_description="…")
     """
 
@@ -40,7 +40,7 @@ class SystemPromptBuilder:
         Parameters
         ----------
         cfg:
-            The ``orchestrator.system_prompt`` section of config.yaml.
+            The ``pilot.system_prompt`` section of config.yaml.
             Expected keys:
                 static (str): fixed instructions appended after any static_files
                 static_files (list[str]): file paths to prepend verbatim (e.g. CLAUDE.md)

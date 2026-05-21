@@ -1,10 +1,10 @@
-"""Tests for orchestrator/router.py — model routing logic."""
+"""Tests for pilot/router.py — model routing logic."""
 
 from __future__ import annotations
 
 import pytest
 
-from orchestrator.router import _apply_rule, _match, route
+from pilot.router import _apply_rule, _match, route
 
 
 # ---------------------------------------------------------------------------
@@ -81,7 +81,7 @@ def test_match_caches_compiled_pattern():
     pattern = "^cache_test "
     _match(pattern, "cache_test me")
     _match(pattern, "cache_test me again")
-    from orchestrator.router import _PATTERN_CACHE
+    from pilot.router import _PATTERN_CACHE
     assert pattern in _PATTERN_CACHE
 
 

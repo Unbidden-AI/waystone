@@ -1,16 +1,16 @@
-"""Tests for orchestrator/conversation.py."""
+"""Tests for pilot/conversation.py."""
 
 from __future__ import annotations
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from orchestrator.conversation import (
+from pilot.conversation import (
     Conversation,
     _format_tool_summary,
     _truncate_args,
 )
-from orchestrator.types import (
+from pilot.types import (
     CompactionResult,
     CompactionTrigger,
     Message,
@@ -28,7 +28,7 @@ from orchestrator.types import (
 def mock_config():
     """Return a minimal config dict."""
     return {
-        "orchestrator": {
+        "pilot": {
             "context": {
                 "window_size": 20,
                 "token_budget": 8000,
@@ -69,8 +69,8 @@ def mock_store():
 @pytest.fixture
 def conversation(mock_config, mock_store):
     """Return a Conversation instance with mocked dependencies."""
-    with patch("orchestrator.conversation.ContextManager") as mock_ctx_cls, \
-         patch("orchestrator.conversation.SystemPromptBuilder") as mock_spb_cls:
+    with patch("pilot.conversation.ContextManager") as mock_ctx_cls, \
+         patch("pilot.conversation.SystemPromptBuilder") as mock_spb_cls:
 
         # Mock ContextManager with both sync and async methods
         mock_ctx = MagicMock()
@@ -113,7 +113,7 @@ def conversation(mock_config, mock_store):
 @pytest.mark.asyncio
 async def test_chat_happy_path(conversation):
     """Test chat() with a normal reply (no tool calls)."""
-    with patch("orchestrator.conversation.call_llm") as mock_llm:
+    with patch("pilot.conversation.call_llm") as mock_llm:
         mock_llm.return_value = ("Hello, I can help!", None, "stop")
 
         # Mock touch() to avoid AsyncMock issues
@@ -144,8 +144,8 @@ async def test_chat_happy_path(conversation):
 @pytest.mark.asyncio
 async def test_chat_with_compaction(conversation):
     """Test chat() logs compaction info when compaction occurs."""
-    with patch("orchestrator.conversation.call_llm") as mock_llm, \
-         patch("orchestrator.conversation.log") as mock_log:
+    with patch("pilot.conversation.call_llm") as mock_llm, \
+         patch("pilot.conversation.log") as mock_log:
 
         mock_llm.return_value = ("Response", None, "stop")
 
@@ -172,7 +172,7 @@ async def test_chat_with_compaction(conversation):
 @pytest.mark.asyncio
 async def test_chat_empty_reply(conversation):
     """Test chat() with empty LLM reply."""
-    with patch("orchestrator.conversation.call_llm") as mock_llm:
+    with patch("pilot.conversation.call_llm") as mock_llm:
         mock_llm.return_value = ("", None, "stop")
         conversation._context_mgr.touch = MagicMock()
 
@@ -184,7 +184,7 @@ async def test_chat_empty_reply(conversation):
 @pytest.mark.asyncio
 async def test_chat_with_no_context(conversation):
     """Test chat() when no context is retrieved."""
-    with patch("orchestrator.conversation.call_llm") as mock_llm:
+    with patch("pilot.conversation.call_llm") as mock_llm:
         conversation._context_mgr.retrieve_context.return_value = ""
         mock_llm.return_value = ("Response", None, "stop")
         conversation._context_mgr.touch = MagicMock()
@@ -203,8 +203,8 @@ async def test_chat_with_no_context(conversation):
 async def test_chat_stream_yields_chunks(conversation):
     """chat_stream() with tools: LLM returns text on round 1, yielded inline as chunks."""
     # conversation fixture has tools enabled — goes through call_llm first
-    with patch("orchestrator.conversation.call_llm") as mock_llm, \
-         patch("orchestrator.conversation.stream_llm") as mock_stream:
+    with patch("pilot.conversation.call_llm") as mock_llm, \
+         patch("pilot.conversation.stream_llm") as mock_stream:
         mock_llm.return_value = ("Hello world", None, "stop")
 
         chunks = []
@@ -219,7 +219,7 @@ async def test_chat_stream_yields_chunks(conversation):
 async def test_chat_stream_no_tools_uses_stream_llm():
     """chat_stream() without tools calls stream_llm directly (not call_llm) for best TTFT."""
     cfg = {
-        "orchestrator": {
+        "pilot": {
             "context": {},
             "system_prompt": {},
             "llm": {"model": "gpt-4"},
@@ -233,10 +233,10 @@ async def test_chat_stream_no_tools_uses_stream_llm():
         called.append(True)
         yield "streamed reply"
 
-    with patch("orchestrator.conversation.ContextManager") as mock_ctx_cls, \
-         patch("orchestrator.conversation.SystemPromptBuilder") as mock_spb_cls, \
-         patch("orchestrator.conversation.stream_llm", new=fake_stream_llm), \
-         patch("orchestrator.conversation.call_llm") as mock_llm:
+    with patch("pilot.conversation.ContextManager") as mock_ctx_cls, \
+         patch("pilot.conversation.SystemPromptBuilder") as mock_spb_cls, \
+         patch("pilot.conversation.stream_llm", new=fake_stream_llm), \
+         patch("pilot.conversation.call_llm") as mock_llm:
 
         mock_ctx = MagicMock()
         mock_ctx.retrieve_context = MagicMock(return_value="")
@@ -259,8 +259,8 @@ async def test_chat_stream_no_tools_uses_stream_llm():
 @pytest.mark.asyncio
 async def test_chat_stream_with_tools_no_tool_calls_yields_inline(conversation):
     """chat_stream() with tools: if LLM returns text on round 1, yield directly (no double call)."""
-    with patch("orchestrator.conversation.call_llm") as mock_llm, \
-         patch("orchestrator.conversation.stream_llm") as mock_stream:
+    with patch("pilot.conversation.call_llm") as mock_llm, \
+         patch("pilot.conversation.stream_llm") as mock_stream:
         mock_llm.return_value = ("direct reply", None, "stop")
 
         chunks = []
@@ -279,10 +279,10 @@ async def test_chat_stream_with_tools_no_tool_calls_yields_inline(conversation):
 
 def test_reset_clears_history():
     """Test reset() delegates to ContextManager.reset()."""
-    with patch("orchestrator.conversation.ContextManager") as mock_ctx_cls, \
-         patch("orchestrator.conversation.SystemPromptBuilder"):
+    with patch("pilot.conversation.ContextManager") as mock_ctx_cls, \
+         patch("pilot.conversation.SystemPromptBuilder"):
         cfg = {
-            "orchestrator": {
+            "pilot": {
                 "context": {},
                 "system_prompt": {},
                 "llm": {},
@@ -308,10 +308,10 @@ def test_reset_clears_history():
 
 def test_stats_delegates_to_context_mgr():
     """Test stats() returns context manager stats."""
-    with patch("orchestrator.conversation.ContextManager"), \
-         patch("orchestrator.conversation.SystemPromptBuilder"):
+    with patch("pilot.conversation.ContextManager"), \
+         patch("pilot.conversation.SystemPromptBuilder"):
         cfg = {
-            "orchestrator": {
+            "pilot": {
                 "context": {},
                 "system_prompt": {},
                 "llm": {},
@@ -343,7 +343,7 @@ def test_stats_delegates_to_context_mgr():
 @pytest.mark.asyncio
 async def test_llm_loop_text_reply_no_tools(conversation):
     """Test _llm_loop() returns text when finish_reason != 'tool_calls'."""
-    with patch("orchestrator.conversation.call_llm") as mock_llm:
+    with patch("pilot.conversation.call_llm") as mock_llm:
         mock_llm.return_value = ("Final reply", None, "stop")
         conversation._context_mgr.get_history.return_value = [
             Message(role="user", content="Test")
@@ -359,8 +359,8 @@ async def test_llm_loop_text_reply_no_tools(conversation):
 @pytest.mark.asyncio
 async def test_llm_loop_executes_tool_calls(conversation):
     """Test _llm_loop() executes tool calls and feeds results back."""
-    with patch("orchestrator.conversation.call_llm") as mock_llm, \
-         patch("orchestrator.conversation.execute_tools") as mock_execute:
+    with patch("pilot.conversation.call_llm") as mock_llm, \
+         patch("pilot.conversation.execute_tools") as mock_execute:
 
         # First call: tool call request
         tool_call = ToolCall(id="tc1", name="bash", args={"command": "ls"})
@@ -392,8 +392,8 @@ async def test_llm_loop_executes_tool_calls(conversation):
 @pytest.mark.asyncio
 async def test_llm_loop_max_tool_rounds(conversation):
     """Test _llm_loop() stops after _MAX_TOOL_ROUNDS and requests final answer."""
-    with patch("orchestrator.conversation.call_llm") as mock_llm, \
-         patch("orchestrator.conversation.execute_tools") as mock_execute:
+    with patch("pilot.conversation.call_llm") as mock_llm, \
+         patch("pilot.conversation.execute_tools") as mock_execute:
 
         # Return tool calls on every round until we hit max (_MAX_TOOL_ROUNDS = 4)
         tool_call = ToolCall(id="tc1", name="bash", args={"command": "test"})
@@ -423,7 +423,7 @@ async def test_llm_loop_max_tool_rounds(conversation):
 @pytest.mark.asyncio
 async def test_llm_loop_empty_text_returns_empty_string(conversation):
     """Test _llm_loop() returns empty string when LLM returns None."""
-    with patch("orchestrator.conversation.call_llm") as mock_llm:
+    with patch("pilot.conversation.call_llm") as mock_llm:
         mock_llm.return_value = (None, None, "stop")
         conversation._context_mgr.get_history.return_value = []
         conversation._context_mgr.touch = MagicMock()
@@ -436,8 +436,8 @@ async def test_llm_loop_empty_text_returns_empty_string(conversation):
 @pytest.mark.asyncio
 async def test_llm_loop_no_tool_calls_on_final_round(conversation):
     """Test that _llm_loop() doesn't process empty tool_calls list."""
-    with patch("orchestrator.conversation.call_llm") as mock_llm, \
-         patch("orchestrator.conversation.execute_tools") as mock_execute:
+    with patch("pilot.conversation.call_llm") as mock_llm, \
+         patch("pilot.conversation.execute_tools") as mock_execute:
 
         # finish_reason is "tool_calls" but tool_calls is empty list
         mock_llm.return_value = ("Some text", [], "tool_calls")
@@ -553,8 +553,8 @@ def test_format_tool_summary_truncates_long_args():
 @pytest.mark.asyncio
 async def test_llm_loop_multiple_tool_rounds(conversation):
     """Test _llm_loop() handles multiple sequential tool rounds."""
-    with patch("orchestrator.conversation.call_llm") as mock_llm, \
-         patch("orchestrator.conversation.execute_tools") as mock_execute:
+    with patch("pilot.conversation.call_llm") as mock_llm, \
+         patch("pilot.conversation.execute_tools") as mock_execute:
 
         tc1 = ToolCall(id="tc1", name="bash", args={"command": "test"})
         tc2 = ToolCall(id="tc2", name="bash", args={"command": "test2"})
@@ -588,10 +588,10 @@ async def test_llm_loop_multiple_tool_rounds(conversation):
 
 def test_conversation_with_no_enabled_tools():
     """Test Conversation with empty tools list."""
-    with patch("orchestrator.conversation.ContextManager"), \
-         patch("orchestrator.conversation.SystemPromptBuilder"):
+    with patch("pilot.conversation.ContextManager"), \
+         patch("pilot.conversation.SystemPromptBuilder"):
         cfg = {
-            "orchestrator": {
+            "pilot": {
                 "context": {},
                 "system_prompt": {},
                 "llm": {},
@@ -607,10 +607,10 @@ def test_conversation_with_no_enabled_tools():
 
 def test_conversation_with_multiple_enabled_tools():
     """Test Conversation with multiple enabled tools."""
-    with patch("orchestrator.conversation.ContextManager"), \
-         patch("orchestrator.conversation.SystemPromptBuilder"):
+    with patch("pilot.conversation.ContextManager"), \
+         patch("pilot.conversation.SystemPromptBuilder"):
         cfg = {
-            "orchestrator": {
+            "pilot": {
                 "context": {},
                 "system_prompt": {},
                 "llm": {},
@@ -627,7 +627,7 @@ def test_conversation_with_multiple_enabled_tools():
 @pytest.mark.asyncio
 async def test_llm_loop_passes_tools_list_when_enabled(conversation):
     """Test _llm_loop() passes enabled tools to call_llm."""
-    with patch("orchestrator.conversation.call_llm") as mock_llm:
+    with patch("pilot.conversation.call_llm") as mock_llm:
         mock_llm.return_value = ("Reply", None, "stop")
         conversation._context_mgr.get_history.return_value = []
         conversation._context_mgr.touch = MagicMock()
@@ -643,7 +643,7 @@ async def test_llm_loop_passes_tools_list_when_enabled(conversation):
 @pytest.mark.asyncio
 async def test_llm_loop_passes_none_tools_when_disabled(conversation):
     """Test _llm_loop() passes None tools when list is empty."""
-    with patch("orchestrator.conversation.call_llm") as mock_llm:
+    with patch("pilot.conversation.call_llm") as mock_llm:
         mock_llm.return_value = ("Reply", None, "stop")
         conversation._context_mgr.get_history.return_value = []
         conversation._context_mgr.touch = MagicMock()

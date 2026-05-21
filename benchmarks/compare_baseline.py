@@ -42,8 +42,8 @@ from waystone.config import get_db_path, get_project_dir, load_config
 from waystone.extractor import extract, extract_targeted, verify_extraction
 from waystone.retriever import retrieve_with_stats
 from waystone.store import GraphStore
-from orchestrator.llm_adapter import call_llm, estimate_tokens
-from orchestrator.types import Message
+from pilot.llm_adapter import call_llm, estimate_tokens
+from pilot.types import Message
 
 BENCHMARKS_DIR = Path(__file__).parent
 TRANSCRIPTS_DIR = BENCHMARKS_DIR / "transcripts"

@@ -1,6 +1,6 @@
 """Model router — selects a model config based on the user message content.
 
-Config shape (under ``orchestrator.routing`` in config.yaml):
+Config shape (under ``pilot.routing`` in config.yaml):
 
     routing:
       enabled: true
@@ -43,7 +43,7 @@ def route(message: str, routing_cfg: dict, base_llm_cfg: dict) -> dict:
     message:
         The raw user message for this turn.
     routing_cfg:
-        The ``orchestrator.routing`` config block.  Must have ``enabled``
+        The ``pilot.routing`` config block.  Must have ``enabled``
         (bool) and ``rules`` (list of rule dicts).
     base_llm_cfg:
         The default ``pilot.llm`` config (including ``_retry``).

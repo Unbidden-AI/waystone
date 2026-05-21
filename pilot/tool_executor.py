@@ -392,7 +392,7 @@ async def execute_tool(tool_call: ToolCall, cfg: dict, store: "GraphStore | None
     tool_call:
         The parsed tool invocation from the LLM.
     cfg:
-        ``orchestrator.tools`` config dict (sandbox_root, max_output_chars, …).
+        ``pilot.tools`` config dict (sandbox_root, max_output_chars, …).
 
     Returns
     -------

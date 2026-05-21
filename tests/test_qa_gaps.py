@@ -7,6 +7,8 @@ run separately with `pip install -e ".[dev]"` which installs fastapi.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import os
 import sqlite3
@@ -40,7 +42,7 @@ class TestNodeLimitEnforcementOnExtract:
         admin_db_path = tmp_path / "admin.db"
         monkeypatch.setenv("CB_USE_ADMIN_DB", "1")
         monkeypatch.setenv("CB_ADMIN_DB", str(admin_db_path))
-        monkeypatch.setenv("LS_WEBHOOK_SECRET", "test_secret")
+        monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "test_secret")
 
         conn = sqlite3.connect(str(admin_db_path))
         conn.row_factory = sqlite3.Row
@@ -174,7 +176,7 @@ class TestWebhookSignatureBypasses:
         """API with webhook secret configured."""
         admin_db_path = tmp_path / "admin.db"
         monkeypatch.setenv("CB_ADMIN_DB", str(admin_db_path))
-        monkeypatch.setenv("LS_WEBHOOK_SECRET", "prod_secret_123")
+        monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "prod_secret_123")
         monkeypatch.delenv("RESEND_API_KEY", raising=False)
 
         conn = sqlite3.connect(str(admin_db_path))
@@ -194,57 +196,61 @@ class TestWebhookSignatureBypasses:
             with TestClient(app) as c:
                 yield c
 
+    def _make_stripe_sig(self, body: bytes, secret: str) -> str:
+        import time
+        ts = int(time.time())
+        signed = f"{ts}".encode() + b"." + body
+        sig = hmac.new(secret.encode(), signed, hashlib.sha256).hexdigest()
+        return f"t={ts},v1={sig}"
+
     def test_webhook_rejects_empty_signature_header(self, webhook_client):
-        """Empty X-Signature should be rejected."""
+        """Empty Stripe-Signature should be rejected."""
         payload = json.dumps({
-            "meta": {"event_name": "subscription_created"},
-            "data": {"attributes": {"user_email": "new@test.com", "variant_id": "var_pro"}},
+            "type": "checkout.session.completed",
+            "data": {"object": {"customer_email": "new@test.com", "customer": "cus_xxx", "metadata": {}}},
         }).encode()
         r = webhook_client.post(
-            "/webhooks/lemonsqueezy",
+            "/webhooks/stripe",
             content=payload,
-            headers={"X-Signature": ""},
+            headers={"Stripe-Signature": ""},
         )
         assert r.status_code == 400
 
     def test_webhook_rejects_wrong_hmac(self, webhook_client):
         """Mismatched HMAC should be rejected."""
         payload = json.dumps({
-            "meta": {"event_name": "subscription_created"},
-            "data": {"attributes": {"user_email": "new@test.com", "variant_id": "var_pro"}},
+            "type": "checkout.session.completed",
+            "data": {"object": {"customer_email": "new@test.com", "customer": "cus_xxx", "metadata": {}}},
         }).encode()
         r = webhook_client.post(
-            "/webhooks/lemonsqueezy",
+            "/webhooks/stripe",
             content=payload,
-            headers={"X-Signature": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"},
+            headers={"Stripe-Signature": "t=123,v1=ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"},
         )
         assert r.status_code == 400
 
     def test_webhook_rejects_modified_payload(self, webhook_client):
         """Changing payload after signing should be rejected."""
-        import hashlib
-        import hmac
-
         original = {
-            "meta": {"event_name": "subscription_created"},
-            "data": {"attributes": {"user_email": "attacker@test.com", "variant_id": "var_team"}},
+            "type": "checkout.session.completed",
+            "data": {"object": {"customer_email": "attacker@test.com", "customer": "cus_atk", "metadata": {}}},
         }
         payload = json.dumps(original).encode()
 
         # Sign with original
-        secret = os.environ.get("LS_WEBHOOK_SECRET", "")
-        sig = hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()
+        secret = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+        sig_header = self._make_stripe_sig(payload, secret)
 
         # Modify payload in transit (attacker changes email)
         modified_payload = json.dumps({
-            "meta": {"event_name": "subscription_created"},
-            "data": {"attributes": {"user_email": "victim@test.com", "variant_id": "var_team"}},
+            "type": "checkout.session.completed",
+            "data": {"object": {"customer_email": "victim@test.com", "customer": "cus_atk", "metadata": {}}},
         }).encode()
 
         r = webhook_client.post(
-            "/webhooks/lemonsqueezy",
+            "/webhooks/stripe",
             content=modified_payload,
-            headers={"X-Signature": sig},
+            headers={"Stripe-Signature": sig_header},
         )
         assert r.status_code == 400, "Signature validation should detect payload tampering"
 
@@ -261,7 +267,7 @@ class TestAPIAuthEdgeCases:
     def api_client_simple(self, tmp_path, monkeypatch):
         """Simple API without admin DB (self-hosted mode)."""
         monkeypatch.delenv("CB_USE_ADMIN_DB", raising=False)
-        monkeypatch.delenv("LS_WEBHOOK_SECRET", raising=False)
+        monkeypatch.delenv("STRIPE_WEBHOOK_SECRET", raising=False)
         monkeypatch.setenv("WAYSTONE_API_KEY", "self-hosted-secret")
 
         config = {
@@ -404,7 +410,7 @@ class TestRateLimitingUnderAdminDB:
         admin_db_path = tmp_path / "admin.db"
         monkeypatch.setenv("CB_USE_ADMIN_DB", "1")
         monkeypatch.setenv("CB_ADMIN_DB", str(admin_db_path))
-        monkeypatch.setenv("LS_WEBHOOK_SECRET", "test_secret")
+        monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "test_secret")
 
         conn = sqlite3.connect(str(admin_db_path))
         conn.row_factory = sqlite3.Row

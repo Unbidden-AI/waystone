@@ -36,8 +36,8 @@ sys.path.insert(0, str(ROOT))
 
 from waystone.config import get_db_path, load_config
 from waystone.store import GraphStore
-from orchestrator.context_manager import ContextManager
-from orchestrator.types import CompactionTrigger, Message
+from pilot.context_manager import ContextManager
+from pilot.types import CompactionTrigger, Message
 
 BENCHMARKS_DIR = Path(__file__).parent
 

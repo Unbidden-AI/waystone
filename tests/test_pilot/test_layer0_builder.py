@@ -1,4 +1,4 @@
-"""Tests for orchestrator/layer0_builder.py."""
+"""Tests for pilot/layer0_builder.py."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from orchestrator.layer0_builder import (
+from pilot.layer0_builder import (
     build_layer0,
     _fetch_open_questions,
     _fetch_active_constraints,
@@ -259,7 +259,7 @@ def test_build_layer0_with_questions_only(mock_store):
     execute_mock.side_effect = side_effect
     mock_store._conn.execute = execute_mock
 
-    with patch('orchestrator.layer0_builder.estimate_tokens', return_value=5):
+    with patch('pilot.layer0_builder.estimate_tokens', return_value=5):
         result = build_layer0(mock_store, token_budget=1000)
 
     assert "Open Questions" in result or result == ""
@@ -270,7 +270,7 @@ def test_build_layer0_respects_token_budget(mock_store):
     mock_store._conn = MagicMock()
     mock_store._conn.execute = MagicMock(return_value=MagicMock(fetchall=lambda: None))
 
-    with patch('orchestrator.layer0_builder.estimate_tokens', return_value=100):
+    with patch('pilot.layer0_builder.estimate_tokens', return_value=100):
         result = build_layer0(mock_store, token_budget=50)
 
     # Should return empty or very minimal output due to budget

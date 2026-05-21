@@ -1,16 +1,68 @@
 # Changelog
 
-All notable changes to Context Broker are documented here.
+All notable changes to Waystone are documented here.
 
 ## [Unreleased]
 
+---
+
+## [0.2.0] – 2026-05-19
+
 ### Added
-- `pilot/` package skeleton — model-agnostic conversation manager with proactive compaction
-- `tests/test_pilot/` — test directory for orchestrator modules
+
+**Product rename: Engram → Waystone**
+- CLI entry point renamed to `waystone`; package renamed to `waystone`; config dir renamed to `~/.waystone/`
+- MCP tool names updated: `context_broker_*` → `waystone_*`
+- Config marker file renamed from `.context-broker` to `.waystone`
+
+**Stripe billing**
+- Replaced LemonSqueezy with Stripe for payment processing
+- Webhook handler verifies `Stripe-Signature` and processes `checkout.session.completed` events
+- API key generation on successful checkout with tier determination from Stripe line items
+- Email delivery via Resend with dead-letter queue for transient failures
+- `waystone/billing.py` — API key management (generate, hash, validate, revoke), tier definitions (free/pro/team), rate limiter
+
+**Hosted API server** (`waystone/api_server.py`)
+- FastAPI server deployable to Fly.io or Railway
+- `/v1/health` — liveness probe
+- `/v1/account` — Clerk JWT-authenticated account info
+- `/v1/projects/{project}/query` — remote context retrieval
+- `/v1/projects/{project}/extract` — remote extraction
+- `/webhooks/stripe` — Stripe payment webhook
+- `/account/key` — API key provisioning endpoint
+- `fly.toml` — Fly.io deployment config (`waystone-api`, 512 MB, health check)
+
+**Retrieval improvements**
+- RRF (Reciprocal Rank Fusion) re-ranking across BFS entry points
+- Semantic dedup CLI (`waystone dedup`) — collapse near-duplicate nodes above cosine threshold
+- `process` node type — captures ongoing processes, background jobs, and scheduled tasks
+- Person-hub fanout in retriever — exhaustive retrieval for person-centric queries
+- `waystone reflect` — in-session hook watermark; dedup cap on reflected nodes
+
+**Pilot orchestrator** (`pilot/`)
+- Model-agnostic conversation manager with proactive context compaction
+- Layer-0 system prompt builder, tool executor, router, scheduler
 - `litellm>=1.40` and `tiktoken>=0.7` dependencies
-- `pilot:` configuration section in `config.yaml` with full schema
-- `PILOT_PLAN.md` — architecture and module design for the orchestrator
-- `DEVELOPMENT_PLAN.md` — agent workflow, milestones, and process conventions
+- `pilot:` configuration section in `config.yaml`
+
+**Benchmarks**
+- LOCOMO benchmark harness (`benchmarks/locomo/`) — multi-conversation memory benchmark (Snap Research); best result 88.1% LLM accuracy on dev split (n=762, GPT-4o-mini judge)
+- LongMemEval benchmark harness (`benchmarks/longmemeval/`) — 500-question S-split; best result 61.6% overall; 87.5% on single-session-assistant category
+- OpenAI Batch API integration in scoring for 50% cost reduction
+- `BENCHMARK_RESULTS.md` — public benchmark documentation with competitor comparison
+
+**Website integration**
+- `unbidden-site/netlify/functions/create-checkout.js` — returns Stripe Payment Link by plan
+- `unbidden-site/netlify/functions/get-api-key.js` — proxies API key fetch with Clerk Bearer token
+
+### Changed
+- `config.yaml` section renamed: `orchestrator:` → `pilot:`
+- `fly.toml` and `railway.toml` updated to Stripe env vars (removed LemonSqueezy vars)
+- Benchmark utilities updated: `compaction_eval.py`, `compare_baseline.py`
+
+### Fixed
+- Keyword extractor now emits both hyphenated compound tokens and their parts (`hot-path` → `hot-path`, `hot`, `path`), fixing tag misses on hyphenated facts
+- Superseding nodes now include prior-state tags so queries for old terms surface the transition node
 
 ---
 

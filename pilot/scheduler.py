@@ -1,4 +1,4 @@
-"""Scheduled runs — cron-driven headless orchestrator execution.
+"""Scheduled runs — cron-driven headless pilot execution.
 
 Status: EXPERIMENTAL in v1. Single-machine only. For HA / distributed scheduling,
 use systemd timers or cron on one designated machine.
@@ -145,7 +145,7 @@ class Scheduler:
         self._schedules: dict[str, ScheduleConfig] = {}
 
         # Load schedules from config (if present)
-        schedules_list = cfg.get("orchestrator", {}).get("schedules", [])
+        schedules_list = cfg.get("pilot", {}).get("schedules", [])
         for sched_dict in schedules_list:
             try:
                 sched = ScheduleConfig.from_dict(sched_dict)

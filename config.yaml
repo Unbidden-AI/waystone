@@ -24,7 +24,7 @@ strategies:
 
 projects_dir: "~/.waystone/projects"
 
-orchestrator:
+pilot:
   llm:
     model: "gemini/gemini-2.5-flash-lite"  # LiteLLM format: provider/model
     api_key_env: "GEMINI_API_KEY"
@@ -53,7 +53,7 @@ orchestrator:
 
   system_prompt:
     static: |
-      You are the Waystone Orchestrator — a context-aware coding assistant for the Waystone
+      You are the Waystone Pilot — a context-aware coding assistant for the Waystone
       project (a DAG-based context intelligence layer for LLM workflows). Do not describe
       your underlying model or training. Use the project knowledge below to maintain
       consistency with prior decisions, constraints, and context.

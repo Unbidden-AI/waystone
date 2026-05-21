@@ -1,4 +1,4 @@
-"""End-to-end integration tests for the Waystone Orchestrator.
+"""End-to-end integration tests for the Waystone Pilot.
 
 These tests use real instances of GraphStore, ContextManager, SystemPromptBuilder,
 and tool_executor. Only litellm.acompletion and waystone.extractor.extract
@@ -14,8 +14,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from waystone.store import GraphStore
-from orchestrator.conversation import Conversation
-from orchestrator.types import Message, ToolCall
+from pilot.conversation import Conversation
+from pilot.types import Message, ToolCall
 
 
 # ==============================================================================
@@ -33,7 +33,7 @@ def minimal_cfg(tmp_path):
             "max_tokens": 100,
             "base_url": "http://localhost:1234/v1",
         },
-        "orchestrator": {
+        "pilot": {
             "llm": {
                 "model": "gpt-4o-mini",
                 "temperature": 0.0,
@@ -101,7 +101,7 @@ def conversation(minimal_cfg, real_store):
 @pytest.mark.asyncio
 async def test_full_turn_cycle(conversation, minimal_cfg, real_store):
     """Test a single complete turn: user message → system context → LLM call → reply."""
-    with patch("orchestrator.llm_adapter.litellm.acompletion") as mock_acompletion:
+    with patch("pilot.llm_adapter.litellm.acompletion") as mock_acompletion:
         # Mock the LLM response
         response = MagicMock()
         response.choices = [MagicMock()]
@@ -141,7 +141,7 @@ async def test_context_retrieved_from_graph(conversation, real_store, minimal_cf
     }
     real_store.add_node(node)
 
-    with patch("orchestrator.llm_adapter.litellm.acompletion") as mock_acompletion:
+    with patch("pilot.llm_adapter.litellm.acompletion") as mock_acompletion:
         response = MagicMock()
         response.choices = [MagicMock()]
         response.choices[0].message.content = "Found the rate limit info in the knowledge base."
@@ -168,7 +168,7 @@ async def test_context_retrieved_from_graph(conversation, real_store, minimal_cf
 @pytest.mark.asyncio
 async def test_multiple_turns_accumulate_history(conversation):
     """Test that multiple conversation turns accumulate in history."""
-    with patch("orchestrator.llm_adapter.litellm.acompletion") as mock_acompletion:
+    with patch("pilot.llm_adapter.litellm.acompletion") as mock_acompletion:
         responses = [
             "First response",
             "Second response",
@@ -202,13 +202,13 @@ async def test_compaction_triggers_on_token_budget(minimal_cfg, real_store):
     """Test that compaction triggers when token budget is exceeded."""
     # Override config with low token budget to trigger quickly
     cfg = minimal_cfg.copy()
-    cfg["orchestrator"]["context"]["token_budget"] = 100
-    cfg["orchestrator"]["context"]["token_trigger_ratio"] = 0.5
-    cfg["orchestrator"]["context"]["compaction_batch"] = 2
+    cfg["pilot"]["context"]["token_budget"] = 100
+    cfg["pilot"]["context"]["token_trigger_ratio"] = 0.5
+    cfg["pilot"]["context"]["compaction_batch"] = 2
 
     conversation = Conversation(cfg=cfg, store=real_store, project_name="test_project")
 
-    with patch("orchestrator.llm_adapter.litellm.acompletion") as mock_acompletion, \
+    with patch("pilot.llm_adapter.litellm.acompletion") as mock_acompletion, \
          patch("waystone.extractor.extract") as mock_extract:
 
         # Mock extract to return a simple result
@@ -261,7 +261,7 @@ async def test_tool_call_round_trip(conversation, tmp_path):
     test_file = tmp_path / "test.txt"
     test_file.write_text("Hello from test file")
 
-    with patch("orchestrator.llm_adapter.litellm.acompletion") as mock_acompletion:
+    with patch("pilot.llm_adapter.litellm.acompletion") as mock_acompletion:
         # First call: LLM requests a tool
         response1 = MagicMock()
         response1.choices = [MagicMock()]
@@ -300,7 +300,7 @@ async def test_tool_call_round_trip(conversation, tmp_path):
 @pytest.mark.asyncio
 async def test_reset_clears_history(conversation):
     """Test that reset() clears the conversation history."""
-    with patch("orchestrator.llm_adapter.litellm.acompletion") as mock_acompletion:
+    with patch("pilot.llm_adapter.litellm.acompletion") as mock_acompletion:
         response = MagicMock()
         response.choices = [MagicMock()]
         response.choices[0].message.content = "Test reply"
@@ -328,7 +328,7 @@ async def test_reset_clears_history(conversation):
 @pytest.mark.asyncio
 async def test_stream_returns_full_reply(conversation):
     """Test that chat_stream() yields and joins to the full reply."""
-    with patch("orchestrator.llm_adapter.litellm.acompletion") as mock_acompletion:
+    with patch("pilot.llm_adapter.litellm.acompletion") as mock_acompletion:
         # Make the reply long enough to require multiple 80-char chunks
         full_reply = "This is a much longer reply that will definitely be streamed in multiple chunks because it contains more than eighty characters which is the chunk boundary."
         response = MagicMock()
@@ -356,7 +356,7 @@ async def test_stream_returns_full_reply(conversation):
 @pytest.mark.asyncio
 async def test_system_prompt_includes_static_instructions(conversation):
     """Test that the system prompt includes static instructions from config."""
-    with patch("orchestrator.llm_adapter.litellm.acompletion") as mock_acompletion:
+    with patch("pilot.llm_adapter.litellm.acompletion") as mock_acompletion:
         response = MagicMock()
         response.choices = [MagicMock()]
         response.choices[0].message.content = "Reply"
@@ -384,7 +384,7 @@ async def test_system_prompt_includes_static_instructions(conversation):
 @pytest.mark.asyncio
 async def test_stats_reflect_current_state(conversation):
     """Test that stats() reflects the current conversation state."""
-    with patch("orchestrator.llm_adapter.litellm.acompletion") as mock_acompletion:
+    with patch("pilot.llm_adapter.litellm.acompletion") as mock_acompletion:
         response = MagicMock()
         response.choices = [MagicMock()]
         response.choices[0].message.content = "Test"
@@ -409,7 +409,7 @@ async def test_stats_reflect_current_state(conversation):
 @pytest.mark.asyncio
 async def test_empty_graph_returns_no_context(conversation):
     """Test that retrieval from an empty graph doesn't break the conversation."""
-    with patch("orchestrator.llm_adapter.litellm.acompletion") as mock_acompletion:
+    with patch("pilot.llm_adapter.litellm.acompletion") as mock_acompletion:
         response = MagicMock()
         response.choices = [MagicMock()]
         response.choices[0].message.content = "No context found"
@@ -438,7 +438,7 @@ async def test_multiple_nodes_in_context(conversation, real_store):
         }
         real_store.add_node(node)
 
-    with patch("orchestrator.llm_adapter.litellm.acompletion") as mock_acompletion:
+    with patch("pilot.llm_adapter.litellm.acompletion") as mock_acompletion:
         response = MagicMock()
         response.choices = [MagicMock()]
         response.choices[0].message.content = "Multiple facts retrieved"
@@ -458,7 +458,7 @@ async def test_multiple_nodes_in_context(conversation, real_store):
 @pytest.mark.asyncio
 async def test_bash_tool_execution(conversation, tmp_path):
     """Test that bash tool calls are executed correctly."""
-    with patch("orchestrator.llm_adapter.litellm.acompletion") as mock_acompletion:
+    with patch("pilot.llm_adapter.litellm.acompletion") as mock_acompletion:
         # First call: LLM requests bash tool
         response1 = MagicMock()
         response1.choices = [MagicMock()]
@@ -488,9 +488,9 @@ async def test_disabled_tool_returns_error(conversation, tmp_path):
     """Test that disabled tools return an error without executing."""
     cfg = conversation._context_mgr._extractor_cfg
     # Disable all tools
-    cfg["orchestrator"]["tools"]["enabled"] = []
+    cfg["pilot"]["tools"]["enabled"] = []
 
-    with patch("orchestrator.llm_adapter.litellm.acompletion") as mock_acompletion:
+    with patch("pilot.llm_adapter.litellm.acompletion") as mock_acompletion:
         # LLM tries to use a tool
         response1 = MagicMock()
         response1.choices = [MagicMock()]
@@ -524,7 +524,7 @@ async def test_disabled_tool_returns_error(conversation, tmp_path):
 @pytest.mark.asyncio
 async def test_empty_user_message(conversation):
     """Test handling of empty user messages."""
-    with patch("orchestrator.llm_adapter.litellm.acompletion") as mock_acompletion:
+    with patch("pilot.llm_adapter.litellm.acompletion") as mock_acompletion:
         response = MagicMock()
         response.choices = [MagicMock()]
         response.choices[0].message.content = "Empty message received"
@@ -540,7 +540,7 @@ async def test_empty_user_message(conversation):
 @pytest.mark.asyncio
 async def test_very_long_user_message(conversation):
     """Test handling of very long user messages."""
-    with patch("orchestrator.llm_adapter.litellm.acompletion") as mock_acompletion:
+    with patch("pilot.llm_adapter.litellm.acompletion") as mock_acompletion:
         response = MagicMock()
         response.choices = [MagicMock()]
         response.choices[0].message.content = "Long message processed"
@@ -561,7 +561,7 @@ async def test_very_long_user_message(conversation):
 @pytest.mark.asyncio
 async def test_llm_error_propagates(conversation):
     """Test that LLM errors propagate correctly."""
-    with patch("orchestrator.llm_adapter.litellm.acompletion") as mock_acompletion:
+    with patch("pilot.llm_adapter.litellm.acompletion") as mock_acompletion:
         # Simulate a generic exception
         mock_acompletion.side_effect = RuntimeError("LLM service unavailable")
 

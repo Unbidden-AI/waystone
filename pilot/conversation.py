@@ -1,4 +1,4 @@
-"""Conversation — the main turn-by-turn loop tying all orchestrator modules together."""
+"""Conversation — the main turn-by-turn loop tying all pilot modules together."""
 
 from __future__ import annotations
 
@@ -58,7 +58,7 @@ class Conversation:
         """
         from pathlib import Path
 
-        orch_cfg = cfg.get("orchestrator", {})
+        orch_cfg = cfg.get("pilot", {})
         ctx_cfg = orch_cfg.get("context", {})
         sp_cfg = orch_cfg.get("system_prompt", {})
         tools_cfg = orch_cfg.get("tools", {})

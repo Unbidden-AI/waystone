@@ -23,10 +23,11 @@ from waystone.billing import (
     open_admin_db,
     revoke_key,
     revoke_key_by_email,
+    revoke_key_by_stripe_customer,
     send_key_email,
-    tier_from_variant,
+    tier_from_price,
     validate_key,
-    verify_ls_signature,
+    verify_stripe_signature,
 )
 
 
@@ -252,39 +253,84 @@ class TestSendKeyEmail:
 
 
 # ---------------------------------------------------------------------------
-# LemonSqueezy helpers
+# Stripe helpers
 # ---------------------------------------------------------------------------
 
-class TestVerifyLsSignature:
-    def _make_sig(self, body: bytes, secret: str) -> str:
-        return hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+class TestVerifyStripeSignature:
+    def _make_sig_header(self, body: bytes, secret: str, t: int | None = None) -> str:
+        import time
+        ts = t or int(time.time())
+        signed = f"{ts}".encode() + b"." + body
+        sig = hmac.new(secret.encode(), signed, hashlib.sha256).hexdigest()
+        return f"t={ts},v1={sig}"
 
     def test_valid_signature(self, monkeypatch):
-        monkeypatch.setenv("LS_WEBHOOK_SECRET", "testsecret")
-        body = b'{"test": "payload"}'
-        sig = self._make_sig(body, "testsecret")
-        assert verify_ls_signature(body, sig) is True
+        monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
+        body = b'{"type": "checkout.session.completed"}'
+        hdr = self._make_sig_header(body, "whsec_test")
+        assert verify_stripe_signature(body, hdr) is True
 
     def test_invalid_signature(self, monkeypatch):
-        monkeypatch.setenv("LS_WEBHOOK_SECRET", "testsecret")
-        body = b'{"test": "payload"}'
-        assert verify_ls_signature(body, "wrongsig") is False
+        monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
+        body = b'{"type": "checkout.session.completed"}'
+        assert verify_stripe_signature(body, "t=123,v1=badhex") is False
 
     def test_no_secret_always_false(self, monkeypatch):
-        monkeypatch.delenv("LS_WEBHOOK_SECRET", raising=False)
-        assert verify_ls_signature(b"anything", "anysig") is False
+        monkeypatch.delenv("STRIPE_WEBHOOK_SECRET", raising=False)
+        assert verify_stripe_signature(b"anything", "t=1,v1=anything") is False
+
+    def test_missing_timestamp_returns_false(self, monkeypatch):
+        monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
+        assert verify_stripe_signature(b"body", "v1=abc123") is False
+
+    def test_multiple_v1_sigs_any_match(self, monkeypatch):
+        monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
+        body = b'{"type": "test"}'
+        import time
+        ts = int(time.time())
+        signed = f"{ts}".encode() + b"." + body
+        real_sig = hmac.new("whsec_test".encode(), signed, hashlib.sha256).hexdigest()
+        hdr = f"t={ts},v1=fakesig,v1={real_sig}"
+        assert verify_stripe_signature(body, hdr) is True
 
 
-class TestTierFromVariant:
-    def test_pro_variant(self, monkeypatch):
-        monkeypatch.setenv("LS_PRO_VARIANT_ID", "var_pro_123")
-        assert tier_from_variant("var_pro_123") == "pro"
+class TestTierFromPrice:
+    def test_pro_price(self, monkeypatch):
+        monkeypatch.setenv("STRIPE_PRO_PRICE_ID", "price_pro_123")
+        assert tier_from_price("price_pro_123") == "pro"
 
-    def test_team_variant(self, monkeypatch):
-        monkeypatch.setenv("LS_TEAM_VARIANT_ID", "var_team_456")
-        assert tier_from_variant("var_team_456") == "team"
+    def test_pro_annual_price(self, monkeypatch):
+        monkeypatch.setenv("STRIPE_PRO_ANNUAL_PRICE_ID", "price_pro_annual_456")
+        assert tier_from_price("price_pro_annual_456") == "pro"
 
-    def test_unknown_variant_defaults_to_free(self, monkeypatch):
-        monkeypatch.delenv("LS_PRO_VARIANT_ID", raising=False)
-        monkeypatch.delenv("LS_TEAM_VARIANT_ID", raising=False)
-        assert tier_from_variant("var_unknown") == "free"
+    def test_team_price(self, monkeypatch):
+        monkeypatch.setenv("STRIPE_TEAM_PRICE_ID", "price_team_789")
+        assert tier_from_price("price_team_789") == "team"
+
+    def test_team_annual_price(self, monkeypatch):
+        monkeypatch.setenv("STRIPE_TEAM_ANNUAL_PRICE_ID", "price_team_annual_000")
+        assert tier_from_price("price_team_annual_000") == "team"
+
+    def test_unknown_price_defaults_to_free(self, monkeypatch):
+        monkeypatch.delenv("STRIPE_PRO_PRICE_ID", raising=False)
+        monkeypatch.delenv("STRIPE_TEAM_PRICE_ID", raising=False)
+        assert tier_from_price("price_unknown") == "free"
+
+
+class TestRevokeKeyByStripeCustomer:
+    def test_revokes_matching_keys(self, mem_db):
+        raw1 = create_key(mem_db, email="a@example.com", tier="pro", stripe_customer_id="cus_abc")
+        raw2 = create_key(mem_db, email="b@example.com", tier="team", stripe_customer_id="cus_abc")
+        count = revoke_key_by_stripe_customer(mem_db, "cus_abc")
+        assert count == 2
+        assert validate_key(mem_db, raw1) is None
+        assert validate_key(mem_db, raw2) is None
+
+    def test_does_not_revoke_other_customers(self, mem_db):
+        raw_other = create_key(mem_db, email="other@example.com", tier="pro", stripe_customer_id="cus_other")
+        create_key(mem_db, email="target@example.com", tier="pro", stripe_customer_id="cus_target")
+        revoke_key_by_stripe_customer(mem_db, "cus_target")
+        assert validate_key(mem_db, raw_other) is not None
+
+    def test_no_match_returns_zero(self, mem_db):
+        assert revoke_key_by_stripe_customer(mem_db, "cus_ghost") == 0

@@ -17,3 +17,10 @@ benchmarks/longmemeval/data/*.json
 # Internal planning docs (kept locally, not published)
 internal/
 specs/
+
+# Internal tools and applications
+YC/
+.agents/
+scripts/
+skills/
+skills-lock.json

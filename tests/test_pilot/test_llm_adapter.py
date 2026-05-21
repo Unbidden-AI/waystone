@@ -1,4 +1,4 @@
-"""Tests for orchestrator.llm_adapter — LLM call handling and tool schemas."""
+"""Tests for pilot.llm_adapter — LLM call handling and tool schemas."""
 
 import asyncio
 import json
@@ -8,14 +8,14 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
-from orchestrator.llm_adapter import (
+from pilot.llm_adapter import (
     _extract_retry_after,
     _parse_tool_calls,
     _resolve_api_key,
     build_tool_schemas,
     estimate_tokens,
 )
-from orchestrator.types import Message, ToolCall
+from pilot.types import Message, ToolCall
 
 # Prevent errors from missing tiktoken during tests
 _TIKTOKEN_UNAVAILABLE = True
@@ -52,7 +52,7 @@ class TestEstimateTokens:
         long = estimate_tokens("hello world this is a longer sentence with more words")
         assert long > short
 
-    @patch("orchestrator.llm_adapter._get_encoding")
+    @patch("pilot.llm_adapter._get_encoding")
     def test_fallback_when_tiktoken_unavailable(self, mock_get_encoding):
         """estimate_tokens falls back to len//4 when tiktoken unavailable."""
         mock_get_encoding.return_value = False
@@ -61,7 +61,7 @@ class TestEstimateTokens:
         assert isinstance(result, int)
         assert result > 0
 
-    @patch("orchestrator.llm_adapter._get_encoding")
+    @patch("pilot.llm_adapter._get_encoding")
     def test_fallback_when_tiktoken_encode_raises(self, mock_get_encoding):
         """estimate_tokens falls back when tiktoken.encode raises."""
         mock_encoding = MagicMock()
@@ -134,7 +134,7 @@ class TestBuildToolSchemas:
         names = [s["function"]["name"] for s in result]
         assert set(names) == {"bash", "read_file", "grep"}
 
-    @patch("orchestrator.llm_adapter.log")
+    @patch("pilot.llm_adapter.log")
     def test_unknown_tool_skipped(self, mock_log):
         """build_tool_schemas skips unknown tool names and logs warning."""
         result = build_tool_schemas(["unknown_tool"])
@@ -142,7 +142,7 @@ class TestBuildToolSchemas:
         mock_log.warning.assert_called_once()
         assert "Unknown tool" in str(mock_log.warning.call_args)
 
-    @patch("orchestrator.llm_adapter.log")
+    @patch("pilot.llm_adapter.log")
     def test_mixed_known_and_unknown_tools(self, mock_log):
         """build_tool_schemas includes known tools and skips unknown."""
         result = build_tool_schemas(["bash", "invalid_tool", "read_file"])
@@ -396,7 +396,7 @@ class TestParseToolCalls:
         assert result is not None
         assert result[0].args == {}
 
-    @patch("orchestrator.llm_adapter.log")
+    @patch("pilot.llm_adapter.log")
     def test_skips_malformed_json_arguments(self, mock_log):
         """_parse_tool_calls skips tool calls with malformed JSON."""
         msg = MagicMock()
@@ -409,7 +409,7 @@ class TestParseToolCalls:
         assert result is None
         mock_log.warning.assert_called_once()
 
-    @patch("orchestrator.llm_adapter.log")
+    @patch("pilot.llm_adapter.log")
     def test_skips_missing_function_attribute(self, mock_log):
         """_parse_tool_calls skips tool calls without function attribute."""
         msg = MagicMock()
@@ -419,7 +419,7 @@ class TestParseToolCalls:
         assert result is None
         mock_log.warning.assert_called_once()
 
-    @patch("orchestrator.llm_adapter.log")
+    @patch("pilot.llm_adapter.log")
     def test_partial_parse_with_mixed_valid_invalid(self, mock_log):
         """_parse_tool_calls parses valid calls and skips invalid ones."""
         msg = MagicMock()
@@ -450,7 +450,7 @@ class TestCallLLM:
 
     async def test_successful_call_returns_text(self):
         """call_llm returns (text, None, 'stop') on successful text response."""
-        from orchestrator.llm_adapter import call_llm
+        from pilot.llm_adapter import call_llm
 
         cfg = {
             "model": "test/model",
@@ -466,7 +466,7 @@ class TestCallLLM:
         mock_response.choices[0].message.tool_calls = None
         mock_response.usage = {"total_tokens": 10}
 
-        with patch("orchestrator.llm_adapter.litellm.acompletion", new_callable=AsyncMock) as mock_acompletion:
+        with patch("pilot.llm_adapter.litellm.acompletion", new_callable=AsyncMock) as mock_acompletion:
             mock_acompletion.return_value = mock_response
             text, tool_calls, finish_reason = await call_llm(messages, system, cfg)
 
@@ -476,7 +476,7 @@ class TestCallLLM:
 
     async def test_tool_call_response_returns_tool_calls(self):
         """call_llm returns (None, [ToolCall(...)], 'tool_calls') on tool response."""
-        from orchestrator.llm_adapter import call_llm
+        from pilot.llm_adapter import call_llm
 
         cfg = {
             "model": "test/model",
@@ -497,7 +497,7 @@ class TestCallLLM:
         mock_response.choices[0].message.tool_calls = [mock_tc]
         mock_response.usage = {"total_tokens": 10}
 
-        with patch("orchestrator.llm_adapter.litellm.acompletion", new_callable=AsyncMock) as mock_acompletion:
+        with patch("pilot.llm_adapter.litellm.acompletion", new_callable=AsyncMock) as mock_acompletion:
             mock_acompletion.return_value = mock_response
             text, tool_calls, finish_reason = await call_llm(messages, system, cfg, tools=["bash"])
 
@@ -511,7 +511,7 @@ class TestCallLLM:
         """call_llm raises AuthenticationError immediately without retry."""
         from litellm.exceptions import AuthenticationError
 
-        from orchestrator.llm_adapter import call_llm
+        from pilot.llm_adapter import call_llm
 
         cfg = {
             "model": "test/model",
@@ -527,7 +527,7 @@ class TestCallLLM:
         )
         auth_error.status_code = 401
 
-        with patch("orchestrator.llm_adapter.litellm.acompletion", new_callable=AsyncMock) as mock_acompletion:
+        with patch("pilot.llm_adapter.litellm.acompletion", new_callable=AsyncMock) as mock_acompletion:
             mock_acompletion.side_effect = auth_error
             with pytest.raises(AuthenticationError):
                 await call_llm(messages, system, cfg)
@@ -539,7 +539,7 @@ class TestCallLLM:
         """call_llm retries InternalServerError with code 500 then raises."""
         from litellm.exceptions import InternalServerError
 
-        from orchestrator.llm_adapter import call_llm
+        from pilot.llm_adapter import call_llm
 
         cfg = {
             "model": "test/model",
@@ -559,9 +559,9 @@ class TestCallLLM:
         )
         error_500.status_code = 500
 
-        with patch("orchestrator.llm_adapter.litellm.acompletion", new_callable=AsyncMock) as mock_acompletion:
+        with patch("pilot.llm_adapter.litellm.acompletion", new_callable=AsyncMock) as mock_acompletion:
             mock_acompletion.side_effect = error_500
-            with patch("orchestrator.llm_adapter.asyncio.sleep", new_callable=AsyncMock):
+            with patch("pilot.llm_adapter.asyncio.sleep", new_callable=AsyncMock):
                 with pytest.raises(InternalServerError):
                     await call_llm(messages, system, cfg)
 
@@ -572,7 +572,7 @@ class TestCallLLM:
         """call_llm raises InternalServerError with non-transient code immediately."""
         from litellm.exceptions import InternalServerError
 
-        from orchestrator.llm_adapter import call_llm
+        from pilot.llm_adapter import call_llm
 
         cfg = {
             "model": "test/model",
@@ -591,7 +591,7 @@ class TestCallLLM:
         )
         error_400.status_code = 400
 
-        with patch("orchestrator.llm_adapter.litellm.acompletion", new_callable=AsyncMock) as mock_acompletion:
+        with patch("pilot.llm_adapter.litellm.acompletion", new_callable=AsyncMock) as mock_acompletion:
             mock_acompletion.side_effect = error_400
             with pytest.raises(InternalServerError):
                 await call_llm(messages, system, cfg)
@@ -603,7 +603,7 @@ class TestCallLLM:
         """call_llm retries RateLimitError with exponential backoff."""
         from litellm.exceptions import RateLimitError
 
-        from orchestrator.llm_adapter import call_llm
+        from pilot.llm_adapter import call_llm
 
         cfg = {
             "model": "test/model",
@@ -628,10 +628,10 @@ class TestCallLLM:
         mock_response.choices[0].message.tool_calls = None
         mock_response.usage = {"total_tokens": 10}
 
-        with patch("orchestrator.llm_adapter.litellm.acompletion", new_callable=AsyncMock) as mock_acompletion:
+        with patch("pilot.llm_adapter.litellm.acompletion", new_callable=AsyncMock) as mock_acompletion:
             # Fail twice, then succeed
             mock_acompletion.side_effect = [rate_limit_error, rate_limit_error, mock_response]
-            with patch("orchestrator.llm_adapter.asyncio.sleep", new_callable=AsyncMock):
+            with patch("pilot.llm_adapter.asyncio.sleep", new_callable=AsyncMock):
                 text, tool_calls, finish_reason = await call_llm(messages, system, cfg)
 
         assert text == "Success"
@@ -643,7 +643,7 @@ class TestCallLLM:
         """call_llm uses Retry-After from RateLimitError if present."""
         from litellm.exceptions import RateLimitError
 
-        from orchestrator.llm_adapter import call_llm
+        from pilot.llm_adapter import call_llm
 
         cfg = {
             "model": "test/model",
@@ -671,9 +671,9 @@ class TestCallLLM:
         mock_llm_response.choices[0].message.tool_calls = None
         mock_llm_response.usage = {"total_tokens": 10}
 
-        with patch("orchestrator.llm_adapter.litellm.acompletion", new_callable=AsyncMock) as mock_acompletion:
+        with patch("pilot.llm_adapter.litellm.acompletion", new_callable=AsyncMock) as mock_acompletion:
             mock_acompletion.side_effect = [rate_limit_error, mock_llm_response]
-            with patch("orchestrator.llm_adapter.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+            with patch("pilot.llm_adapter.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
                 text, tool_calls, finish_reason = await call_llm(messages, system, cfg)
 
         assert text == "Success"
@@ -684,7 +684,7 @@ class TestCallLLM:
         """call_llm retries Timeout error then raises."""
         from litellm.exceptions import Timeout
 
-        from orchestrator.llm_adapter import call_llm
+        from pilot.llm_adapter import call_llm
 
         cfg = {
             "model": "test/model",
@@ -702,9 +702,9 @@ class TestCallLLM:
             llm_provider="openai",
         )
 
-        with patch("orchestrator.llm_adapter.litellm.acompletion", new_callable=AsyncMock) as mock_acompletion:
+        with patch("pilot.llm_adapter.litellm.acompletion", new_callable=AsyncMock) as mock_acompletion:
             mock_acompletion.side_effect = timeout_error
-            with patch("orchestrator.llm_adapter.asyncio.sleep", new_callable=AsyncMock):
+            with patch("pilot.llm_adapter.asyncio.sleep", new_callable=AsyncMock):
                 with pytest.raises(Timeout):
                     await call_llm(messages, system, cfg)
 
@@ -713,7 +713,7 @@ class TestCallLLM:
 
     async def test_api_key_resolution_in_call(self):
         """call_llm resolves API key and passes to litellm.acompletion."""
-        from orchestrator.llm_adapter import call_llm
+        from pilot.llm_adapter import call_llm
 
         cfg = {
             "model": "test/model",
@@ -731,7 +731,7 @@ class TestCallLLM:
         mock_response.usage = {"total_tokens": 10}
 
         with patch.dict(os.environ, {"TEST_API_KEY": "secret_key"}):
-            with patch("orchestrator.llm_adapter.litellm.acompletion", new_callable=AsyncMock) as mock_acompletion:
+            with patch("pilot.llm_adapter.litellm.acompletion", new_callable=AsyncMock) as mock_acompletion:
                 mock_acompletion.return_value = mock_response
                 await call_llm(messages, system, cfg)
 
@@ -741,7 +741,7 @@ class TestCallLLM:
 
     async def test_builds_tool_schemas_when_tools_provided(self):
         """call_llm builds tool schemas when tools parameter provided."""
-        from orchestrator.llm_adapter import call_llm
+        from pilot.llm_adapter import call_llm
 
         cfg = {
             "model": "test/model",
@@ -757,7 +757,7 @@ class TestCallLLM:
         mock_response.choices[0].message.tool_calls = None
         mock_response.usage = {"total_tokens": 10}
 
-        with patch("orchestrator.llm_adapter.litellm.acompletion", new_callable=AsyncMock) as mock_acompletion:
+        with patch("pilot.llm_adapter.litellm.acompletion", new_callable=AsyncMock) as mock_acompletion:
             mock_acompletion.return_value = mock_response
             await call_llm(messages, system, cfg, tools=["bash", "read_file"])
 
@@ -769,7 +769,7 @@ class TestCallLLM:
 
     async def test_no_tools_when_tools_none(self):
         """call_llm doesn't pass tools when tools parameter is None."""
-        from orchestrator.llm_adapter import call_llm
+        from pilot.llm_adapter import call_llm
 
         cfg = {
             "model": "test/model",
@@ -785,7 +785,7 @@ class TestCallLLM:
         mock_response.choices[0].message.tool_calls = None
         mock_response.usage = {"total_tokens": 10}
 
-        with patch("orchestrator.llm_adapter.litellm.acompletion", new_callable=AsyncMock) as mock_acompletion:
+        with patch("pilot.llm_adapter.litellm.acompletion", new_callable=AsyncMock) as mock_acompletion:
             mock_acompletion.return_value = mock_response
             await call_llm(messages, system, cfg, tools=None)
 
@@ -795,7 +795,7 @@ class TestCallLLM:
 
     async def test_default_config_values(self):
         """call_llm uses sensible defaults when config keys missing."""
-        from orchestrator.llm_adapter import call_llm
+        from pilot.llm_adapter import call_llm
 
         cfg = {}  # Minimal config
         system = "You are helpful."
@@ -808,7 +808,7 @@ class TestCallLLM:
         mock_response.choices[0].message.tool_calls = None
         mock_response.usage = {"total_tokens": 10}
 
-        with patch("orchestrator.llm_adapter.litellm.acompletion", new_callable=AsyncMock) as mock_acompletion:
+        with patch("pilot.llm_adapter.litellm.acompletion", new_callable=AsyncMock) as mock_acompletion:
             mock_acompletion.return_value = mock_response
             await call_llm(messages, system, cfg)
 
@@ -820,7 +820,7 @@ class TestCallLLM:
 
     async def test_finish_reason_none_defaults_to_stop(self):
         """call_llm defaults finish_reason to 'stop' when None."""
-        from orchestrator.llm_adapter import call_llm
+        from pilot.llm_adapter import call_llm
 
         cfg = {
             "model": "test/model",
@@ -836,7 +836,7 @@ class TestCallLLM:
         mock_response.choices[0].message.tool_calls = None
         mock_response.usage = {"total_tokens": 10}
 
-        with patch("orchestrator.llm_adapter.litellm.acompletion", new_callable=AsyncMock) as mock_acompletion:
+        with patch("pilot.llm_adapter.litellm.acompletion", new_callable=AsyncMock) as mock_acompletion:
             mock_acompletion.return_value = mock_response
             text, tool_calls, finish_reason = await call_llm(messages, system, cfg)
 
@@ -844,7 +844,7 @@ class TestCallLLM:
 
     async def test_empty_content_treated_as_none(self):
         """call_llm treats empty content string as None."""
-        from orchestrator.llm_adapter import call_llm
+        from pilot.llm_adapter import call_llm
 
         cfg = {
             "model": "test/model",
@@ -860,7 +860,7 @@ class TestCallLLM:
         mock_response.choices[0].message.tool_calls = None
         mock_response.usage = {"total_tokens": 10}
 
-        with patch("orchestrator.llm_adapter.litellm.acompletion", new_callable=AsyncMock) as mock_acompletion:
+        with patch("pilot.llm_adapter.litellm.acompletion", new_callable=AsyncMock) as mock_acompletion:
             mock_acompletion.return_value = mock_response
             text, tool_calls, finish_reason = await call_llm(messages, system, cfg)
 

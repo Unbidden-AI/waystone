@@ -1,4 +1,4 @@
-"""Integration tests for the LemonSqueezy webhook endpoint."""
+"""Integration tests for the Stripe webhook endpoint."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import json
 import sqlite3
+import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -22,35 +23,44 @@ from waystone.billing import _hash_key, init_admin_db, validate_key  # noqa: E40
 # Helpers
 # ---------------------------------------------------------------------------
 
-WEBHOOK_SECRET = "test_webhook_secret"
-LS_PRO_VARIANT = "var_pro_111"
-LS_TEAM_VARIANT = "var_team_222"
+WEBHOOK_SECRET = "whsec_test_secret"
+STRIPE_PRO_PRICE = "price_pro_111"
+STRIPE_TEAM_PRICE = "price_team_222"
 
 
-def _sign(body: bytes, secret: str = WEBHOOK_SECRET) -> str:
-    return hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+def _sign(body: bytes, secret: str = WEBHOOK_SECRET, timestamp: int | None = None) -> str:
+    """Return a valid Stripe-Signature header value for the given body."""
+    t = timestamp or int(time.time())
+    signed_payload = f"{t}".encode() + b"." + body
+    sig = hmac.new(secret.encode(), signed_payload, hashlib.sha256).hexdigest()
+    return f"t={t},v1={sig}"
 
 
-def _subscription_created_payload(email: str, variant_id: str = LS_PRO_VARIANT) -> dict:
+def _checkout_completed_payload(
+    email: str,
+    customer_id: str = "cus_test123",
+    price_id: str = STRIPE_PRO_PRICE,
+) -> dict:
     return {
-        "meta": {"event_name": "subscription_created"},
+        "type": "checkout.session.completed",
         "data": {
-            "attributes": {
-                "user_email": email,
-                "variant_id": variant_id,
-                "status": "active",
+            "object": {
+                "customer_email": email,
+                "customer": customer_id,
+                "mode": "subscription",
+                "metadata": {"price_id": price_id},
             }
         },
     }
 
 
-def _subscription_cancelled_payload(email: str) -> dict:
+def _subscription_deleted_payload(customer_id: str = "cus_test123") -> dict:
     return {
-        "meta": {"event_name": "subscription_cancelled"},
+        "type": "customer.subscription.deleted",
         "data": {
-            "attributes": {
-                "user_email": email,
-                "status": "cancelled",
+            "object": {
+                "customer": customer_id,
+                "status": "canceled",
             }
         },
     }
@@ -62,9 +72,9 @@ def _subscription_cancelled_payload(email: str) -> dict:
 
 @pytest.fixture(autouse=True)
 def env_vars(monkeypatch):
-    monkeypatch.setenv("LS_WEBHOOK_SECRET", WEBHOOK_SECRET)
-    monkeypatch.setenv("LS_PRO_VARIANT_ID", LS_PRO_VARIANT)
-    monkeypatch.setenv("LS_TEAM_VARIANT_ID", LS_TEAM_VARIANT)
+    monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", WEBHOOK_SECRET)
+    monkeypatch.setenv("STRIPE_PRO_PRICE_ID", STRIPE_PRO_PRICE)
+    monkeypatch.setenv("STRIPE_TEAM_PRICE_ID", STRIPE_TEAM_PRICE)
     monkeypatch.delenv("RESEND_API_KEY", raising=False)
 
 
@@ -73,7 +83,6 @@ def admin_db_path(tmp_path, monkeypatch):
     """File-based admin DB; sets CB_ADMIN_DB env var so open_admin_db() finds it."""
     db_path = tmp_path / "admin.db"
     monkeypatch.setenv("CB_ADMIN_DB", str(db_path))
-    # Pre-initialise the schema
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
     init_admin_db(conn)
@@ -82,7 +91,6 @@ def admin_db_path(tmp_path, monkeypatch):
 
 
 def _open_db(db_path: Path):
-    """Open a read connection to the file DB for assertions."""
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
     return conn
@@ -110,62 +118,61 @@ def client_with_db(tmp_path, admin_db_path):
 class TestWebhookSignature:
     def test_invalid_signature_returns_400(self, client_with_db):
         c, _ = client_with_db
-        body = json.dumps(_subscription_created_payload("user@example.com")).encode()
+        body = json.dumps(_checkout_completed_payload("user@example.com")).encode()
         r = c.post(
-            "/webhooks/lemonsqueezy",
+            "/webhooks/stripe",
             content=body,
-            headers={"Content-Type": "application/json", "X-Signature": "badsig"},
+            headers={"Content-Type": "application/json", "Stripe-Signature": "t=1,v1=badhex"},
         )
         assert r.status_code == 400
         assert "signature" in r.json()["detail"].lower()
 
     def test_missing_signature_returns_400(self, client_with_db):
         c, _ = client_with_db
-        body = json.dumps(_subscription_created_payload("user@example.com")).encode()
+        body = json.dumps(_checkout_completed_payload("user@example.com")).encode()
         r = c.post(
-            "/webhooks/lemonsqueezy",
+            "/webhooks/stripe",
             content=body,
             headers={"Content-Type": "application/json"},
         )
         assert r.status_code == 400
 
-    def test_no_secret_configured_returns_400(self, client_with_db, monkeypatch):
-        monkeypatch.delenv("LS_WEBHOOK_SECRET")
+    def test_no_secret_configured_returns_503(self, client_with_db, monkeypatch):
+        monkeypatch.delenv("STRIPE_WEBHOOK_SECRET")
         c, _ = client_with_db
-        body = json.dumps(_subscription_created_payload("user@example.com")).encode()
-        # Even a "correctly" signed request fails with no secret configured
+        body = json.dumps(_checkout_completed_payload("user@example.com")).encode()
         sig = _sign(body, "anything")
         r = c.post(
-            "/webhooks/lemonsqueezy",
+            "/webhooks/stripe",
             content=body,
-            headers={"Content-Type": "application/json", "X-Signature": sig},
+            headers={"Content-Type": "application/json", "Stripe-Signature": sig},
         )
-        assert r.status_code == 400
+        assert r.status_code == 503
 
 
 # ---------------------------------------------------------------------------
-# subscription_created
+# checkout.session.completed
 # ---------------------------------------------------------------------------
 
-class TestSubscriptionCreated:
+class TestCheckoutSessionCompleted:
     def _post(self, client, payload: dict):
         body = json.dumps(payload).encode()
         sig = _sign(body)
         return client.post(
-            "/webhooks/lemonsqueezy",
+            "/webhooks/stripe",
             content=body,
-            headers={"Content-Type": "application/json", "X-Signature": sig},
+            headers={"Content-Type": "application/json", "Stripe-Signature": sig},
         )
 
     def test_returns_200_ok(self, client_with_db):
         c, _ = client_with_db
-        r = self._post(c, _subscription_created_payload("new@example.com"))
+        r = self._post(c, _checkout_completed_payload("new@example.com"))
         assert r.status_code == 200
         assert r.json()["ok"] is True
 
     def test_creates_key_in_db(self, client_with_db):
         c, db_path = client_with_db
-        self._post(c, _subscription_created_payload("new@example.com", LS_PRO_VARIANT))
+        self._post(c, _checkout_completed_payload("new@example.com", price_id=STRIPE_PRO_PRICE))
         db = _open_db(db_path)
         row = db.execute("SELECT * FROM api_keys WHERE email = ?", ("new@example.com",)).fetchone()
         db.close()
@@ -173,72 +180,99 @@ class TestSubscriptionCreated:
         assert row["tier"] == "pro"
         assert row["is_revoked"] == 0
 
-    def test_team_variant_creates_team_key(self, client_with_db):
+    def test_team_price_creates_team_key(self, client_with_db):
         c, db_path = client_with_db
-        self._post(c, _subscription_created_payload("team@example.com", LS_TEAM_VARIANT))
+        self._post(c, _checkout_completed_payload("team@example.com", price_id=STRIPE_TEAM_PRICE))
         db = _open_db(db_path)
         row = db.execute("SELECT tier FROM api_keys WHERE email = ?", ("team@example.com",)).fetchone()
         db.close()
         assert row["tier"] == "team"
 
+    def test_stores_stripe_customer_id(self, client_with_db):
+        c, db_path = client_with_db
+        self._post(c, _checkout_completed_payload("cust@example.com", customer_id="cus_abc123"))
+        db = _open_db(db_path)
+        row = db.execute("SELECT stripe_customer_id FROM api_keys WHERE email = ?", ("cust@example.com",)).fetchone()
+        db.close()
+        assert row["stripe_customer_id"] == "cus_abc123"
+
     def test_sends_email_with_key(self, client_with_db, capsys):
         c, _ = client_with_db
-        self._post(c, _subscription_created_payload("emailtest@example.com"))
-        # Dev mode (no RESEND_API_KEY) prints key to stdout
+        self._post(c, _checkout_completed_payload("emailtest@example.com"))
         out = capsys.readouterr().out
         assert "emailtest@example.com" in out
         assert "waystone_" in out  # key prefix in dev mode stdout
 
     def test_response_includes_tier(self, client_with_db):
         c, _ = client_with_db
-        r = self._post(c, _subscription_created_payload("x@example.com", LS_TEAM_VARIANT))
+        r = self._post(c, _checkout_completed_payload("x@example.com", price_id=STRIPE_TEAM_PRICE))
         assert r.json()["tier"] == "team"
 
     def test_missing_email_returns_422(self, client_with_db):
         c, _ = client_with_db
-        payload = {"meta": {"event_name": "subscription_created"}, "data": {"attributes": {}}}
+        payload = {
+            "type": "checkout.session.completed",
+            "data": {"object": {"customer": "cus_xxx", "metadata": {}}},
+        }
         body = json.dumps(payload).encode()
         sig = _sign(body)
         r = c.post(
-            "/webhooks/lemonsqueezy",
+            "/webhooks/stripe",
             content=body,
-            headers={"Content-Type": "application/json", "X-Signature": sig},
+            headers={"Content-Type": "application/json", "Stripe-Signature": sig},
         )
         assert r.status_code == 422
 
+    def test_no_price_id_defaults_to_pro(self, client_with_db):
+        c, db_path = client_with_db
+        payload = {
+            "type": "checkout.session.completed",
+            "data": {"object": {"customer_email": "noprice@example.com", "customer": "cus_yyy", "metadata": {}}},
+        }
+        body = json.dumps(payload).encode()
+        sig = _sign(body)
+        c.post(
+            "/webhooks/stripe",
+            content=body,
+            headers={"Content-Type": "application/json", "Stripe-Signature": sig},
+        )
+        db = _open_db(db_path)
+        row = db.execute("SELECT tier FROM api_keys WHERE email = ?", ("noprice@example.com",)).fetchone()
+        db.close()
+        assert row["tier"] == "pro"
+
 
 # ---------------------------------------------------------------------------
-# subscription_cancelled
+# customer.subscription.deleted
 # ---------------------------------------------------------------------------
 
-class TestSubscriptionCancelled:
+class TestSubscriptionDeleted:
     def _post(self, client, payload: dict):
         body = json.dumps(payload).encode()
         sig = _sign(body)
         return client.post(
-            "/webhooks/lemonsqueezy",
+            "/webhooks/stripe",
             content=body,
-            headers={"Content-Type": "application/json", "X-Signature": sig},
+            headers={"Content-Type": "application/json", "Stripe-Signature": sig},
         )
 
     def test_returns_200_ok(self, client_with_db):
         c, db_path = client_with_db
-        # Pre-create a key directly in the file DB
         from waystone.billing import create_key
         db = _open_db(db_path)
-        create_key(db, email="sub@example.com", tier="pro")
+        create_key(db, email="sub@example.com", tier="pro", stripe_customer_id="cus_del123")
         db.close()
-        r = self._post(c, _subscription_cancelled_payload("sub@example.com"))
+        r = self._post(c, _subscription_deleted_payload("cus_del123"))
         assert r.status_code == 200
         assert r.json()["ok"] is True
 
-    def test_revokes_key(self, client_with_db):
+    def test_revokes_key_by_customer_id(self, client_with_db):
         c, db_path = client_with_db
         from waystone.billing import create_key
         db = _open_db(db_path)
-        raw = create_key(db, email="cancel@example.com", tier="pro")
+        raw = create_key(db, email="cancel@example.com", tier="pro", stripe_customer_id="cus_cancel")
         db.close()
-        self._post(c, _subscription_cancelled_payload("cancel@example.com"))
+        self._post(c, _subscription_deleted_payload("cus_cancel"))
         db = _open_db(db_path)
         assert validate_key(db, raw) is None
         db.close()
@@ -247,15 +281,15 @@ class TestSubscriptionCancelled:
         c, db_path = client_with_db
         from waystone.billing import create_key
         db = _open_db(db_path)
-        create_key(db, email="multi@example.com", tier="pro")
-        create_key(db, email="multi@example.com", tier="pro")
+        create_key(db, email="multi1@example.com", tier="pro", stripe_customer_id="cus_multi")
+        create_key(db, email="multi2@example.com", tier="pro", stripe_customer_id="cus_multi")
         db.close()
-        r = self._post(c, _subscription_cancelled_payload("multi@example.com"))
+        r = self._post(c, _subscription_deleted_payload("cus_multi"))
         assert r.json()["revoked"] == 2
 
     def test_no_existing_key_returns_zero(self, client_with_db):
         c, _ = client_with_db
-        r = self._post(c, _subscription_cancelled_payload("ghost@example.com"))
+        r = self._post(c, _subscription_deleted_payload("cus_ghost"))
         assert r.status_code == 200
         assert r.json()["revoked"] == 0
 
@@ -267,13 +301,13 @@ class TestSubscriptionCancelled:
 class TestUnknownEvents:
     def test_unknown_event_ignored(self, client_with_db):
         c, _ = client_with_db
-        payload = {"meta": {"event_name": "order_refunded"}, "data": {"attributes": {}}}
+        payload = {"type": "payment_intent.succeeded", "data": {"object": {}}}
         body = json.dumps(payload).encode()
         sig = _sign(body)
         r = c.post(
-            "/webhooks/lemonsqueezy",
+            "/webhooks/stripe",
             content=body,
-            headers={"Content-Type": "application/json", "X-Signature": sig},
+            headers={"Content-Type": "application/json", "Stripe-Signature": sig},
         )
         assert r.status_code == 200
         assert r.json()["ignored"] is True

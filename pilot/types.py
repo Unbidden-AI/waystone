@@ -1,4 +1,4 @@
-"""Shared data classes for the Waystone orchestrator."""
+"""Shared data classes for the Waystone pilot."""
 
 from __future__ import annotations
 

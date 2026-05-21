@@ -1,9 +1,9 @@
-"""Tests for orchestrator.system_prompt_builder — system prompt assembly."""
+"""Tests for pilot.system_prompt_builder — system prompt assembly."""
 
 import pytest
 
-from orchestrator.llm_adapter import estimate_tokens
-from orchestrator.system_prompt_builder import (
+from pilot.llm_adapter import estimate_tokens
+from pilot.system_prompt_builder import (
     SystemPromptBuilder,
     _CONTEXT_FOOTER,
     _CONTEXT_HEADER,
@@ -670,7 +670,7 @@ class TestStaticFiles:
             "static": "Fallback",
             "context_token_limit": 2000,
         }
-        with caplog.at_level(logging.WARNING, logger="orchestrator.system_prompt_builder"):
+        with caplog.at_level(logging.WARNING, logger="pilot.system_prompt_builder"):
             builder = SystemPromptBuilder(cfg)
 
         assert builder._static == "Fallback"

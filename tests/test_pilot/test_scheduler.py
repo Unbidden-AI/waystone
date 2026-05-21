@@ -1,4 +1,4 @@
-"""Tests for orchestrator/scheduler.py."""
+"""Tests for pilot/scheduler.py."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from orchestrator.scheduler import (
+from pilot.scheduler import (
     OutputConfig,
     ErrorNotificationConfig,
     ScheduleConfig,
@@ -32,7 +32,7 @@ def mock_store():
 def mock_config():
     """Return a minimal config dict."""
     return {
-        "orchestrator": {
+        "pilot": {
             "context": {},
             "system_prompt": {},
             "llm": {},
@@ -231,7 +231,7 @@ def test_schedule_config_to_dict():
 
 def test_scheduler_init_empty_config():
     """Test Scheduler initialization with empty config."""
-    cfg = {"orchestrator": {}}
+    cfg = {"pilot": {}}
     scheduler = Scheduler(cfg)
 
     assert len(scheduler.list_schedules()) == 0
@@ -240,7 +240,7 @@ def test_scheduler_init_empty_config():
 def test_scheduler_init_with_schedules():
     """Test Scheduler initialization with schedules in config."""
     cfg = {
-        "orchestrator": {
+        "pilot": {
             "schedules": [
                 {
                     "name": "daily",
@@ -263,7 +263,7 @@ def test_scheduler_init_with_schedules():
 def test_scheduler_list_schedules_enabled_only():
     """Test Scheduler.list_schedules with enabled_only=True."""
     cfg = {
-        "orchestrator": {
+        "pilot": {
             "schedules": [
                 {
                     "name": "enabled",
@@ -304,7 +304,7 @@ async def test_scheduler_run_schedule_not_found(mock_store, mock_config):
 async def test_scheduler_run_schedule_disabled(mock_store, sample_schedule_config):
     """Test Scheduler.run_schedule when schedule is disabled."""
     sample_schedule_config.enabled = False
-    cfg = {"orchestrator": {"schedules": [sample_schedule_config.to_dict()]}}
+    cfg = {"pilot": {"schedules": [sample_schedule_config.to_dict()]}}
     scheduler = Scheduler(cfg)
 
     result = await scheduler.run_schedule("daily_summary", mock_store)
@@ -314,10 +314,10 @@ async def test_scheduler_run_schedule_disabled(mock_store, sample_schedule_confi
 @pytest.mark.asyncio
 async def test_scheduler_run_schedule_success(mock_store, sample_schedule_config):
     """Test Scheduler.run_schedule executes successfully."""
-    cfg = {"orchestrator": {"schedules": [sample_schedule_config.to_dict()]}}
+    cfg = {"pilot": {"schedules": [sample_schedule_config.to_dict()]}}
     scheduler = Scheduler(cfg)
 
-    with patch("orchestrator.scheduler.Conversation") as mock_conv_cls:
+    with patch("pilot.scheduler.Conversation") as mock_conv_cls:
         mock_conv = AsyncMock()
         mock_conv.chat = AsyncMock(return_value="Task completed.")
         mock_conv_cls.return_value = mock_conv
@@ -331,10 +331,10 @@ async def test_scheduler_run_schedule_success(mock_store, sample_schedule_config
 @pytest.mark.asyncio
 async def test_scheduler_run_schedule_template_expansion(mock_store, sample_schedule_config):
     """Test Scheduler.run_schedule expands prompt template variables."""
-    cfg = {"orchestrator": {"schedules": [sample_schedule_config.to_dict()]}}
+    cfg = {"pilot": {"schedules": [sample_schedule_config.to_dict()]}}
     scheduler = Scheduler(cfg)
 
-    with patch("orchestrator.scheduler.Conversation") as mock_conv_cls:
+    with patch("pilot.scheduler.Conversation") as mock_conv_cls:
         mock_conv = AsyncMock()
         mock_conv.chat = AsyncMock(return_value="Done.")
         mock_conv_cls.return_value = mock_conv
@@ -350,10 +350,10 @@ async def test_scheduler_run_schedule_template_expansion(mock_store, sample_sche
 @pytest.mark.asyncio
 async def test_scheduler_run_schedule_error_handling(mock_store, sample_schedule_config):
     """Test Scheduler.run_schedule handles errors gracefully."""
-    cfg = {"orchestrator": {"schedules": [sample_schedule_config.to_dict()]}}
+    cfg = {"pilot": {"schedules": [sample_schedule_config.to_dict()]}}
     scheduler = Scheduler(cfg)
 
-    with patch("orchestrator.scheduler.Conversation") as mock_conv_cls:
+    with patch("pilot.scheduler.Conversation") as mock_conv_cls:
         mock_conv = AsyncMock()
         mock_conv.chat = AsyncMock(side_effect=Exception("Chat failed"))
         mock_conv_cls.return_value = mock_conv
@@ -367,7 +367,7 @@ async def test_scheduler_run_schedule_error_handling(mock_store, sample_schedule
 @pytest.mark.asyncio
 async def test_scheduler_route_output_stdout(mock_store, sample_schedule_config):
     """Test Scheduler._route_output with stdout destination."""
-    cfg = {"orchestrator": {"schedules": [sample_schedule_config.to_dict()]}}
+    cfg = {"pilot": {"schedules": [sample_schedule_config.to_dict()]}}
     scheduler = Scheduler(cfg)
 
     with patch("builtins.print") as mock_print:
@@ -392,7 +392,7 @@ async def test_scheduler_route_output_file(mock_store, tmp_path):
         output=output_cfg,
     )
 
-    cfg = {"orchestrator": {"schedules": [sched_cfg.to_dict()]}}
+    cfg = {"pilot": {"schedules": [sched_cfg.to_dict()]}}
     scheduler = Scheduler(cfg)
 
     await scheduler._route_output(sched_cfg, "Test content", "run_123")
@@ -454,7 +454,7 @@ def test_should_run_multiple_times_per_minute():
 @pytest.mark.asyncio
 async def test_run_daemon_no_schedules(mock_store, mock_config):
     """Test run_daemon logs warning when no enabled schedules exist."""
-    with patch("orchestrator.scheduler.log") as mock_log:
+    with patch("pilot.scheduler.log") as mock_log:
         import asyncio
 
         # Set a short timeout to prevent infinite loop
@@ -468,7 +468,7 @@ async def test_run_daemon_no_schedules(mock_store, mock_config):
                 pass
 
         async def _run_daemon_for_test(store, cfg):
-            from orchestrator.scheduler import run_daemon
+            from pilot.scheduler import run_daemon
             await run_daemon(cfg, store)
 
         await run_with_timeout()
@@ -494,14 +494,14 @@ async def test_scheduler_full_workflow(tmp_path, mock_store):
         },
     }
 
-    cfg = {"orchestrator": {"schedules": [schedule_dict]}}
+    cfg = {"pilot": {"schedules": [schedule_dict]}}
     scheduler = Scheduler(cfg)
 
     # Verify schedule is registered
     schedules = scheduler.list_schedules()
     assert len(schedules) == 1
 
-    with patch("orchestrator.scheduler.Conversation") as mock_conv_cls:
+    with patch("pilot.scheduler.Conversation") as mock_conv_cls:
         mock_conv = AsyncMock()
         mock_conv.chat = AsyncMock(return_value="Integration test result")
         mock_conv_cls.return_value = mock_conv

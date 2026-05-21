@@ -1,4 +1,4 @@
-"""Tests for orchestrator.tool_executor — sandbox enforcement and tool execution."""
+"""Tests for pilot.tool_executor — sandbox enforcement and tool execution."""
 
 from __future__ import annotations
 
@@ -6,12 +6,12 @@ import asyncio
 import pytest
 from pathlib import Path
 
-from orchestrator.tool_executor import (
+from pilot.tool_executor import (
     _resolve_and_check,
     execute_tool,
     execute_tools,
 )
-from orchestrator.types import ToolCall, ToolResult
+from pilot.types import ToolCall, ToolResult
 
 
 # =============================================================================

@@ -188,7 +188,7 @@ def main(
     print_prompt: str | None,
     fmt: str,
 ) -> None:
-    """Start an orchestrator session for PROJECT.
+    """Start a pilot session for PROJECT.
 
     PROJECT is the name of a Waystone project (same namespace used by
     ``waystone init`` / ``waystone extract``).  The pilot loads the

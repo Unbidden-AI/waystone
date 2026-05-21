@@ -196,7 +196,7 @@ def admin_db_path(tmp_path, monkeypatch):
     db_path = tmp_path / "admin.db"
     monkeypatch.setenv("CB_ADMIN_DB", str(db_path))
     monkeypatch.setenv("CB_USE_ADMIN_DB", "1")
-    monkeypatch.setenv("LS_WEBHOOK_SECRET", "test_secret")
+    monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "test_secret")
     # Pre-initialize schema
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
@@ -379,13 +379,13 @@ class TestRateLimitIntegration:
         assert r.status_code == 200
 
     def test_rate_limit_only_enforced_with_webhook_secret(self, client_with_db, monkeypatch):
-        """Rate limiting is only enforced if LS_WEBHOOK_SECRET is set."""
+        """Rate limiting is only enforced if STRIPE_WEBHOOK_SECRET is set."""
         # This behavior is already tested implicitly (our fixture sets the secret)
         # Verify the condition: if secret is not set, rate limiting is skipped
         c, db_path = client_with_db
 
         # Remove the webhook secret
-        monkeypatch.delenv("LS_WEBHOOK_SECRET")
+        monkeypatch.delenv("STRIPE_WEBHOOK_SECRET")
 
         # We need to reload the app to pick up the env var change
         # For now, this test documents the design; actual behavior verified via fixture

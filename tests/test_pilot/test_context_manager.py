@@ -1,4 +1,4 @@
-"""Tests for orchestrator.context_manager — history management and compaction."""
+"""Tests for pilot.context_manager — history management and compaction."""
 
 import asyncio
 import time
@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import pytest
 
 from waystone.store import GraphStore
-from orchestrator.context_manager import ContextManager
-from orchestrator.types import CompactionResult, CompactionTrigger, Message
+from pilot.context_manager import ContextManager
+from pilot.types import CompactionResult, CompactionTrigger, Message
 
 
 # ==============================================================================
@@ -166,7 +166,7 @@ class TestShouldCompact:
         """should_compact returns IDLE_TIME when idle > threshold."""
         msg = Message(role="user", content="test", token_estimate=10)
         # Patch before adding message to control all calls to time.monotonic
-        with patch("orchestrator.context_manager.time.monotonic") as mock_time:
+        with patch("pilot.context_manager.time.monotonic") as mock_time:
             # Set up time values: first call (add_message) = 100.0, second call (should_compact) = 800.0
             mock_time.side_effect = [100.0, 800.0]
             context_manager.add_message(msg)
@@ -179,7 +179,7 @@ class TestShouldCompact:
         msg = Message(role="user", content="x", token_estimate=6400)
         context_manager.add_message(msg)
         # Also advance time to trigger idle
-        with patch("orchestrator.context_manager.time.monotonic") as mock_time:
+        with patch("pilot.context_manager.time.monotonic") as mock_time:
             mock_time.side_effect = [100.0, 800.0]
             trigger = context_manager.should_compact()
             # TOKEN_BUDGET is checked first
@@ -188,7 +188,7 @@ class TestShouldCompact:
     def test_should_compact_idle_triggered_last(self, context_manager):
         """IDLE_TIME is checked last after token and depth."""
         msg = Message(role="user", content="test", token_estimate=10)
-        with patch("orchestrator.context_manager.time.monotonic") as mock_time:
+        with patch("pilot.context_manager.time.monotonic") as mock_time:
             # Set up time values: first call (add_message) = 100.0, second call (should_compact) = 800.0
             mock_time.side_effect = [100.0, 800.0]
             context_manager.add_message(msg)
@@ -212,7 +212,7 @@ class TestCompact:
             context_manager.add_message(msg)
         assert len(context_manager.get_history()) == 15
 
-        with patch("orchestrator.context_manager.extract", new_callable=AsyncMock) as mock_extract:
+        with patch("pilot.context_manager.extract", new_callable=AsyncMock) as mock_extract:
             mock_extract.return_value = {"nodes": [], "edges": []}
             result = await context_manager.compact(CompactionTrigger.TOKEN_BUDGET)
             # Default compaction_batch=10
@@ -228,7 +228,7 @@ class TestCompact:
         initial_tokens = context_manager.total_tokens()
         assert initial_tokens == 150
 
-        with patch("orchestrator.context_manager.extract", new_callable=AsyncMock) as mock_extract:
+        with patch("pilot.context_manager.extract", new_callable=AsyncMock) as mock_extract:
             mock_extract.return_value = {"nodes": [], "edges": []}
             await context_manager.compact(CompactionTrigger.TOKEN_BUDGET)
             # 10 messages removed (10 * 10 = 100 tokens freed)
@@ -241,7 +241,7 @@ class TestCompact:
             msg = Message(role="user" if i % 2 == 0 else "assistant", content=f"msg{i}", token_estimate=10)
             context_manager.add_message(msg)
 
-        with patch("orchestrator.context_manager.extract", new_callable=AsyncMock) as mock_extract:
+        with patch("pilot.context_manager.extract", new_callable=AsyncMock) as mock_extract:
             mock_extract.return_value = {"nodes": [], "edges": []}
             result = await context_manager.compact(CompactionTrigger.TOKEN_BUDGET)
             assert result.tokens_freed == 100
@@ -257,7 +257,7 @@ class TestCompact:
         for msg in messages:
             context_manager.add_message(msg)
 
-        with patch("orchestrator.context_manager.extract", new_callable=AsyncMock) as mock_extract:
+        with patch("pilot.context_manager.extract", new_callable=AsyncMock) as mock_extract:
             mock_extract.return_value = {"nodes": [], "edges": []}
             await context_manager.compact(CompactionTrigger.TOKEN_BUDGET)
             # extract should be called with transcript excluding system message
@@ -284,7 +284,7 @@ class TestCompact:
             "edges": [{"from_id": "n1", "to_id": "n2", "relation": "relates_to"}],
         }
 
-        with patch("orchestrator.context_manager.extract", new_callable=AsyncMock) as mock_extract:
+        with patch("pilot.context_manager.extract", new_callable=AsyncMock) as mock_extract:
             mock_extract.return_value = extraction_data
             with patch.object(context_manager._store, "merge_extraction") as mock_merge:
                 await context_manager.compact(CompactionTrigger.TOKEN_BUDGET)
@@ -310,7 +310,7 @@ class TestCompact:
             "edges": [],
         }
 
-        with patch("orchestrator.context_manager.extract", new_callable=AsyncMock) as mock_extract:
+        with patch("pilot.context_manager.extract", new_callable=AsyncMock) as mock_extract:
             mock_extract.return_value = extraction_data
             result = await context_manager.compact(CompactionTrigger.TOKEN_BUDGET)
             assert result.nodes_extracted == 2
@@ -323,7 +323,7 @@ class TestCompact:
             context_manager.add_message(msg)
         initial_history_len = len(context_manager.get_history())
 
-        with patch("orchestrator.context_manager.extract", new_callable=AsyncMock) as mock_extract:
+        with patch("pilot.context_manager.extract", new_callable=AsyncMock) as mock_extract:
             mock_extract.side_effect = Exception("Extract failed")
             result = await context_manager.compact(CompactionTrigger.TOKEN_BUDGET)
             # History should still be pruned
@@ -342,7 +342,7 @@ class TestCompact:
         for msg in messages:
             context_manager.add_message(msg)
 
-        with patch("orchestrator.context_manager.extract", new_callable=AsyncMock) as mock_extract:
+        with patch("pilot.context_manager.extract", new_callable=AsyncMock) as mock_extract:
             mock_extract.return_value = {"nodes": [], "edges": []}
             result = await context_manager.compact(CompactionTrigger.TOKEN_BUDGET)
             # extract should not be called for empty transcript
@@ -357,7 +357,7 @@ class TestCompact:
             msg = Message(role="user", content=f"msg{i}", token_estimate=10)
             context_manager.add_message(msg)
 
-        with patch("orchestrator.context_manager.extract", new_callable=AsyncMock) as mock_extract:
+        with patch("pilot.context_manager.extract", new_callable=AsyncMock) as mock_extract:
             mock_extract.return_value = {"nodes": [], "edges": []}
             result = await context_manager.compact(CompactionTrigger.TOKEN_BUDGET)
             # Only 5 messages exist, compaction_batch=10, so remove min(10, 5)=5
@@ -370,7 +370,7 @@ class TestCompact:
         msg = Message(role="user", content="test", token_estimate=10)
         context_manager.add_message(msg)
 
-        with patch("orchestrator.context_manager.extract", new_callable=AsyncMock) as mock_extract:
+        with patch("pilot.context_manager.extract", new_callable=AsyncMock) as mock_extract:
             mock_extract.return_value = {"nodes": [], "edges": []}
             result = await context_manager.compact(CompactionTrigger.IDLE_TIME)
             assert result.trigger == CompactionTrigger.IDLE_TIME
@@ -399,7 +399,7 @@ class TestCompactIfNeeded:
             msg = Message(role="user" if i % 2 == 0 else "assistant", content=f"msg{i}", token_estimate=10)
             context_manager.add_message(msg)
 
-        with patch("orchestrator.context_manager.extract", new_callable=AsyncMock) as mock_extract:
+        with patch("pilot.context_manager.extract", new_callable=AsyncMock) as mock_extract:
             mock_extract.return_value = {"nodes": [], "edges": []}
             result = await context_manager.compact_if_needed()
             assert result is not None
@@ -427,7 +427,7 @@ class TestRetrieveContext:
 
     def test_retrieve_context_calls_retrieve_with_stats(self, context_manager):
         """retrieve_context calls retrieve_with_stats with correct args."""
-        with patch("orchestrator.context_manager.retrieve_with_stats") as mock_retrieve:
+        with patch("pilot.context_manager.retrieve_with_stats") as mock_retrieve:
             mock_retrieve.return_value = MagicMock(
                 markdown="# Context\nSome facts",
                 nodes_before_strategies=10,
@@ -445,7 +445,7 @@ class TestRetrieveContext:
 
     def test_retrieve_context_passes_context_token_limit(self, context_manager):
         """retrieve_context passes context_token_limit as token_budget in strategies."""
-        with patch("orchestrator.context_manager.retrieve_with_stats") as mock_retrieve:
+        with patch("pilot.context_manager.retrieve_with_stats") as mock_retrieve:
             mock_retrieve.return_value = MagicMock(markdown="", nodes_before_strategies=0, nodes_after_strategies=0, tokens_estimated=0)
             context_manager.retrieve_context("test")
             call_kwargs = mock_retrieve.call_args[1]
@@ -454,7 +454,7 @@ class TestRetrieveContext:
     def test_retrieve_context_returns_markdown_on_success(self, context_manager):
         """retrieve_context returns the markdown result."""
         expected_md = "# Relevant Context\n\n- Fact 1\n- Fact 2"
-        with patch("orchestrator.context_manager.retrieve_with_stats") as mock_retrieve:
+        with patch("pilot.context_manager.retrieve_with_stats") as mock_retrieve:
             mock_retrieve.return_value = MagicMock(
                 markdown=expected_md,
                 nodes_before_strategies=10,
@@ -466,14 +466,14 @@ class TestRetrieveContext:
 
     def test_retrieve_context_returns_empty_string_on_exception(self, context_manager):
         """retrieve_context returns empty string if retrieve_with_stats raises."""
-        with patch("orchestrator.context_manager.retrieve_with_stats") as mock_retrieve:
+        with patch("pilot.context_manager.retrieve_with_stats") as mock_retrieve:
             mock_retrieve.side_effect = Exception("Retrieval failed")
             result = context_manager.retrieve_context("test")
             assert result == ""
 
     def test_retrieve_context_preserves_retrieve_strategies_config(self, context_manager):
         """retrieve_context merges config strategies with token_budget."""
-        with patch("orchestrator.context_manager.retrieve_with_stats") as mock_retrieve:
+        with patch("pilot.context_manager.retrieve_with_stats") as mock_retrieve:
             mock_retrieve.return_value = MagicMock(markdown="", nodes_before_strategies=0, nodes_after_strategies=0, tokens_estimated=0)
             context_manager.retrieve_context("test")
             call_kwargs = mock_retrieve.call_args[1]
@@ -628,7 +628,7 @@ class TestIntegration:
             "edges": [],
         }
 
-        with patch("orchestrator.context_manager.extract", new_callable=AsyncMock) as mock_extract:
+        with patch("pilot.context_manager.extract", new_callable=AsyncMock) as mock_extract:
             mock_extract.return_value = extraction_data
             result = await context_manager.compact(CompactionTrigger.TOKEN_BUDGET)
 
@@ -654,7 +654,7 @@ class TestIntegration:
         for msg in messages:
             context_manager.add_message(msg)
 
-        with patch("orchestrator.context_manager.extract", new_callable=AsyncMock) as mock_extract:
+        with patch("pilot.context_manager.extract", new_callable=AsyncMock) as mock_extract:
             mock_extract.return_value = {"nodes": [], "edges": []}
             await context_manager.compact(CompactionTrigger.TOKEN_BUDGET)
             # Verify transcript was built
