@@ -23,7 +23,9 @@ Install:
   python hooks/install.py
 """
 
+import html
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -170,6 +172,27 @@ def main():
 
 
 # ---------------------------------------------------------------------------
+# Channel message sanitization
+# ---------------------------------------------------------------------------
+
+_CHANNEL_TAG_RE = re.compile(r'<channel\b[^>]*>(.*?)</channel>', re.DOTALL)
+
+
+def _strip_channel_wrapper(text: str) -> str:
+    """Strip <channel source="..."> wrappers injected by Discord/Telegram plugins.
+
+    Extracts the inner message text and HTML-unescapes it. Handles multiple
+    channel blocks in a single turn (rare but possible).
+    """
+    def _replace(m: re.Match) -> str:
+        return html.unescape(m.group(1).strip())
+
+    result = _CHANNEL_TAG_RE.sub(_replace, text)
+    # Unescape any stray HTML entities outside channel tags (e.g. 2&gt;/dev/null)
+    return html.unescape(result)
+
+
+# ---------------------------------------------------------------------------
 # Turn parsing
 # ---------------------------------------------------------------------------
 
@@ -198,7 +221,7 @@ def _jsonl_to_turns(jsonl_path: Path) -> list[tuple[str, str]]:
         if entry_type == "user" and role == "user":
             content = message.get("content", "")
             if isinstance(content, str) and content.strip():
-                turns.append(("user", content.strip()))
+                turns.append(("user", _strip_channel_wrapper(content.strip())))
 
         # Assistant turn
         elif role == "assistant":
