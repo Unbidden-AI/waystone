@@ -407,10 +407,10 @@ def get_provider(config: dict) -> LLMProvider | None:
     elif llm_cfg.get("api_key"):
         api_key = llm_cfg["api_key"]
     else:
-        api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("CTX_API_KEY")
+        api_key = os.environ.get("CTX_API_KEY")
 
     if not api_key:
-        log.warning("use_native_sdk=true but no Gemini API key found — falling back")
+        log.warning("use_native_sdk=true but no API key found — falling back to OpenAI-compatible path")
         return None
 
     # Hash the API key to avoid leaking it in cache keys or logs
