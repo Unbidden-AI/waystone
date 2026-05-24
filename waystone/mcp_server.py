@@ -164,7 +164,7 @@ def waystone_query(
                 sentry_sdk.capture_exception(e)
         except ImportError:
             pass
-        raise ValueError(f"Query failed: {e}") from e
+        raise ValueError(f"AI API call failed — check your API key and quota: {e}") from e
 
 
 @mcp.tool()
@@ -248,7 +248,7 @@ def waystone_extract(
             )
 
         return asyncio.run(_run())
-    except (ValueError, FileNotFoundError):
+    except (ValueError, FileNotFoundError, RuntimeError):
         raise  # already user-friendly
     except Exception as e:
         log.error(f"waystone_extract failed: {e}", exc_info=True)
@@ -258,7 +258,7 @@ def waystone_extract(
                 sentry_sdk.capture_exception(e)
         except ImportError:
             pass
-        raise ValueError(f"Extraction failed: {e}") from e
+        raise ValueError(f"AI API call failed — check your API key and quota: {e}") from e
 
 
 @mcp.tool()
