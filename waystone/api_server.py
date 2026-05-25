@@ -53,6 +53,17 @@ from .store import GraphStore
 from contextlib import asynccontextmanager
 
 from .monitoring import init_sentry
+from . import __version__ as _WAYSTONE_VERSION
+
+_SERVER_START_TIME = time.time()
+_ADMIN_EMAILS: frozenset[str] = frozenset(
+    e.strip()
+    for e in os.environ.get(
+        "WAYSTONE_ADMIN_EMAILS",
+        "justin.walton@gmail.com,justin@unbidden.ai",
+    ).split(",")
+    if e.strip()
+)
 
 
 @asynccontextmanager
@@ -73,7 +84,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Waystone API",
-    version="0.1.0",
+    version=_WAYSTONE_VERSION,
     description="DAG-based context intelligence layer for LLM workflows",
     lifespan=lifespan,
 )
@@ -336,7 +347,7 @@ class AccountResponse(BaseModel):
 
 @app.get("/v1/health")
 def health() -> dict:
-    return {"status": "ok", "version": "0.1.0"}
+    return {"status": "ok", "version": _WAYSTONE_VERSION}
 
 
 @app.get("/v1/account")
@@ -828,6 +839,91 @@ async def stripe_webhook(request: Request) -> dict:
 
     # Unknown events are acknowledged but ignored
     return {"ok": True, "event": event_type, "ignored": True}
+
+
+# ---------------------------------------------------------------------------
+# Admin metrics endpoint (Clerk-authenticated, admin email only)
+# ---------------------------------------------------------------------------
+
+@app.get("/v1/admin/metrics")
+async def admin_metrics(request: Request) -> dict:
+    """Return internal platform metrics. Requires Clerk JWT for the admin email.
+
+    Protected by WAYSTONE_ADMIN_EMAIL (default: justin.walton@gmail.com).
+    Returns key counts by tier, recent signups, usage activity, and server uptime.
+    """
+    if not _USE_ADMIN_DB:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                            detail="Admin metrics only available on hosted service")
+
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing session token")
+
+    claims = _validate_clerk_jwt(auth_header[7:])
+
+    email = claims.get("email") or claims.get("primary_email_address")
+    if not email:
+        sub = claims.get("sub", "")
+        if sub:
+            email = _get_email_from_clerk_sub(sub)
+
+    if email not in _ADMIN_EMAILS:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+
+    conn = open_admin_db()
+    try:
+        # Keys by tier (active only)
+        tier_rows = conn.execute(
+            "SELECT tier, COUNT(*) as cnt FROM api_keys WHERE is_revoked=0 GROUP BY tier"
+        ).fetchall()
+        keys_by_tier = {r["tier"]: r["cnt"] for r in tier_rows}
+        total_keys = sum(keys_by_tier.values())
+
+        # Recent signups
+        signups_24h = conn.execute(
+            "SELECT COUNT(*) FROM api_keys WHERE is_revoked=0 AND created_at > datetime('now', '-1 day')"
+        ).fetchone()[0]
+        signups_7d = conn.execute(
+            "SELECT COUNT(*) FROM api_keys WHERE is_revoked=0 AND created_at > datetime('now', '-7 days')"
+        ).fetchone()[0]
+
+        # Usage in last 24h by action type
+        usage_rows = conn.execute(
+            "SELECT action, COUNT(*) as cnt FROM usage_log "
+            "WHERE timestamp > datetime('now', '-1 day') GROUP BY action"
+        ).fetchall()
+        usage_24h = {r["action"]: r["cnt"] for r in usage_rows}
+        total_requests_24h = sum(usage_24h.values())
+
+        # Usage in last 7d (total count)
+        total_requests_7d = conn.execute(
+            "SELECT COUNT(*) FROM usage_log WHERE timestamp > datetime('now', '-7 days')"
+        ).fetchone()[0]
+    finally:
+        conn.close()
+
+    return {
+        "server": {
+            "version": _WAYSTONE_VERSION,
+            "uptime_seconds": int(time.time() - _SERVER_START_TIME),
+        },
+        "keys": {
+            "free": keys_by_tier.get("free", 0),
+            "pro": keys_by_tier.get("pro", 0),
+            "team": keys_by_tier.get("team", 0),
+            "total": total_keys,
+        },
+        "signups": {
+            "last_24h": signups_24h,
+            "last_7d": signups_7d,
+        },
+        "usage": {
+            "last_24h": usage_24h,
+            "total_requests_24h": total_requests_24h,
+            "total_requests_7d": total_requests_7d,
+        },
+    }
 
 
 # ---------------------------------------------------------------------------
