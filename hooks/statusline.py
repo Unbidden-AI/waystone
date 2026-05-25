@@ -84,9 +84,23 @@ def _format_cb(state: dict, ctx_size: int) -> str:
     extract_started_at = state.get("extract_started_at")
 
     # Extraction suffix shown whenever a background worker is running
+    extract_error = state.get("extract_error", "")
     if extracting and extract_started_at:
         elapsed_s = int(time.time() - extract_started_at)
         extract_str = f" ⟳{elapsed_s}s"
+    elif extract_error and not extracting:
+        # Classify the error for a compact label
+        err_lower = extract_error.lower()
+        if "leaked" in err_lower or "permission_denied" in err_lower or "403" in err_lower:
+            extract_str = " ⚠ key"
+        elif "401" in err_lower or "auth" in err_lower or "invalid api" in err_lower:
+            extract_str = " ⚠ auth"
+        elif "429" in err_lower or "rate" in err_lower:
+            extract_str = " ⚠ rate"
+        elif "timeout" in err_lower:
+            extract_str = " ⚠ timeout"
+        else:
+            extract_str = " ⚠ extract"
     else:
         extract_str = ""
 

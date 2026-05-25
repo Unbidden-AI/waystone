@@ -18,6 +18,7 @@ Install:
   python hooks/install.py
 """
 
+import html
 import json
 import re
 import subprocess
@@ -33,7 +34,7 @@ sys.path.insert(0, str(REPO_ROOT))
 # Load project-local .env (e.g. GEMINI_API_KEY) before any Waystone imports.
 try:
     from dotenv import load_dotenv as _load_dotenv
-    _load_dotenv(dotenv_path=REPO_ROOT / ".env", override=False)
+    _load_dotenv(dotenv_path=REPO_ROOT / ".env", override=True)
 except ImportError:
     pass
 
@@ -45,6 +46,19 @@ SESSION_STATE_TTL_SECONDS = 600  # fallback expiry: 10 minutes
 REFLECT_INTERVAL = 20  # Fire reflect every N new user+assistant turns
 
 _SESSION_STATE_TS_RE = re.compile(r'^\[[\d:]+\|ts=(\d+)\]')
+_CHANNEL_TAG_RE = re.compile(r'<channel\b[^>]*>(.*?)</channel>', re.DOTALL)
+
+
+def _strip_channel_wrapper(text: str) -> str:
+    """Strip <channel source="..."> wrappers injected by Discord/Telegram plugins.
+
+    Extracts the inner message text and HTML-unescapes it.
+    """
+    def _replace(m: re.Match) -> str:
+        return html.unescape(m.group(1).strip())
+
+    result = _CHANNEL_TAG_RE.sub(_replace, text)
+    return html.unescape(result)
 
 
 _MEASUREMENT_RE = re.compile(
@@ -202,7 +216,7 @@ def main():
     except Exception:
         sys.exit(0)
 
-    prompt = hook_input.get("prompt", "").strip()
+    prompt = _strip_channel_wrapper(hook_input.get("prompt", "").strip())
     cwd = hook_input.get("cwd", ".")
     transcript_path = hook_input.get("transcript_path", "")
     session_id = hook_input.get("session_id", "")
@@ -432,6 +446,8 @@ def _read_recent_turns(transcript_path: str, n: int) -> str:
             text = content.strip()
         if text:
             label = "User" if role == "user" else "Assistant"
+            if role == "user":
+                text = _strip_channel_wrapper(text)
             turns.append(f"{label}: {text}")
 
     tail = turns[-n:] if n < len(turns) else turns

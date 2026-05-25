@@ -24,6 +24,14 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
+# Load project .env before Waystone imports — override=True ensures a fresh
+# key in .env wins over a stale value inherited from the parent process.
+try:
+    from dotenv import load_dotenv as _load_dotenv
+    _load_dotenv(dotenv_path=REPO_ROOT / ".env", override=True)
+except ImportError:
+    pass
+
 STATE_DIR = Path.home() / ".waystone"
 PAUSE_FILE = STATE_DIR / "paused"
 
