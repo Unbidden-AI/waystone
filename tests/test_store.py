@@ -81,6 +81,35 @@ class TestEdges:
         store.add_edge("n_a", "n_b", "relates_to")
         assert len(store.get_edges_from("n_a")) == 2
 
+    def test_set_and_get_edge_query_rule(self, store):
+        store.add_node(_make_node(id="n_a"))
+        store.add_node(_make_node(id="n_b"))
+        store.add_edge("n_a", "n_b", "depends_on")
+
+        store.set_edge_query_rule("n_a", "n_b", "add_synonyms", {"synonyms": ["api", "rest"]})
+
+        rule = store.get_edge_query_rule("n_a", "n_b")
+        assert rule is not None
+        assert rule["rule_type"] == "add_synonyms"
+        assert rule["params"] == {"synonyms": ["api", "rest"]}
+
+    def test_supersedes_edge_auto_wires_rule(self, store):
+        store.add_node(_make_node(id="n_old", fact="Old decision"))
+        store.add_node(_make_node(id="n_new", fact="New decision"))
+        store.add_edge("n_new", "n_old", "supersedes")
+
+        rule = store.get_edge_query_rule("n_new", "n_old")
+        assert rule is not None
+        assert rule["rule_type"] == "add_superseded_tags"
+
+    def test_get_edge_query_rule_none_when_not_set(self, store):
+        store.add_node(_make_node(id="n_a"))
+        store.add_node(_make_node(id="n_b"))
+        store.add_edge("n_a", "n_b", "depends_on")
+
+        rule = store.get_edge_query_rule("n_a", "n_b")
+        assert rule is None
+
 
 class TestTagMatching:
     def test_finds_matching_tags(self, store):
@@ -266,3 +295,168 @@ class TestBitemporalSupersession:
         old_after = store.get_node("n_old")
         assert old_after["is_active"] == 0
         assert old_after["valid_to"] == "2023-08-01T00:00:00+00:00"
+
+
+class TestWorldDBTriggers:
+    """SQLite reactive triggers added in WorldDB (SCHEMA_VERSION 17).
+
+    The critical tests bypass Python's add_edge() and insert raw SQL so they
+    verify the trigger itself, not the Python belt-and-suspenders.
+    """
+
+    def test_edge_supersedes_trigger_fires_via_raw_sql(self, store):
+        """INSERT into edges directly — trigger must expire the superseded node."""
+        old = _make_node(id="n_old", fact="Old approach", occurred_at="2023-01-01T00:00:00+00:00")
+        new = _make_node(id="n_new", fact="New approach", occurred_at="2023-09-01T00:00:00+00:00")
+        store.add_node(old)
+        store.add_node(new)
+
+        # Bypass add_edge() entirely — only the trigger should fire.
+        store.conn.execute(
+            "INSERT INTO edges (from_id, to_id, relation) VALUES (?, ?, 'supersedes')",
+            ("n_new", "n_old"),
+        )
+        store.conn.commit()
+
+        old_after = store.get_node("n_old")
+        assert old_after["is_active"] == 0, "trigger must set is_active=0"
+        assert old_after["valid_to"] == "2023-09-01T00:00:00+00:00", (
+            "trigger must use occurred_at of superseding node"
+        )
+
+    def test_edge_supersedes_trigger_preserves_existing_valid_to(self, store):
+        """Trigger must not overwrite valid_to that is already set (COALESCE guard)."""
+        old = _make_node(id="n_old", fact="Old fact", occurred_at="2023-01-01T00:00:00+00:00")
+        mid = _make_node(id="n_mid", fact="Mid fact", occurred_at="2023-06-01T00:00:00+00:00")
+        new = _make_node(id="n_new", fact="Newest fact", occurred_at="2023-12-01T00:00:00+00:00")
+        store.add_node(old)
+        store.add_node(mid)
+        store.add_node(new)
+
+        # First supersession closes old at June via trigger
+        store.conn.execute(
+            "INSERT INTO edges (from_id, to_id, relation) VALUES ('n_mid', 'n_old', 'supersedes')"
+        )
+        store.conn.commit()
+        assert store.get_node("n_old")["valid_to"] == "2023-06-01T00:00:00+00:00"
+
+        # Second supersession must NOT move valid_to to December (COALESCE protects it)
+        store.conn.execute(
+            "INSERT INTO edges (from_id, to_id, relation) VALUES ('n_new', 'n_old', 'supersedes')"
+        )
+        store.conn.commit()
+        assert store.get_node("n_old")["valid_to"] == "2023-06-01T00:00:00+00:00", (
+            "valid_to must not be overwritten once set"
+        )
+
+    def test_node_delete_cascade_cleans_node_tags(self, store):
+        """Deleting a node must cascade-delete its node_tags rows."""
+        node = _make_node(id="n_tagged", fact="Tagged node", tags=["alpha", "beta"])
+        store.add_node(node)
+
+        count_before = store.conn.execute(
+            "SELECT COUNT(*) FROM node_tags WHERE node_id = 'n_tagged'"
+        ).fetchone()[0]
+        assert count_before > 0, "node_tags must be populated before delete"
+
+        store.conn.execute("DELETE FROM nodes WHERE id = 'n_tagged'")
+        store.conn.commit()
+
+        count_after = store.conn.execute(
+            "SELECT COUNT(*) FROM node_tags WHERE node_id = 'n_tagged'"
+        ).fetchone()[0]
+        assert count_after == 0, "trigger must clean node_tags on node delete"
+
+    def test_node_delete_cascade_cleans_edges(self, store):
+        """Deleting a node must cascade-delete all edges that reference it."""
+        store.add_node(_make_node(id="n_a", fact="Node A"))
+        store.add_node(_make_node(id="n_b", fact="Node B"))
+        store.add_node(_make_node(id="n_c", fact="Node C"))
+        store.add_edge("n_a", "n_b", "depends_on")
+        store.add_edge("n_c", "n_a", "relates_to")
+
+        edge_count_before = store.conn.execute(
+            "SELECT COUNT(*) FROM edges WHERE from_id='n_a' OR to_id='n_a'"
+        ).fetchone()[0]
+        assert edge_count_before == 2
+
+        store.conn.execute("DELETE FROM nodes WHERE id = 'n_a'")
+        store.conn.commit()
+
+        edge_count_after = store.conn.execute(
+            "SELECT COUNT(*) FROM edges WHERE from_id='n_a' OR to_id='n_a'"
+        ).fetchone()[0]
+        assert edge_count_after == 0, "trigger must clean all edges referencing deleted node"
+
+    def test_node_delete_cascade_cleans_hyperedge_members(self, store):
+        """Deleting a node must remove it from hyperedge_members."""
+        store.add_node(_make_node(id="n_he", fact="Hyperedge member"))
+        store.conn.execute(
+            "INSERT INTO hyperedge_members (hyperedge_id, node_id) VALUES ('he_001', 'n_he')"
+        )
+        store.conn.commit()
+
+        row_before = store.conn.execute(
+            "SELECT 1 FROM hyperedge_members WHERE node_id = 'n_he'"
+        ).fetchone()
+        assert row_before is not None
+
+        store.conn.execute("DELETE FROM nodes WHERE id = 'n_he'")
+        store.conn.commit()
+
+        row_after = store.conn.execute(
+            "SELECT 1 FROM hyperedge_members WHERE node_id = 'n_he'"
+        ).fetchone()
+        assert row_after is None, "trigger must remove hyperedge_members row on node delete"
+
+    def test_non_supersedes_edge_does_not_trigger_expiry(self, store):
+        """Only relation='supersedes' should activate the expiry trigger."""
+        node = _make_node(id="n_stable", fact="Stable fact")
+        other = _make_node(id="n_other", fact="Other fact")
+        store.add_node(node)
+        store.add_node(other)
+
+        store.conn.execute(
+            "INSERT INTO edges (from_id, to_id, relation) VALUES ('n_other', 'n_stable', 'relates_to')"
+        )
+        store.conn.commit()
+
+        result = store.get_node("n_stable")
+        assert result["is_active"] == 1, "relates_to edge must not trigger expiry"
+        assert result["valid_to"] is None
+
+
+class TestGetNodeByHash:
+    """Content-addressed lookup API (get_node_by_hash / compute_fact_hash)."""
+
+    def test_returns_node_for_known_hash(self, store):
+        from waystone.store import compute_fact_hash
+        node = _make_node(id="n_hash_test", fact="Content-addressed fact")
+        store.add_node(node)
+
+        h = compute_fact_hash("Content-addressed fact")
+        result = store.get_node_by_hash(h)
+        assert result is not None
+        assert result["id"] == "n_hash_test"
+        assert result["fact"] == "Content-addressed fact"
+
+    def test_returns_none_for_unknown_hash(self, store):
+        result = store.get_node_by_hash("deadbeef00000000")
+        assert result is None
+
+    def test_compute_fact_hash_is_stable(self):
+        from waystone.store import compute_fact_hash
+        h1 = compute_fact_hash("Stable input")
+        h2 = compute_fact_hash("Stable input")
+        assert h1 == h2
+
+    def test_compute_fact_hash_differs_for_different_inputs(self):
+        from waystone.store import compute_fact_hash
+        assert compute_fact_hash("Fact A") != compute_fact_hash("Fact B")
+
+    def test_hash_normalizes_whitespace(self):
+        from waystone.store import compute_fact_hash
+        # Leading/trailing whitespace and case normalization should match stored hash
+        h_clean = compute_fact_hash("Some fact")
+        h_padded = compute_fact_hash("  Some fact  ")
+        assert h_clean == h_padded, "hash should normalize whitespace"

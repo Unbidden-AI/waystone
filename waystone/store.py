@@ -12,7 +12,7 @@ log = logging.getLogger(__name__)
 
 # Increment when any schema change is made (new table, column, index, trigger).
 # init_db() checks PRAGMA user_version and skips all DDL if already current.
-SCHEMA_VERSION = 16
+SCHEMA_VERSION = 18
 
 
 def _normalize_fact(fact: str) -> str:
@@ -31,6 +31,11 @@ def _normalize_fact(fact: str) -> str:
 def _fact_hash(fact: str) -> str:
     """Return a 16-char hex SHA-256 of the normalized fact text."""
     return hashlib.sha256(_normalize_fact(fact).encode()).hexdigest()[:16]
+
+
+def compute_fact_hash(fact: str) -> str:
+    """Public content-address utility: return the canonical hash for a fact string."""
+    return _fact_hash(fact)
 
 
 def _auto_tag_numerics(fact: str, tags: list[str]) -> list[str]:
@@ -332,6 +337,39 @@ class GraphStore:
             END;
         """)
         self.conn.commit()
+
+        # WorldDB-style reactive edge programs: typed edge handlers as SQLite triggers.
+        #
+        # edge_supersedes_expire: fires atomically when a supersedes edge is inserted,
+        # closing the validity window of the superseded node without requiring Python to
+        # chase the expiry after every add_edge() call.
+        #
+        # node_delete_cascade: when any node is deleted, auto-clean node_tags, edges,
+        # and hyperedge_members.  Fixes a latent bug where vacuum_unused() and prune_nodes()
+        # left stale node_tags rows (those callers delete edges then nodes but never node_tags).
+        self.conn.executescript("""
+            CREATE TRIGGER IF NOT EXISTS edge_supersedes_expire
+            AFTER INSERT ON edges
+            WHEN new.relation = 'supersedes'
+            BEGIN
+                UPDATE nodes
+                SET valid_to  = COALESCE(valid_to,
+                        (SELECT COALESCE(occurred_at, created_at) FROM nodes WHERE id = new.from_id),
+                        datetime('now')),
+                    is_active = 0
+                WHERE id = new.to_id AND is_active = 1;
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS node_delete_cascade
+            AFTER DELETE ON nodes
+            BEGIN
+                DELETE FROM node_tags         WHERE node_id = old.id;
+                DELETE FROM edges             WHERE from_id = old.id OR to_id = old.id;
+                DELETE FROM hyperedge_members WHERE node_id = old.id;
+            END;
+        """)
+        self.conn.commit()
+
         # Backfill FTS index for any nodes not yet indexed
         self._backfill_fts()
 
@@ -359,6 +397,27 @@ class GraphStore:
         self.conn.commit()
         # Backfill node_tags for any nodes whose tags haven't been indexed yet.
         self._backfill_node_tags()
+
+        # Migration: add on_query_rewrite column to edges for typed edge handler registry
+        try:
+            self.conn.execute("ALTER TABLE edges ADD COLUMN on_query_rewrite TEXT")
+            self.conn.commit()
+            log.info("Migrated edges table: added on_query_rewrite column")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
+        # Migration: create edge_query_rules table for on_query_rewrite rule registry
+        self.conn.execute("""
+            CREATE TABLE IF NOT EXISTS edge_query_rules (
+                rule_id   TEXT PRIMARY KEY,
+                rule_type TEXT NOT NULL,
+                params    TEXT
+            )
+        """)
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_edge_query_rules_type ON edge_query_rules(rule_type)"
+        )
+        self.conn.commit()
 
         # Raw sentence index: per-sentence transcript storage for semantic fallback.
         # Populated by ingestion when sentence_index.enabled=True in config.
@@ -724,6 +783,8 @@ class GraphStore:
         node (from_id), falling back to its created_at, then now().  This keeps
         add_edge() consistent with merge_extraction() so callers don't have to
         remember to expire superseded nodes manually.
+
+        For supersedes edges, also auto-wires the add_superseded_tags query rewrite rule.
         """
         self.conn.execute(
             """INSERT INTO edges (from_id, to_id, relation, weight)
@@ -748,10 +809,26 @@ class GraphStore:
             )
             self.conn.commit()
 
+            # Auto-wire the add_superseded_tags rule if not already set.
+            existing_rule = self.get_edge_query_rule(from_id, to_id)
+            if not existing_rule:
+                self.set_edge_query_rule(from_id, to_id, "add_superseded_tags")
+
     def get_node(self, node_id: str) -> dict | None:
         """Fetch a single node by ID."""
         row = self.conn.execute(
             "SELECT * FROM nodes WHERE id = ?", (node_id,)
+        ).fetchone()
+        return self._row_to_node(row) if row else None
+
+    def get_node_by_hash(self, fact_hash: str) -> dict | None:
+        """Content-addressed lookup: fetch a node by its normalized fact hash.
+
+        Use compute_fact_hash(fact_text) to derive the hash from a raw fact string.
+        Returns None if no node with that hash exists.
+        """
+        row = self.conn.execute(
+            "SELECT * FROM nodes WHERE fact_hash = ? LIMIT 1", (fact_hash,)
         ).fetchone()
         return self._row_to_node(row) if row else None
 
@@ -1090,6 +1167,42 @@ class GraphStore:
         """Fetch all edges."""
         rows = self.conn.execute("SELECT * FROM edges").fetchall()
         return [dict(r) for r in rows]
+
+    def set_edge_query_rule(self, from_id: str, to_id: str, rule_type: str, params: dict | None = None) -> None:
+        """Set a query rewrite rule on an edge.
+
+        rule_id is auto-generated as f"{from_id}__{to_id}". Writes the rule to
+        edge_query_rules and updates the edge's on_query_rewrite column.
+        """
+        rule_id = f"{from_id}__{to_id}"
+        params_json = json.dumps(params) if params else None
+        self.conn.execute(
+            "INSERT OR REPLACE INTO edge_query_rules (rule_id, rule_type, params) VALUES (?, ?, ?)",
+            (rule_id, rule_type, params_json),
+        )
+        self.conn.execute(
+            "UPDATE edges SET on_query_rewrite = ? WHERE from_id = ? AND to_id = ?",
+            (rule_id, from_id, to_id),
+        )
+        self.conn.commit()
+
+    def get_edge_query_rule(self, from_id: str, to_id: str) -> dict | None:
+        """Get the query rewrite rule for an edge, if any.
+
+        Returns a dict with keys: rule_id, rule_type, params (parsed JSON or None).
+        """
+        rule_id = f"{from_id}__{to_id}"
+        row = self.conn.execute(
+            "SELECT rule_id, rule_type, params FROM edge_query_rules WHERE rule_id = ?",
+            (rule_id,),
+        ).fetchone()
+        if not row:
+            return None
+        return {
+            "rule_id": row[0],
+            "rule_type": row[1],
+            "params": json.loads(row[2]) if row[2] else None,
+        }
 
     def deactivate_node(self, node_id: str) -> None:
         """Soft-delete a node by setting is_active=0 and valid_to=now.

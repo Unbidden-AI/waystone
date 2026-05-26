@@ -341,3 +341,68 @@ class TestIntegrationWithStrategies:
         )
         assert reduced.nodes_after_strategies <= baseline.nodes_after_strategies
         assert reduced.tokens_estimated <= baseline.tokens_estimated
+
+
+class TestEdgeQueryRewrite:
+    def test_add_superseded_tags_rule_expands_keywords(self, tmp_path):
+        """Test that add_superseded_tags rule adds old node's tags during BFS."""
+        from waystone.retriever import bfs_collect
+
+        db_path = tmp_path / "test.db"
+        store = GraphStore(db_path)
+
+        # Create a superseding relationship: n_new supersedes n_old
+        old_node = {
+            "id": "n_old",
+            "fact": "Use JSON for serialization",
+            "type": "decision",
+            "confidence": 0.9,
+            "tags": ["json", "serialization"],
+            "created_at": "2026-03-07T00:00:00Z",
+            "supersedes": [],
+        }
+        new_node = {
+            "id": "n_new",
+            "fact": "Use Avro for serialization",
+            "type": "decision",
+            "confidence": 0.95,
+            "tags": ["avro", "serialization"],
+            "created_at": "2026-03-07T00:01:00Z",
+            "supersedes": [],
+        }
+        bridge_node = {
+            "id": "n_bridge",
+            "fact": "Data pipeline uses efficient formats",
+            "type": "transition",
+            "confidence": 0.85,
+            "tags": ["pipeline", "format"],
+            "created_at": "2026-03-07T00:02:00Z",
+            "supersedes": [],
+        }
+
+        store.add_node(old_node)
+        store.add_node(new_node)
+        store.add_node(bridge_node)
+
+        # Create the supersedes edge, which auto-wires the rule
+        store.add_edge("n_new", "n_old", "supersedes")
+
+        # Also connect new_node to bridge_node for further exploration
+        store.add_edge("n_new", "n_bridge", "flows_to")
+
+        # Verify the rule was auto-wired
+        rule = store.get_edge_query_rule("n_new", "n_old")
+        assert rule is not None
+        assert rule["rule_type"] == "add_superseded_tags"
+
+        # Run BFS from n_new — it should reach n_old via the supersedes edge
+        # and expand keywords to include the old node's tags
+        collected = bfs_collect(store, [new_node], hops=2)
+
+        # Verify we collected the nodes
+        collected_ids = {n["id"] for n in collected}
+        assert "n_new" in collected_ids
+        assert "n_old" in collected_ids
+        assert "n_bridge" in collected_ids
+
+        store.close()

@@ -1533,6 +1533,39 @@ def apply_token_budget(nodes: list[dict], budget: int) -> list[dict]:
 # Core retrieval helpers
 # ---------------------------------------------------------------------------
 
+def apply_edge_query_rewrite(
+    rule: dict,
+    active_keywords: set[str],
+    traversed_node: dict,
+    store: GraphStore,
+) -> None:
+    """Apply an edge query rewrite rule, mutating active_keywords in place.
+
+    Rules dispatch on rule_type:
+    - add_superseded_tags: adds tags from the traversed node to active keywords
+    - add_synonyms: adds static synonym list from params["synonyms"]
+    - alias: maps keywords matching keys in params["aliases"] to additional keywords
+    """
+    rule_type = rule.get("rule_type")
+    params = rule.get("params", {})
+
+    if rule_type == "add_superseded_tags":
+        tags = traversed_node.get("tags", [])
+        if tags:
+            active_keywords.update(tags)
+
+    elif rule_type == "add_synonyms":
+        synonyms = params.get("synonyms", [])
+        if synonyms:
+            active_keywords.update(synonyms)
+
+    elif rule_type == "alias":
+        aliases = params.get("aliases", {})
+        for keyword in list(active_keywords):
+            if keyword in aliases:
+                active_keywords.add(aliases[keyword])
+
+
 def bfs_collect(
     store: GraphStore,
     entry_nodes: list[dict],
@@ -1569,6 +1602,7 @@ def bfs_collect(
             current_layer_ids.append(node["id"])
 
     _autosearch_active = autosearch_query is not None and autosearch_threshold > 0
+    active_keywords: set[str] = set()
 
     for depth in range(hops):
         if not current_layer_ids:
@@ -1577,14 +1611,18 @@ def bfs_collect(
         # Batch-fetch all edges touching this layer (1 query for the whole layer)
         all_edges = store.get_edges_for_nodes(current_layer_ids)
 
-        # Build neighbor_id → max edge weight map (best path quality wins)
+        # Build neighbor_id → (max edge weight, list of edges to that neighbor)
         neighbor_max_weight: dict[str, float] = {}
+        neighbor_edges: dict[str, list[dict]] = {}
         for edge in all_edges:
             w = edge.get("weight", 1.0)
             for nid in (edge["to_id"], edge["from_id"]):
                 if nid not in visited_ids:
                     if nid not in neighbor_max_weight or w > neighbor_max_weight[nid]:
                         neighbor_max_weight[nid] = w
+                    if nid not in neighbor_edges:
+                        neighbor_edges[nid] = []
+                    neighbor_edges[nid].append(edge)
 
         neighbor_ids = list(neighbor_max_weight.keys())
         if not neighbor_ids:
@@ -1600,6 +1638,12 @@ def bfs_collect(
                 node = {**node, "_bfs_depth": depth + 1, "_max_edge_weight": w}
                 collected.append(node)
                 next_layer_ids.append(nid)
+
+                # Apply edge query rewrite rules for edges leading to this neighbor
+                for edge in neighbor_edges.get(nid, []):
+                    rule = store.get_edge_query_rule(edge["from_id"], edge["to_id"])
+                    if rule:
+                        apply_edge_query_rewrite(rule, active_keywords, node, store)
 
         # AutoSearch: check marginal relevance of this hop before continuing
         if _autosearch_active and next_layer_ids:
