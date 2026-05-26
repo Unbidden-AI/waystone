@@ -4,9 +4,18 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "waystone"
-version = "0.2.0"
+version = "0.2.1"
 description = "A context intelligence layer for LLM workflows"
-requires-python = ">=3.13,<3.14"
+readme = "README.md"
+license = { text = "MIT" }
+keywords = ["ai", "memory", "mcp", "llm", "agents", "context", "knowledge-graph"]
+requires-python = ">=3.11"
+
+[project.urls]
+Homepage = "https://unbidden.ai/waystone/"
+Repository = "https://github.com/Unbidden-AI/waystone"
+Documentation = "https://unbidden.ai/docs/"
+"Bug Tracker" = "https://github.com/Unbidden-AI/waystone/issues"
 dependencies = [
     "click>=8.0",
     "croniter>=2.0",
