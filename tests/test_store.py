@@ -460,3 +460,158 @@ class TestGetNodeByHash:
         h_clean = compute_fact_hash("Some fact")
         h_padded = compute_fact_hash("  Some fact  ")
         assert h_clean == h_padded, "hash should normalize whitespace"
+
+
+class TestWorldContainers:
+    """World-scoped context namespace API and retrieval."""
+
+    def test_create_world_returns_id(self, store):
+        """create_world returns a valid world node ID."""
+        world_id = store.create_world(name="Test World")
+        assert world_id is not None
+        assert world_id.startswith("n_")
+
+        # Verify the world node was created
+        world_node = store.get_node(world_id)
+        assert world_node is not None
+        assert world_node["type"] == "world"
+        assert world_node["fact"] == "Test World"
+        assert world_node["confidence"] == 1.0
+
+    def test_add_node_to_world(self, store):
+        """add_node_to_world associates a node with a world."""
+        world_id = store.create_world(name="Test World")
+        node = _make_node(id="n_test1", fact="Test fact")
+        store.add_node(node)
+
+        store.add_node_to_world("n_test1", world_id)
+
+        updated_node = store.get_node("n_test1")
+        assert updated_node["world_id"] == world_id
+
+    def test_get_world_nodes_recursive(self, store):
+        """get_world_nodes with recursive=True includes child worlds."""
+        parent_world = store.create_world(name="Parent World")
+        child_world = store.create_world(name="Child World", parent_world_id=parent_world)
+
+        # Add nodes to parent and child
+        node1 = _make_node(id="n_p1", fact="Parent fact 1")
+        node2 = _make_node(id="n_c1", fact="Child fact 1")
+        store.add_node(node1)
+        store.add_node(node2)
+
+        store.add_node_to_world("n_p1", parent_world)
+        store.add_node_to_world("n_c1", child_world)
+
+        # Non-recursive: only parent's direct members
+        parent_nodes = store.get_world_nodes(parent_world, recursive=False)
+        parent_ids = {n["id"] for n in parent_nodes}
+        assert "n_p1" in parent_ids
+        assert "n_c1" not in parent_ids
+
+        # Recursive: parent's members + child world members
+        parent_nodes_rec = store.get_world_nodes(parent_world, recursive=True)
+        parent_ids_rec = {n["id"] for n in parent_nodes_rec}
+        assert "n_p1" in parent_ids_rec
+        assert "n_c1" in parent_ids_rec
+
+    def test_add_node_to_nonexistent_world_raises(self, store):
+        """add_node_to_world raises ValueError for non-existent world."""
+        node = _make_node(id="n_test1", fact="Test fact")
+        store.add_node(node)
+
+        with pytest.raises(ValueError):
+            store.add_node_to_world("n_test1", "n_nonexistent")
+
+    def test_world_scoped_bfs(self, store):
+        """BFS with world_id parameter respects world membership."""
+        from waystone.retriever import bfs_collect
+
+        # Create two separate worlds
+        world_id = store.create_world(name="Scoped World")
+        other_world = store.create_world(name="Other World")
+
+        # Nodes in target world
+        n1 = _make_node(id="n_in1", fact="Inside world 1", tags=["world_scoped"])
+        n2 = _make_node(id="n_in2", fact="Inside world 2", tags=["world_scoped"])
+
+        # Node in different world (should be excluded)
+        n3 = _make_node(id="n_out1", fact="In other world", tags=["not_scoped"])
+
+        # Root-level node directly connected to world node
+        n_root = _make_node(id="n_root", fact="Root level fact", tags=["root"])
+
+        store.add_node(n1)
+        store.add_node(n2)
+        store.add_node(n3)
+        store.add_node(n_root)
+
+        # Assign worlds
+        store.add_node_to_world("n_in1", world_id)
+        store.add_node_to_world("n_in2", world_id)
+        store.add_node_to_world("n_out1", other_world)  # Different world
+        # n_root stays at world_id=None (root-level)
+
+        # Create edges:
+        # - in1 -> in2 (within world)
+        # - in2 -> out1 (leaves world, should be filtered)
+        # - in1 -> root (within world to root-level, should be reachable)
+        store.conn.execute(
+            "INSERT INTO edges (from_id, to_id, relation) VALUES (?, ?, ?)",
+            ("n_in1", "n_in2", "flows_to")
+        )
+        store.conn.execute(
+            "INSERT INTO edges (from_id, to_id, relation) VALUES (?, ?, ?)",
+            ("n_in2", "n_out1", "flows_to")
+        )
+        store.conn.execute(
+            "INSERT INTO edges (from_id, to_id, relation) VALUES (?, ?, ?)",
+            ("n_in1", "n_root", "relates_to")
+        )
+        store.conn.commit()
+
+        # BFS with world_id should:
+        # - Include n_in1 (entry), n_in2 (hop 1, same world)
+        # - Skip n_out1 (hop 1, different world)
+        # - Include n_root (hop 1, root-level accessible from any world)
+        collected = bfs_collect(
+            store, [n1], hops=2, world_id=world_id
+        )
+
+        collected_ids = {n["id"] for n in collected}
+        assert "n_in1" in collected_ids
+        assert "n_in2" in collected_ids
+        assert "n_root" in collected_ids  # Root-level fact accessible
+        assert "n_out1" not in collected_ids  # Different world, should be skipped
+
+    def test_world_node_is_type_world(self, store):
+        """World nodes have type='world' in the database."""
+        world_id = store.create_world(name="Type Check World")
+        world_node = store.get_node(world_id)
+
+        assert world_node["type"] == "world"
+        assert world_node["fact"] == "Type Check World"
+
+    def test_list_worlds_node_count(self, store):
+        """list_worlds returns node_count for each world."""
+        world1 = store.create_world(name="World 1")
+        world2 = store.create_world(name="World 2")
+
+        # Add nodes to world1
+        n1 = _make_node(id="n_w1_1", fact="Node in world 1")
+        n2 = _make_node(id="n_w1_2", fact="Another node in world 1")
+        store.add_node(n1)
+        store.add_node(n2)
+        store.add_node_to_world("n_w1_1", world1)
+        store.add_node_to_world("n_w1_2", world1)
+
+        # Add one node to world2
+        n3 = _make_node(id="n_w2_1", fact="Node in world 2")
+        store.add_node(n3)
+        store.add_node_to_world("n_w2_1", world2)
+
+        worlds = store.list_worlds()
+        world_map = {w["world_id"]: w for w in worlds}
+
+        assert world_map[world1]["node_count"] == 2
+        assert world_map[world2]["node_count"] == 1

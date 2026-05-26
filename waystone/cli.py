@@ -3063,6 +3063,139 @@ def watch_cmd(ctx, project, paths, interval, verify, extensions):
         _time.sleep(interval)
 
 
+# --- World container subcommands ---
+
+@cli.group("world")
+@click.pass_context
+def world_group(ctx):
+    """Manage named context namespaces (worlds)."""
+    pass
+
+
+@world_group.command("create")
+@click.argument("project")
+@click.option("--name", required=True, help="Name of the world")
+@click.option("--description", default=None, help="Optional description")
+@click.option("--parent", default=None, help="Optional parent world ID for hierarchy")
+@click.pass_context
+def world_create(ctx, project, name, description, parent):
+    """Create a new world (named context namespace)."""
+    config = _load_cfg(ctx.obj["config_path"])
+    db_path = get_db_path(config, project)
+
+    if not db_path.exists():
+        click.echo(f"Error: Project '{project}' not found. Run 'waystone init {project}' first.", err=True)
+        sys.exit(1)
+
+    try:
+        store = GraphStore(db_path)
+        world_id = store.create_world(
+            name=name,
+            description=description,
+            parent_world_id=parent,
+        )
+        store.close()
+        click.echo(f"Created world '{name}' (ID: {world_id})")
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+
+
+@world_group.command("list")
+@click.argument("project")
+@click.option("--parent", default=None, help="Filter by parent world ID")
+@click.pass_context
+def world_list(ctx, project, parent):
+    """List all worlds in a project."""
+    config = _load_cfg(ctx.obj["config_path"])
+    db_path = get_db_path(config, project)
+
+    if not db_path.exists():
+        click.echo(f"Error: Project '{project}' not found.", err=True)
+        sys.exit(1)
+
+    try:
+        store = GraphStore(db_path)
+        worlds = store.list_worlds(parent_world_id=parent)
+        store.close()
+
+        if not worlds:
+            click.echo("No worlds found.")
+            return
+
+        for w in worlds:
+            click.echo(f"  {w['name']:20} (ID: {w['world_id']}, nodes: {w['node_count']})")
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+
+
+@world_group.command("show")
+@click.argument("project")
+@click.argument("world_id")
+@click.option("--recursive", is_flag=True, help="Include child worlds")
+@click.pass_context
+def world_show(ctx, project, world_id, recursive):
+    """Show details of a specific world."""
+    config = _load_cfg(ctx.obj["config_path"])
+    db_path = get_db_path(config, project)
+
+    if not db_path.exists():
+        click.echo(f"Error: Project '{project}' not found.", err=True)
+        sys.exit(1)
+
+    try:
+        store = GraphStore(db_path)
+        world = store.get_world(world_id)
+
+        if not world:
+            click.echo(f"World '{world_id}' not found.", err=True)
+            sys.exit(1)
+
+        click.echo(f"World: {world['name']}")
+        click.echo(f"ID: {world['world_id']}")
+        if world.get('description'):
+            click.echo(f"Description: {world['description']}")
+        click.echo(f"Node count: {world['node_count']}")
+        click.echo(f"Created: {world.get('created_at', 'unknown')}")
+
+        if recursive:
+            nodes = store.get_world_nodes(world_id, recursive=True)
+            click.echo(f"Total nodes (recursive): {len(nodes)}")
+
+        store.close()
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+
+
+@world_group.command("add-node")
+@click.argument("project")
+@click.argument("world_id")
+@click.argument("node_id")
+@click.pass_context
+def world_add_node(ctx, project, world_id, node_id):
+    """Add a node to a world."""
+    config = _load_cfg(ctx.obj["config_path"])
+    db_path = get_db_path(config, project)
+
+    if not db_path.exists():
+        click.echo(f"Error: Project '{project}' not found.", err=True)
+        sys.exit(1)
+
+    try:
+        store = GraphStore(db_path)
+        store.add_node_to_world(node_id, world_id)
+        store.close()
+        click.echo(f"Added node {node_id} to world {world_id}")
+    except ValueError as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+
+
 @cli.command("auto-import")
 @click.argument("project")
 @click.argument("directory", type=click.Path(exists=True))

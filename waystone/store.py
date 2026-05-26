@@ -12,7 +12,7 @@ log = logging.getLogger(__name__)
 
 # Increment when any schema change is made (new table, column, index, trigger).
 # init_db() checks PRAGMA user_version and skips all DDL if already current.
-SCHEMA_VERSION = 18
+SCHEMA_VERSION = 19
 
 
 def _normalize_fact(fact: str) -> str:
@@ -445,6 +445,26 @@ class GraphStore:
                 f"sentence_id INTEGER PRIMARY KEY, embedding float[{EMBEDDING_DIM}])"
             )
             self.conn.commit()
+
+        # Migration: world containers — named context namespaces for scoped retrieval
+        try:
+            self.conn.execute("ALTER TABLE nodes ADD COLUMN world_id TEXT REFERENCES nodes(id)")
+            self.conn.commit()
+            log.info("Migrated nodes table: added world_id column")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_nodes_world_id ON nodes(world_id) WHERE world_id IS NOT NULL"
+        )
+        self.conn.execute("""
+            CREATE TABLE IF NOT EXISTS worlds (
+                world_id    TEXT PRIMARY KEY REFERENCES nodes(id) ON DELETE CASCADE,
+                name        TEXT NOT NULL,
+                description TEXT,
+                created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+        """)
+        self.conn.commit()
 
         # Stamp schema version so future opens skip all DDL above.
         self.conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
@@ -1110,6 +1130,135 @@ class GraphStore:
         )
         self.conn.commit()
         return cursor.rowcount
+
+    def create_world(
+        self,
+        name: str,
+        tags: list[str] | None = None,
+        parent_world_id: str | None = None,
+        description: str | None = None,
+    ) -> str:
+        """Create a world container node and return its ID."""
+        from uuid import uuid4
+        world_node_id = f"n_{uuid4().hex[:8]}"
+        world_tags = list(tags or [])
+        name_tokens = [t.lower() for t in name.split()]
+        world_tags.extend(name_tokens)
+        world_tags = sorted(set(world_tags))
+
+        node = {
+            "id": world_node_id,
+            "fact": name,
+            "type": "world",
+            "confidence": 1.0,
+            "tags": world_tags,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        self.add_node(node)
+
+        self.conn.execute(
+            "INSERT INTO worlds (world_id, name, description, created_at) VALUES (?, ?, ?, ?)",
+            (world_node_id, name, description, datetime.now(timezone.utc).isoformat()),
+        )
+        self.conn.commit()
+
+        if parent_world_id is not None:
+            self.add_edge(parent_world_id, world_node_id, "contains")
+
+        return world_node_id
+
+    def add_node_to_world(self, node_id: str, world_id: str) -> None:
+        """Assign a node to a world."""
+        world_exists = self.conn.execute(
+            "SELECT world_id FROM worlds WHERE world_id = ?", (world_id,)
+        ).fetchone()
+        if not world_exists:
+            raise ValueError(f"World {world_id} does not exist")
+
+        self.conn.execute(
+            "UPDATE nodes SET world_id = ? WHERE id = ?",
+            (world_id, node_id),
+        )
+        self.conn.commit()
+
+    def get_world_nodes(self, world_id: str, recursive: bool = False) -> list[dict]:
+        """Get all nodes in a world. If recursive=True, include child worlds."""
+        nodes = []
+
+        if recursive:
+            world_ids = [world_id]
+            visited = {world_id}
+            while world_ids:
+                current_id = world_ids.pop(0)
+                rows = self.conn.execute(
+                    "SELECT * FROM nodes WHERE world_id = ?", (current_id,)
+                ).fetchall()
+                nodes.extend(self._row_to_node(r) for r in rows)
+
+                child_rows = self.conn.execute(
+                    "SELECT to_id FROM edges WHERE from_id = ? AND relation = 'contains'",
+                    (current_id,),
+                ).fetchall()
+                for row in child_rows:
+                    child_id = row[0]
+                    if child_id not in visited:
+                        visited.add(child_id)
+                        world_ids.append(child_id)
+        else:
+            rows = self.conn.execute(
+                "SELECT * FROM nodes WHERE world_id = ?", (world_id,)
+            ).fetchall()
+            nodes = [self._row_to_node(r) for r in rows]
+
+        return nodes
+
+    def list_worlds(self, parent_world_id: str | None = None) -> list[dict]:
+        """List all worlds, optionally filtered by parent."""
+        if parent_world_id is None:
+            rows = self.conn.execute(
+                "SELECT * FROM worlds ORDER BY created_at DESC"
+            ).fetchall()
+        else:
+            rows = self.conn.execute(
+                """SELECT w.* FROM worlds w
+                   JOIN edges e ON e.to_id = w.world_id
+                   WHERE e.from_id = ? AND e.relation = 'contains'
+                   ORDER BY w.created_at DESC""",
+                (parent_world_id,),
+            ).fetchall()
+
+        results = []
+        for row in rows:
+            world_id = row[0]
+            node_count = self.conn.execute(
+                "SELECT COUNT(*) FROM nodes WHERE world_id = ?", (world_id,)
+            ).fetchone()[0]
+            results.append({
+                "world_id": world_id,
+                "name": row[1],
+                "description": row[2],
+                "created_at": row[3],
+                "node_count": node_count,
+            })
+        return results
+
+    def get_world(self, world_id: str) -> dict | None:
+        """Get world metadata by ID."""
+        row = self.conn.execute(
+            "SELECT * FROM worlds WHERE world_id = ?", (world_id,)
+        ).fetchone()
+        if not row:
+            return None
+        node_count = self.conn.execute(
+            "SELECT COUNT(*) FROM nodes WHERE world_id = ?", (world_id,)
+        ).fetchone()[0]
+        return {
+            "world_id": row[0],
+            "name": row[1],
+            "description": row[2],
+            "created_at": row[3],
+            "node_count": node_count,
+        }
 
     def get_edges_for_nodes(self, node_ids: list[str]) -> list[dict]:
         """Fetch all edges where from_id or to_id is in node_ids, chunked for SQLite limits.

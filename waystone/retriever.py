@@ -373,12 +373,14 @@ def retrieve(
     hops: int = 3,
     top_k: int = 10,
     strategies: dict | None = None,
+    *,
+    world_id: str | None = None,
 ) -> str:
     """Retrieve relevant context for a task description.
 
     Returns formatted markdown string with relevant context.
     """
-    result = retrieve_with_stats(store, task_description, hops, top_k, strategies)
+    result = retrieve_with_stats(store, task_description, hops, top_k, strategies, world_id=world_id)
     return result.markdown
 
 
@@ -388,6 +390,8 @@ def retrieve_with_stats(
     hops: int = 3,
     top_k: int = 10,
     strategies: dict | None = None,
+    *,
+    world_id: str | None = None,
 ) -> RetrievalResult:
     """Retrieve context with full stats for benchmarking.
 
@@ -404,6 +408,7 @@ def retrieve_with_stats(
             - recency_half_life_days (int): Half-life for decay
             - token_budget (int): Max estimated tokens in output (0 = off)
             - relevance_scoring (bool): Rank entry nodes by tag overlap count
+        world_id: Optional world container ID to scope retrieval
     """
     # Check for empty graph early
     stats = store.get_stats()
@@ -579,6 +584,22 @@ def retrieve_with_stats(
             source_prefixes, before_filter, len(entry_nodes),
         )
 
+    # World scoping: restrict entry nodes to a named context namespace.
+    # When world_id is specified, include only nodes where:
+    #   - node.world_id == world_id (members of this world), OR
+    #   - node.world_id IS NULL (root-level facts accessible from all worlds)
+    # Maintain backward compatibility: world_id=None means no filtering (zero overhead).
+    if world_id:
+        before_filter = len(entry_nodes)
+        entry_nodes = [
+            n for n in entry_nodes
+            if n.get("world_id") == world_id or n.get("world_id") is None
+        ]
+        log.debug(
+            "World scoping (world_id=%s): %d → %d entry nodes",
+            world_id, before_filter, len(entry_nodes),
+        )
+
     if not entry_nodes:
         return RetrievalResult(markdown="No relevant context found.", nodes_before_strategies=0, nodes_after_strategies=0)
 
@@ -674,6 +695,7 @@ def retrieve_with_stats(
         store, entry_nodes, hops,
         autosearch_query=_autosearch_query,
         autosearch_threshold=_autosearch_threshold,
+        world_id=world_id,
     )
 
     # Process/episode-node direct injection: bypass BFS depth limits for 'process' and 'episode' nodes.
@@ -1573,6 +1595,7 @@ def bfs_collect(
     *,
     autosearch_query: bytes | None = None,
     autosearch_threshold: float = 0.0,
+    world_id: str | None = None,
 ) -> list[dict]:
     """BFS from entry nodes up to `hops` depth, collecting all reachable nodes.
 
@@ -1588,6 +1611,9 @@ def bfs_collect(
     below the threshold, BFS halts — the neighbourhood is diverging from the
     query and further hops add noise rather than signal. The current layer is
     kept (it was already collected); only future hops are suppressed.
+
+    If `world_id` is provided, BFS only traverses to nodes where world_id matches
+    or is None (root-level facts accessible from all worlds).
     """
     visited_ids: set[str] = set()
     collected: list[dict] = []
@@ -1633,6 +1659,9 @@ def bfs_collect(
         for node in store.get_nodes_by_ids(neighbor_ids):
             nid = node["id"]
             if nid not in visited_ids:
+                # World scoping: skip nodes that don't match world membership
+                if world_id and node.get("world_id") != world_id and node.get("world_id") is not None:
+                    continue
                 visited_ids.add(nid)
                 w = neighbor_max_weight.get(nid, 1.0)
                 node = {**node, "_bfs_depth": depth + 1, "_max_edge_weight": w}
