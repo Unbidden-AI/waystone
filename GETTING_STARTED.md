@@ -21,36 +21,47 @@ Waystone extracts facts from your Claude Code conversations into a knowledge gra
 
 ---
 
-## Step 1: Install the package
-
-From the Waystone repo directory:
+## Step 1: Install and configure
 
 ```bash
-cd /Users/justinwalton/Apps/ContextBroker
-pip install -e ".[dev]"
+pip install waystone
 ```
 
-Verify it worked:
+Then run the setup wizard **from your project directory** (not your home directory):
 
 ```bash
-waystone --help
+cd /path/to/your/project
+waystone configure
 ```
+
+The wizard walks you through three steps:
+1. **LLM provider** — choose Gemini, OpenAI, Anthropic, Local, or Custom; enter your API key
+2. **Claude Code integration** — MCP server (recommended) or hooks
+3. **Project marker** — marks the current directory so Waystone knows which graph to use
+
+Verify everything is working:
+
+```bash
+waystone doctor
+```
+
+> **Important:** Run `waystone configure` from inside your project directory, not your home directory. Waystone stores its data in `~/.waystone/` — running configure there causes a conflict with the project marker file. If you see a "Permission denied" or "already a directory" error, `cd` into your project first and re-run.
 
 ---
 
 ## Step 2: Configure your LLM API key
 
-Waystone needs an LLM to extract facts from transcripts. Retrieval (the hot path on every prompt) is fully local SQLite — no LLM calls at query time.
-
-A config file has been created at `~/.waystone/config.yaml`. Open it and replace `YOUR_GEMINI_API_KEY` with your key:
+`waystone configure` handles this for you. If you need to update it later, edit `~/.waystone/config.yaml`:
 
 ```bash
+# macOS / Linux
 open ~/.waystone/config.yaml
+
+# Windows
+notepad %USERPROFILE%\.waystone\config.yaml
 ```
 
-The file is pre-configured for Gemini (recommended). To use OpenAI instead, uncomment the OpenAI section and comment out the Gemini section.
-
-> **Note:** If you prefer not to put your key in the file, set `OPENAI_API_KEY` in your shell environment instead and remove the `api_key` line. The Gemini OpenAI-compatible endpoint also reads `OPENAI_API_KEY`.
+> **Tip:** If you prefer environment variables over a config file, set `GEMINI_API_KEY` (or `OPENAI_API_KEY`) in your shell and leave `api_key` out of the config.
 
 ---
 
@@ -392,6 +403,15 @@ pip uninstall waystone
 ---
 
 ## Troubleshooting
+
+**`waystone configure` crashes with "Permission denied" or "already a directory"**
+→ You ran `waystone configure` from your home directory. `~/.waystone/` already exists there as Waystone's data folder, so it can't also be a project marker file.
+→ Fix: `cd` into your project directory first, then re-run:
+```bash
+cd /path/to/your/project
+waystone configure
+```
+→ Alternatively, create the marker manually: `echo 'myproject' > /path/to/your/project/.waystone`
 
 **"No graph found" in the status line**
 → Run `waystone onboard myproject` or `waystone extract myproject <transcript>` to build the graph first.
