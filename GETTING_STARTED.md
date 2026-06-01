@@ -342,6 +342,10 @@ waystone export myproject
 
 # Initialize a fresh empty graph
 waystone init myproject
+
+# Run a preflight check
+waystone doctor          # check only
+waystone doctor --fix    # check + automatically fix what's possible
 ```
 
 ---
@@ -414,9 +418,19 @@ waystone configure
 → Alternatively, create the marker manually: `echo 'myproject' > /path/to/your/project/.waystone`
 
 **`waystone doctor` shows ✗ for UserPromptSubmit / Stop hooks**
-→ If you chose the **MCP server** integration during `waystone configure`, hooks are optional — the MCP path doesn't need them. Doctor shows them as `–  (optional — MCP is active)` in 0.3.2+.
-→ If you're on an older version or chose hooks integration: run `waystone configure` from your project directory and choose option 2 (Hooks) or 3 (Both).
-→ Hooks require the `waystone-hook-submit` and `waystone-hook-stop` entry points, which are only available in 0.3.2+. Upgrade: `pip install waystone --upgrade`
+→ Doctor output depends on what you chose during `waystone configure`:
+- **MCP-only (option 1)**: hooks show as `–  optional — MCP-only mode` — this is correct, not an error.
+- **Hooks-only (option 2)** or **Both (option 3)**: hooks are required and the ✗ is real. Re-run `waystone configure` from your project directory and choose option 2 or 3.
+- **No configure run yet**: run `waystone configure` first.
+→ If you see ✗ after running configure, try `waystone doctor --fix` to auto-install the hooks.
+
+**`waystone doctor` shows ✗ for MCP server registered**
+→ If you chose hooks-only (option 2), doctor shows `–  not selected — hooks-only mode` — this is informational, not a failure.
+→ If you chose MCP (option 1 or 3): re-run `waystone configure` to register it, or run manually:
+```bash
+claude mcp add waystone waystone mcp-serve
+```
+→ If `claude` isn't in PATH, Waystone writes the config directly to `~/.claude/claude_desktop_config.json`. Check that file — it should contain a `"waystone"` entry under `mcpServers`.
 
 **"No graph found" in the status line**
 → Run `waystone onboard myproject` or `waystone extract myproject <transcript>` to build the graph first.
