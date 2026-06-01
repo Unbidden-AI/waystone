@@ -2662,23 +2662,17 @@ def doctor_cmd(ctx, do_fix):
     )
 
     # --- LLM endpoint reachability ---
-    import httpx as _httpx
     base_url = llm_cfg.get("base_url", "http://localhost:1234/v1")
     llm_auth_failed = False
-    try:
-        r = _httpx.get(base_url.rstrip("/").rsplit("/", 1)[0] + "/models", timeout=5)
-        if r.status_code in (401, 403):
-            llm_auth_failed = True
-            _check(
-                "LLM endpoint reachable",
-                False,
-                f"{base_url} → HTTP {r.status_code} (auth failed — API key is wrong or missing)",
-            )
-        else:
-            _check("LLM endpoint reachable", r.status_code < 500,
-                   f"{base_url} → HTTP {r.status_code}")
-    except Exception as e:
-        _check("LLM endpoint reachable", False, f"{base_url} — {type(e).__name__}")
+    from .setup import test_llm_connection as _test_llm
+    _llm_ok, _llm_msg = _test_llm(
+        base_url,
+        api_key=llm_cfg.get("api_key"),
+        api_key_env=llm_cfg.get("api_key_env"),
+    )
+    if not _llm_ok and any(word in _llm_msg for word in ("invalid", "rejected", "auth")):
+        llm_auth_failed = True
+    _check("LLM endpoint reachable", _llm_ok, _llm_msg if not _llm_ok else "")
 
     # --- MCP package ---
     try:
@@ -2790,7 +2784,13 @@ def doctor_cmd(ctx, do_fix):
     click.echo("Attempting auto-fix...\n")
     fixed_any = False
 
-    from .setup import install_claude_md, install_hooks, register_mcp_server, write_llm_config
+    from .setup import (
+        install_claude_md,
+        install_hooks,
+        register_mcp_server,
+        test_llm_connection as _test_llm,
+        write_llm_config,
+    )
 
     # Fix: API key 403
     if llm_auth_failed:
@@ -2801,6 +2801,15 @@ def doctor_cmd(ctx, do_fix):
         if new_key:
             masked = new_key[:4] + "..." + new_key[-4:] if len(new_key) > 8 else "****"
             click.echo(f"  ✓  Key received ({masked})")
+            # Test the new key before saving
+            click.echo("  Testing...", nl=False)
+            test_ok, test_msg = _test_llm(llm_cfg.get("base_url", ""), api_key=new_key)
+            if test_ok:
+                click.echo(f"\r  ✓  {test_msg}          ")
+            else:
+                click.echo(f"\r  ✗  {test_msg}")
+                if not click.confirm("  Key may be invalid. Save it anyway?", default=False):
+                    new_key = ""
         if new_key:
             write_llm_config(
                 base_url=llm_cfg.get("base_url", ""),
@@ -2944,6 +2953,7 @@ def configure_cmd(non_interactive):
         existing_key = _os.environ.get(api_key_env, "")
         if existing_key:
             click.echo(f"  {api_key_env} already set in environment — using it.")
+            api_key = None  # will be read from env at runtime
         elif non_interactive:
             click.echo(f"  (Skipping key prompt in non-interactive mode.)")
         else:
@@ -2965,6 +2975,19 @@ def configure_cmd(non_interactive):
     base_url = prov["base_url"]
     if provider_key == "custom" and not non_interactive:
         base_url = click.prompt("  Base URL", default="https://api.openai.com/v1")
+
+    # --- Optional API key test ---
+    if not non_interactive and provider_key != "local" and base_url:
+        from .setup import test_llm_connection as _test_llm
+        click.echo("  Testing connection...", nl=False)
+        ok, msg = _test_llm(base_url, api_key=api_key, api_key_env=api_key_env)
+        if ok:
+            click.echo(f"\r  ✓  {msg}          ")
+        else:
+            click.echo(f"\r  ✗  {msg}")
+            click.echo("  You can continue and fix the key later, or press Ctrl-C to exit.")
+            if not click.confirm("  Continue anyway?", default=True):
+                raise SystemExit(1)
 
     # Write config
     cfg_path = write_llm_config(

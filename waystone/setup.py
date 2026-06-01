@@ -236,6 +236,90 @@ def install_claude_md() -> bool:
 
 
 # ---------------------------------------------------------------------------
+# LLM connection test
+# ---------------------------------------------------------------------------
+
+# Human-readable explanations for common HTTP status codes from LLM APIs
+_HTTP_MESSAGES: dict[int, str] = {
+    400: "bad request — the request was malformed (check model name or base URL)",
+    401: "invalid API key — the key is missing or not recognised by the provider",
+    403: "API key rejected — key may be expired, from the wrong project, or lack quota",
+    404: "endpoint not found — check that base_url is correct for this provider",
+    408: "request timed out — the provider took too long to respond",
+    422: "unprocessable request — check model name and request parameters",
+    429: "rate limited — you've hit the provider's request quota; wait and retry",
+    500: "provider internal error — this is on the provider's side; try again later",
+    502: "bad gateway — provider infrastructure issue; try again later",
+    503: "service unavailable — provider is down or overloaded; try again later",
+    504: "gateway timeout — provider is slow; try again later",
+}
+
+
+def test_llm_connection(
+    base_url: str,
+    api_key: str | None = None,
+    api_key_env: str | None = None,
+    timeout: float = 8.0,
+) -> tuple[bool, str]:
+    """Make a test request to the LLM endpoint and return (ok, human_message).
+
+    Tries GET /models first (standard OpenAI-compatible endpoint).
+    Falls back to a minimal chat completion if /models returns 404.
+    Resolves the API key from: explicit api_key arg → api_key_env env var → OPENAI_API_KEY.
+    """
+    import os as _os
+
+    import httpx as _httpx
+
+    # Resolve key
+    resolved_key = (
+        api_key
+        or (api_key_env and _os.environ.get(api_key_env))
+        or _os.environ.get("OPENAI_API_KEY")
+        or ""
+    )
+
+    headers = {"Authorization": f"Bearer {resolved_key}"} if resolved_key else {}
+    models_url = base_url.rstrip("/") + "/models"
+
+    try:
+        r = _httpx.get(models_url, headers=headers, timeout=timeout)
+    except _httpx.ConnectError:
+        return False, f"cannot reach {base_url} — check your internet connection and base URL"
+    except _httpx.TimeoutException:
+        return False, f"connection to {base_url} timed out after {timeout:.0f}s"
+    except Exception as exc:
+        return False, f"unexpected error connecting to {base_url}: {exc}"
+
+    code = r.status_code
+    if code == 200:
+        return True, f"connected successfully ({base_url})"
+
+    if code == 404:
+        # Some providers (e.g. Anthropic) don't expose /models — do a minimal chat call
+        chat_url = base_url.rstrip("/") + "/chat/completions"
+        try:
+            rc = _httpx.post(
+                chat_url,
+                headers={**headers, "Content-Type": "application/json"},
+                json={
+                    "model": "claude-haiku-4-5-20251001",
+                    "max_tokens": 1,
+                    "messages": [{"role": "user", "content": "hi"}],
+                },
+                timeout=timeout,
+            )
+            if rc.status_code in (200, 400):  # 400 = reached but bad params = auth works
+                return True, f"connected successfully ({base_url})"
+            code = rc.status_code
+        except Exception:
+            pass  # fall through to generic /models 404 message
+
+    msg = _HTTP_MESSAGES.get(code, f"HTTP {code} — unexpected response")
+    return False, msg
+
+
+# ---------------------------------------------------------------------------
 # MCP server registration
 # ---------------------------------------------------------------------------
 
