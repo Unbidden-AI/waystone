@@ -2599,17 +2599,31 @@ def import_sessions_cmd(ctx, project, session_files, verify, chunk_size, timeout
 
 
 @cli.command("doctor")
+@click.option("--fix", "do_fix", is_flag=True, default=False,
+              help="Attempt to automatically fix detected issues.")
 @click.pass_context
-def doctor_cmd(ctx):
+def doctor_cmd(ctx, do_fix):
     """Run a preflight check: config, LLM reachability, project marker, MCP.
 
     Prints a checklist of what's working and what needs attention.
-    Use this to diagnose setup issues before running waystone extract or waystone query.
+    Pass --fix to automatically resolve common issues (register MCP, install hooks,
+    seed the graph, save a corrected API key).
+
+    \b
+        waystone doctor          # check only
+        waystone doctor --fix    # check + fix
     """
     import os as _os
 
     config_path = ctx.obj["config_path"]
     ok = True
+    # State gathered during checks — used by --fix
+    marker_project: str | None = None
+    has_nodes = False
+    has_submit = False
+    mcp_registered = False
+    llm_auth_failed = False
+    llm_cfg: dict = {}
 
     def _check(label: str, passed: bool, detail: str = ""):
         nonlocal ok
@@ -2650,10 +2664,19 @@ def doctor_cmd(ctx):
     # --- LLM endpoint reachability ---
     import httpx as _httpx
     base_url = llm_cfg.get("base_url", "http://localhost:1234/v1")
+    llm_auth_failed = False
     try:
         r = _httpx.get(base_url.rstrip("/").rsplit("/", 1)[0] + "/models", timeout=5)
-        reachable = r.status_code < 500
-        _check("LLM endpoint reachable", reachable, f"{base_url} → HTTP {r.status_code}")
+        if r.status_code in (401, 403):
+            llm_auth_failed = True
+            _check(
+                "LLM endpoint reachable",
+                False,
+                f"{base_url} → HTTP {r.status_code} (auth failed — API key is wrong or missing)",
+            )
+        else:
+            _check("LLM endpoint reachable", r.status_code < 500,
+                   f"{base_url} → HTTP {r.status_code}")
     except Exception as e:
         _check("LLM endpoint reachable", False, f"{base_url} — {type(e).__name__}")
 
@@ -2756,9 +2779,74 @@ def doctor_cmd(ctx):
     click.echo()
     if ok:
         click.echo("All checks passed. Waystone is ready.")
-    else:
-        click.echo("Some checks failed. See above for remediation steps.")
+        return
+
+    # ------------------------------------------------------------------ --fix
+    if not do_fix:
+        click.echo("Some checks failed. Run 'waystone doctor --fix' to auto-fix what's possible.")
         sys.exit(1)
+
+    # Attempt auto-fixes for common issues
+    click.echo("Attempting auto-fix...\n")
+    fixed_any = False
+
+    from .setup import install_claude_md, install_hooks, register_mcp_server, write_llm_config
+
+    # Fix: API key 403
+    if llm_auth_failed:
+        api_key_env = llm_cfg.get("api_key_env", "OPENAI_API_KEY")
+        click.echo(f"  API key fix — your {api_key_env} is missing or invalid.")
+        new_key = click.prompt(f"  Enter your {api_key_env}", hide_input=True, default="", prompt_suffix=" (leave blank to skip): ").strip()
+        if new_key:
+            write_llm_config(
+                base_url=llm_cfg.get("base_url", ""),
+                model=llm_cfg.get("model", ""),
+                api_key_env=api_key_env,
+                api_key=new_key,
+            )
+            click.echo(f"  ✓  API key saved to ~/.waystone/config.yaml")
+            fixed_any = True
+        else:
+            click.echo(f"  –  Skipped. Set {api_key_env} in your shell or add api_key to ~/.waystone/config.yaml")
+
+    # Fix: MCP not registered
+    if not mcp_registered:
+        click.echo("  MCP fix — registering waystone MCP server...")
+        mcp_ok, mcp_msg = register_mcp_server()
+        prefix = "  ✓ " if mcp_ok else "  ✗ "
+        for line in mcp_msg.splitlines():
+            click.echo(f"{prefix}{line}")
+            prefix = "    "
+        if mcp_ok:
+            fixed_any = True
+
+    # Fix: hooks not installed (only when MCP is also absent or user wants both)
+    if not mcp_registered and not has_submit:
+        click.echo("  Hooks fix — installing Claude Code hooks...")
+        try:
+            added, skipped = install_hooks()
+            for label in added:
+                click.echo(f"  ✓  {label} added")
+            if install_claude_md():
+                click.echo("  ✓  Waystone section appended to ~/.claude/CLAUDE.md")
+            fixed_any = True
+        except Exception as e:
+            click.echo(f"  ✗  Could not install hooks: {e}")
+
+    # Fix: 0 nodes — offer to onboard
+    if marker_project and not has_nodes:
+        click.echo(f"  Graph fix — '{marker_project}' graph is empty.")
+        if click.confirm(f"  Run 'waystone onboard {marker_project}' now?", default=True):
+            import subprocess as _sp
+            result = _sp.run([sys.executable, "-m", "waystone.cli", "onboard", marker_project])
+            fixed_any = result.returncode == 0
+
+    click.echo()
+    if fixed_any:
+        click.echo("Fixes applied. Run 'waystone doctor' to verify.")
+    else:
+        click.echo("Nothing auto-fixed. Check the items above manually.")
+    sys.exit(0 if fixed_any else 1)
 
 
 @cli.command("configure")
