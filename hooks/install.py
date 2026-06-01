@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install Waystone hooks and status line into ~/.claude/settings.json.
+"""Install Waystone hooks, status line, and CLAUDE.md guidance into Claude Code.
 
 Run once per machine:
   python hooks/install.py
@@ -9,8 +9,9 @@ What it does:
      relevant context into each Claude prompt.
   2. Adds a Stop hook that records each session transcript to
      ~/.waystone/transcripts/<project>/.
-  3. Configures the status line to show CB retrieval metrics.
-  4. Backs up your existing settings.json before modifying it.
+  3. Configures the status line to show retrieval metrics.
+  4. Appends a Waystone usage section to ~/.claude/CLAUDE.md.
+  5. Backs up settings.json before modifying it.
 
 After installing:
   1. Mark your project directory:
@@ -22,110 +23,51 @@ After installing:
        waystone last-context
 """
 
-import json
-import shutil
 import sys
-from datetime import datetime
 from pathlib import Path
 
-SETTINGS_PATH = Path.home() / ".claude" / "settings.json"
-HOOK_DIR = Path(__file__).resolve().parent
+# Allow running from the repo root without installing the package
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-SUBMIT_HOOK_CMD = f"python {HOOK_DIR / 'engram_submit.py'}"
-STOP_HOOK_CMD = f"python {HOOK_DIR / 'engram_stop.py'}"
-STATUSLINE_CMD = f"python {HOOK_DIR / 'statusline.py'}"
+from waystone.setup import (  # noqa: E402
+    CLAUDE_MD_PATH,
+    SETTINGS_PATH,
+    install_claude_md,
+    install_hooks,
+)
+
+HOOK_DIR = Path(__file__).resolve().parent
 
 
 def main():
-    print("Waystone Hook Installer")
+    print("Waystone Installer")
     print("=" * 40)
 
-    # Load existing settings
-    settings: dict = {}
-    if SETTINGS_PATH.exists():
-        try:
-            settings = json.loads(SETTINGS_PATH.read_text()) or {}
-        except json.JSONDecodeError:
-            print(f"Warning: could not parse {SETTINGS_PATH} — will create fresh copy")
+    added, skipped = install_hooks(HOOK_DIR)
 
-        # Backup
-        backup = SETTINGS_PATH.with_suffix(
-            f".json.bak.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        )
-        shutil.copy(SETTINGS_PATH, backup)
-        print(f"Backed up settings to: {backup}")
+    for label in added:
+        print(f"\n  ✓  {label}: added")
+    for label in skipped:
+        print(f"\n  –  {label}: already installed (skipping)")
 
-    changed = False
-
-    # --- UserPromptSubmit hook ---
-    hooks = settings.setdefault("hooks", {})
-    submit_entries = hooks.setdefault("UserPromptSubmit", [])
-
-    existing_cmds = [
-        h.get("command", "")
-        for entry in submit_entries
-        for h in entry.get("hooks", [])
-    ]
-    if any("engram_submit" in c for c in existing_cmds):
-        print("\nUserPromptSubmit hook: already installed (skipping)")
-    else:
-        submit_entries.append({
-            "hooks": [{"type": "command", "command": SUBMIT_HOOK_CMD}]
-        })
-        print(f"\nUserPromptSubmit hook: added")
-        print(f"  {SUBMIT_HOOK_CMD}")
-        changed = True
-
-    # --- Stop hook (transcript recording) ---
-    stop_entries = hooks.setdefault("Stop", [])
-
-    existing_stop_cmds = [
-        h.get("command", "")
-        for entry in stop_entries
-        for h in entry.get("hooks", [])
-    ]
-    if any("engram_stop" in c for c in existing_stop_cmds):
-        print("\nStop hook: already installed (skipping)")
-    else:
-        stop_entries.append({
-            "hooks": [{"type": "command", "command": STOP_HOOK_CMD}]
-        })
-        print(f"\nStop hook (transcript recording): added")
-        print(f"  {STOP_HOOK_CMD}")
-        changed = True
-
-    # --- Status line ---
-    if "statusLine" in settings:
-        existing = settings["statusLine"]
-        existing_cmd = existing.get("command", "") if isinstance(existing, dict) else ""
-        if "statusline" in existing_cmd.lower() and "waystone" in existing_cmd.lower():
-            print("\nStatus line: already configured (skipping)")
-        else:
-            print(f"\nStatus line: already set to another command:")
-            print(f"  {existing_cmd or existing}")
-            print(f"  To use Waystone status line instead, set:")
-            print(f"    statusLine.command = \"{STATUSLINE_CMD}\"")
-    else:
-        settings["statusLine"] = {"type": "command", "command": STATUSLINE_CMD}
-        print(f"\nStatus line: configured")
-        print(f"  {STATUSLINE_CMD}")
-        changed = True
-
-    # Write
-    if changed:
-        SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
-        SETTINGS_PATH.write_text(json.dumps(settings, indent=2))
+    if added:
         print(f"\nSettings written: {SETTINGS_PATH}")
     else:
-        print("\nNo changes needed.")
+        print("\nNo changes to settings.json needed.")
+
+    if install_claude_md():
+        print(f"CLAUDE.md: Waystone section appended → {CLAUDE_MD_PATH}")
+    else:
+        print("CLAUDE.md: Waystone section already present (skipping)")
 
     print("\nNext steps:")
-    print("  1. Mark your project directory:")
+    print("  1. Restart Claude Code to pick up the new hooks and CLAUDE.md.")
+    print("  2. Mark your project directory:")
     print("       echo 'myproject' > /path/to/project/.waystone")
-    print("  2. Start a Claude Code session — transcripts are recorded automatically.")
-    print("  3. Extract a recorded transcript:")
+    print("  3. Start a session — transcripts are saved automatically on Stop.")
+    print("  4. Extract a transcript:")
     print("       waystone extract myproject ~/.waystone/transcripts/myproject/latest.md")
-    print("  4. Future sessions will auto-inject context. View what was injected:")
+    print("  5. Future sessions will auto-inject context. View what was injected:")
     print("       waystone last-context")
 
 

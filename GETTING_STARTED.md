@@ -115,16 +115,17 @@ After import, it runs a sample query so you immediately see your own knowledge r
 Use this path if you prefer automatic background extraction after every session.
 
 ```bash
-python /Users/justinwalton/Apps/ContextBroker/hooks/install.py
+python hooks/install.py
 ```
 
-This adds three things to `~/.claude/settings.json`:
+This makes four changes:
 
-| Hook | What it does |
-|------|-------------|
-| `UserPromptSubmit` | Queries the graph and injects relevant context into every prompt |
-| `Stop` | Records each session as a transcript to `~/.waystone/transcripts/<project>/` |
-| Status line | Shows retrieval metrics (nodes retrieved, tokens injected, latency) |
+| What | Where |
+|------|-------|
+| `UserPromptSubmit` hook | `~/.claude/settings.json` — queries the graph and injects relevant context into every prompt |
+| `Stop` hook | `~/.claude/settings.json` — records each session transcript to `~/.waystone/transcripts/<project>/` |
+| Status line | `~/.claude/settings.json` — shows retrieval metrics (nodes retrieved, tokens injected, latency) |
+| Waystone usage guide | `~/.claude/CLAUDE.md` — teaches Claude Code how to use Waystone and interpret injected context |
 
 **Restart Claude Code** after running the installer.
 

@@ -2733,6 +2733,205 @@ def doctor_cmd(ctx):
         sys.exit(1)
 
 
+@cli.command("configure")
+@click.option("--non-interactive", is_flag=True, hidden=True,
+              help="Skip prompts (used in tests)")
+def configure_cmd(non_interactive):
+    """Interactive setup wizard: configure LLM, Claude Code integration, and a project.
+
+    Run this once after 'pip install waystone':
+
+    \b
+        waystone configure
+
+    The wizard walks you through:
+      1. LLM provider — picks base URL, model, and API key
+      2. Claude Code integration — MCP server (recommended) or hooks
+      3. Project marker — optionally marks the current directory for tracking
+    """
+    import os as _os
+
+    from .setup import (
+        PROVIDERS,
+        WAYSTONE_CONFIG_PATH,
+        install_claude_md,
+        install_hooks,
+        register_mcp_server,
+        write_llm_config,
+    )
+
+    # ------------------------------------------------------------------ header
+    click.echo()
+    click.echo("Waystone Setup Wizard")
+    click.echo("=" * 50)
+    click.echo("This wizard configures Waystone in about 2 minutes.")
+    click.echo("Press Ctrl-C at any time to quit without saving.\n")
+
+    # --------------------------------------------------------- Step 1: LLM
+    click.echo("Step 1 of 3 — LLM for Extraction")
+    click.echo("-" * 35)
+
+    provider_keys = list(PROVIDERS.keys())
+    for i, key in enumerate(provider_keys, 1):
+        click.echo(f"  [{i}] {PROVIDERS[key]['label']}")
+
+    default_choice = "1"
+    if non_interactive:
+        choice_str = default_choice
+    else:
+        choice_str = click.prompt("\nProvider", default=default_choice)
+
+    try:
+        provider_key = provider_keys[int(choice_str) - 1]
+    except (ValueError, IndexError):
+        click.echo("Invalid choice — defaulting to Gemini.", err=True)
+        provider_key = "gemini"
+
+    prov = PROVIDERS[provider_key]
+
+    # Model
+    if prov["models"]:
+        click.echo(f"\n  Available models for {provider_key}:")
+        for j, m in enumerate(prov["models"], 1):
+            suffix = " (recommended)" if j == 1 else ""
+            click.echo(f"    [{j}] {m}{suffix}")
+        if non_interactive:
+            model = prov["default_model"]
+        else:
+            model = click.prompt("  Model", default=prov["default_model"])
+            # accept numeric shortcut
+            try:
+                idx = int(model) - 1
+                if 0 <= idx < len(prov["models"]):
+                    model = prov["models"][idx]
+            except ValueError:
+                pass
+    else:
+        if non_interactive:
+            model = prov["default_model"] or "my-local-model"
+        else:
+            model = click.prompt("  Model name", default=prov["default_model"] or "")
+
+    # API key
+    api_key: str | None = None
+    api_key_env: str | None = prov["api_key_env"]
+    if provider_key == "local":
+        click.echo("  (No API key needed for local inference.)")
+    elif provider_key == "custom":
+        api_key_env = click.prompt("  Env var name for API key", default="OPENAI_API_KEY") if not non_interactive else "OPENAI_API_KEY"
+
+    if api_key_env and provider_key not in ("local",):
+        existing_key = _os.environ.get(api_key_env, "")
+        if existing_key:
+            click.echo(f"  {api_key_env} already set in environment — using it.")
+        elif non_interactive:
+            click.echo(f"  (Skipping key prompt in non-interactive mode.)")
+        else:
+            if prov.get("key_url"):
+                click.echo(f"  Get a key: {prov['key_url']}")
+            raw = click.prompt(
+                f"  {api_key_env}",
+                default="",
+                hide_input=True,
+                prompt_suffix=" (leave blank to set later): ",
+            )
+            api_key = raw.strip() or None
+
+    # base_url for custom
+    base_url = prov["base_url"]
+    if provider_key == "custom" and not non_interactive:
+        base_url = click.prompt("  Base URL", default="https://api.openai.com/v1")
+
+    # Write config
+    cfg_path = write_llm_config(
+        base_url=base_url,
+        model=model,
+        api_key_env=api_key_env,
+        api_key=api_key,
+    )
+    click.echo(f"\n  ✓  Config written to {cfg_path}")
+
+    # ----------------------------------------- Step 2: Claude Code integration
+    click.echo()
+    click.echo("Step 2 of 3 — Claude Code Integration")
+    click.echo("-" * 35)
+    click.echo("  [1] MCP server (recommended) — Claude calls Waystone as a tool")
+    click.echo("  [2] Hooks — auto-inject context before every prompt + status line")
+    click.echo("  [3] Both — MCP server AND hooks")
+    click.echo("  [4] Skip — configure manually later")
+
+    if non_interactive:
+        integration_choice = "1"
+    else:
+        integration_choice = click.prompt("\nIntegration", default="1")
+
+    do_mcp = integration_choice in ("1", "3")
+    do_hooks = integration_choice in ("2", "3")
+
+    if do_mcp:
+        ok, msg = register_mcp_server()
+        prefix = "  ✓ " if ok else "  ✗ "
+        for line in msg.splitlines():
+            click.echo(f"{prefix}{line}")
+            prefix = "    "  # indent continuation lines
+
+    if do_hooks:
+        # Find the hooks directory relative to this file
+        hooks_dir = Path(__file__).resolve().parent.parent / "hooks"
+        if not hooks_dir.exists():
+            # Package install — hooks ship alongside waystone/
+            hooks_dir = Path(__file__).resolve().parent / "hooks"
+
+        if hooks_dir.exists():
+            added, skipped = install_hooks(hooks_dir)
+            for label in added:
+                click.echo(f"  ✓  {label} added to ~/.claude/settings.json")
+            for label in skipped:
+                click.echo(f"  –  {label} already installed")
+
+            if install_claude_md():
+                click.echo("  ✓  Waystone section appended to ~/.claude/CLAUDE.md")
+            else:
+                click.echo("  –  CLAUDE.md already has Waystone section")
+        else:
+            click.echo(
+                "  ✗  Hooks directory not found. Run 'python hooks/install.py' from the repo.",
+                err=True,
+            )
+
+    if integration_choice == "4":
+        click.echo("  –  Skipped. See GETTING_STARTED.md for manual setup instructions.")
+
+    # ----------------------------------------------- Step 3: Project marker
+    click.echo()
+    click.echo("Step 3 of 3 — Mark a Project (optional)")
+    click.echo("-" * 35)
+    click.echo("  Waystone identifies which graph to use via a '.waystone' file")
+    click.echo("  in your project root.\n")
+
+    if non_interactive:
+        mark = False
+    else:
+        mark = click.confirm("  Mark the current directory as a Waystone project?", default=True)
+
+    if mark:
+        default_name = Path.cwd().name
+        project_name = click.prompt("  Project name", default=default_name)
+        marker = Path.cwd() / ".waystone"
+        marker.write_text(project_name + "\n")
+        click.echo(f"  ✓  Created {marker} → project '{project_name}'")
+        click.echo(f"\n  Next: extract your first transcript or run 'waystone onboard {project_name}'")
+    else:
+        click.echo("  Skipped. When ready:")
+        click.echo("    echo 'myproject' > /path/to/your/project/.waystone")
+
+    # ------------------------------------------------------------------ done
+    click.echo()
+    click.echo("=" * 50)
+    click.echo("Setup complete. Run 'waystone doctor' to verify everything is working.")
+    click.echo()
+
+
 @cli.command("pause")
 def pause_cmd():
     """Pause background extraction (context injection continues from existing graph).
