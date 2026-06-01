@@ -2788,6 +2788,37 @@ def doctor_cmd(ctx, do_fix):
         _check("Stop hook installed", has_stop,
                "" if has_stop else "run 'waystone configure' and choose Hooks")
 
+    # --- Additional tools (Antigravity, Codex) ---
+    _extra_tools = config.get("integration_tools", []) or []
+
+    if "antigravity" in _extra_tools:
+        from .setup import ANTIGRAVITY_SETTINGS_PATH
+        _ag_has_hooks = False
+        if ANTIGRAVITY_SETTINGS_PATH.exists():
+            try:
+                _ag_cfg = _json.loads(ANTIGRAVITY_SETTINGS_PATH.read_text())
+                _ag_hooks = _ag_cfg.get("hooks", {})
+                _ag_has_hooks = any(
+                    "waystone" in str(h)
+                    for h in _ag_hooks.get("UserPromptSubmit", [])
+                )
+            except Exception:
+                pass
+        _check("Antigravity UserPromptSubmit hook", _ag_has_hooks,
+               "" if _ag_has_hooks else "run 'waystone configure' to reinstall Antigravity hooks")
+
+    if "codex" in _extra_tools:
+        from .setup import CODEX_HOOKS_PATH
+        _cx_has_hooks = CODEX_HOOKS_PATH.exists() and "waystone" in CODEX_HOOKS_PATH.read_text()
+        _check("Codex CLI hook", _cx_has_hooks,
+               "" if _cx_has_hooks else "run 'waystone configure' to reinstall Codex hooks")
+
+    if "openhands" in _extra_tools:
+        from .setup import OPENHANDS_HOOKS_PATH
+        _oh_has_hooks = OPENHANDS_HOOKS_PATH.exists() and "waystone" in OPENHANDS_HOOKS_PATH.read_text()
+        _check("OpenHands hook", _oh_has_hooks,
+               "" if _oh_has_hooks else "run 'waystone configure' to reinstall OpenHands hooks")
+
     click.echo()
     if ok:
         click.echo("All checks passed. Waystone is ready.")
@@ -2901,8 +2932,13 @@ def configure_cmd(non_interactive):
     from .setup import (
         PROVIDERS,
         WAYSTONE_CONFIG_PATH,
+        install_antigravity_hooks,
         install_claude_md,
+        install_codex_hooks,
         install_hooks,
+        install_openhands_hooks,
+        register_antigravity_mcp,
+        register_codex_mcp,
         register_mcp_server,
         save_integration_mode,
         write_llm_config,
@@ -3068,9 +3104,45 @@ def configure_cmd(non_interactive):
     if integration_choice == "4":
         click.echo("  –  Skipped. See GETTING_STARTED.md for manual setup instructions.")
 
+    # ----------------------------------------- Additional tools
+    extra_tools: list[str] = []
+    if not non_interactive and integration_choice != "4":
+        click.echo()
+        click.echo("  Additional tools (hooks — same scripts, different config paths):")
+
+        if click.confirm("  Also install for Google Antigravity?", default=False):
+            extra_tools.append("antigravity")
+            ag_added, ag_skipped = install_antigravity_hooks()
+            _ag_mcp_ok, _ag_mcp_msg = register_antigravity_mcp()
+            for label in ag_added:
+                click.echo(f"  ✓  {label} added")
+            for label in ag_skipped:
+                click.echo(f"  –  {label} already installed")
+            icon = "✓" if _ag_mcp_ok else "✗"
+            click.echo(f"  {icon}  {_ag_mcp_msg}")
+
+        if click.confirm("  Also install for Codex CLI?", default=False):
+            extra_tools.append("codex")
+            cx_added, cx_skipped = install_codex_hooks()
+            _cx_mcp_ok, _cx_mcp_msg = register_codex_mcp()
+            for label in cx_added:
+                click.echo(f"  ✓  {label} added")
+            for label in cx_skipped:
+                click.echo(f"  –  {label} already installed")
+            icon = "✓" if _cx_mcp_ok else "✗"
+            click.echo(f"  {icon}  {_cx_mcp_msg}")
+
+        if click.confirm("  Also install for OpenHands?", default=False):
+            extra_tools.append("openhands")
+            oh_added, oh_skipped = install_openhands_hooks()
+            for label in oh_added:
+                click.echo(f"  ✓  {label} added")
+            for label in oh_skipped:
+                click.echo(f"  –  {label} already installed")
+
     # Save the chosen mode so waystone doctor can contextualize its output
     from .setup import save_integration_mode as _save_mode
-    _save_mode(integration_choice)
+    _save_mode(integration_choice, extra_tools=extra_tools or None)
 
     # ----------------------------------------------- Step 3: Project marker
     click.echo()

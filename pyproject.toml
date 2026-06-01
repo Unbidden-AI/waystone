@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "waystone"
-version = "0.3.7"
+version = "0.3.8"
 description = "A context intelligence layer for LLM workflows"
 readme = "README.md"
 license = { text = "MIT" }
@@ -18,6 +18,7 @@ dependencies = [
     "mcp>=1.0",
     "litellm>=1.40",
     "tiktoken>=0.7",
+    "tomlkit>=0.12",
 ]
 
 [project.urls]

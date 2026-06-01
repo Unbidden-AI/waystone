@@ -378,6 +378,190 @@ def register_mcp_server() -> tuple[bool, str]:
 
 
 # ---------------------------------------------------------------------------
+# Google Antigravity integration
+# ---------------------------------------------------------------------------
+
+ANTIGRAVITY_SETTINGS_PATH = Path.home() / ".gemini" / "antigravity-cli" / "settings.json"
+ANTIGRAVITY_MCP_PATH = Path.home() / ".gemini" / "antigravity-cli" / "mcp_config.json"
+
+
+def install_antigravity_hooks(hook_dir: Path | None = None) -> tuple[list[str], list[str]]:
+    """Add Waystone hooks to ~/.gemini/antigravity-cli/settings.json.
+
+    Antigravity uses the same UserPromptSubmit/Stop hook events and JSON
+    stdin/stdout format as Claude Code, so the same entry-point commands work.
+    Returns (added, skipped) lists.
+    """
+    import shutil as _shutil
+
+    submit_cmd = "waystone-hook-submit" if _shutil.which("waystone-hook-submit") else (
+        f"python {hook_dir / 'waystone_submit.py'}" if hook_dir else "waystone-hook-submit"
+    )
+    stop_cmd = "waystone-hook-stop" if _shutil.which("waystone-hook-stop") else (
+        f"python {hook_dir / 'waystone_stop.py'}" if hook_dir else "waystone-hook-stop"
+    )
+
+    settings: dict = {}
+    if ANTIGRAVITY_SETTINGS_PATH.exists():
+        try:
+            settings = json.loads(ANTIGRAVITY_SETTINGS_PATH.read_text()) or {}
+        except json.JSONDecodeError:
+            pass
+
+    added: list[str] = []
+    skipped: list[str] = []
+    hooks = settings.setdefault("hooks", {})
+
+    # UserPromptSubmit
+    submit_entries = hooks.setdefault("UserPromptSubmit", [])
+    existing_submit = [h.get("command", "") for e in submit_entries for h in e.get("hooks", [])]
+    if any("waystone" in c for c in existing_submit):
+        skipped.append("Antigravity UserPromptSubmit hook")
+    else:
+        submit_entries.append({"hooks": [{"type": "command", "command": submit_cmd}]})
+        added.append("Antigravity UserPromptSubmit hook")
+
+    # Stop
+    stop_entries = hooks.setdefault("Stop", [])
+    existing_stop = [h.get("command", "") for e in stop_entries for h in e.get("hooks", [])]
+    if any("waystone" in c for c in existing_stop):
+        skipped.append("Antigravity Stop hook")
+    else:
+        stop_entries.append({"hooks": [{"type": "command", "command": stop_cmd}]})
+        added.append("Antigravity Stop hook")
+
+    if added:
+        ANTIGRAVITY_SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        ANTIGRAVITY_SETTINGS_PATH.write_text(json.dumps(settings, indent=2))
+
+    return added, skipped
+
+
+def register_antigravity_mcp() -> tuple[bool, str]:
+    """Write Waystone MCP server config to Antigravity's mcp_config.json."""
+    ANTIGRAVITY_MCP_PATH.parent.mkdir(parents=True, exist_ok=True)
+    existing: dict = {}
+    if ANTIGRAVITY_MCP_PATH.exists():
+        try:
+            existing = json.loads(ANTIGRAVITY_MCP_PATH.read_text())
+        except Exception:
+            pass
+    servers = existing.setdefault("mcpServers", {})
+    if "waystone" in servers:
+        return True, f"MCP server already in {ANTIGRAVITY_MCP_PATH}"
+    servers["waystone"] = {"command": "waystone", "args": ["mcp-serve"]}
+    ANTIGRAVITY_MCP_PATH.write_text(json.dumps(existing, indent=2))
+    return True, f"MCP server written to {ANTIGRAVITY_MCP_PATH}"
+
+
+# ---------------------------------------------------------------------------
+# OpenAI Codex CLI integration
+# ---------------------------------------------------------------------------
+
+CODEX_HOOKS_PATH = Path.home() / ".codex" / "hooks.json"   # hooks (JSON)
+CODEX_CONFIG_PATH = Path.home() / ".codex" / "config.toml"  # MCP + settings (TOML)
+
+
+def _install_hooks_json(
+    hooks_path: Path,
+    submit_cmd: str,
+    stop_cmd: str,
+    label_prefix: str,
+) -> tuple[list[str], list[str]]:
+    """Generic JSON hooks.json installer shared by Codex and OpenHands."""
+    settings: dict = {}
+    if hooks_path.exists():
+        try:
+            settings = json.loads(hooks_path.read_text()) or {}
+        except json.JSONDecodeError:
+            pass
+
+    added: list[str] = []
+    skipped: list[str] = []
+    hooks = settings.setdefault("hooks", {})
+
+    for event, cmd, label in [
+        ("UserPromptSubmit", submit_cmd, f"{label_prefix} UserPromptSubmit hook"),
+        ("Stop", stop_cmd, f"{label_prefix} Stop hook"),
+    ]:
+        entries = hooks.setdefault(event, [])
+        existing_cmds = [e.get("command", "") for e in entries if isinstance(e, dict)]
+        if any("waystone" in c for c in existing_cmds):
+            skipped.append(label)
+        else:
+            entries.append({"type": "command", "command": cmd})
+            added.append(label)
+
+    if added:
+        hooks_path.parent.mkdir(parents=True, exist_ok=True)
+        hooks_path.write_text(json.dumps(settings, indent=2))
+
+    return added, skipped
+
+
+def install_codex_hooks(hook_dir: Path | None = None) -> tuple[list[str], list[str]]:
+    """Add Waystone hooks to ~/.codex/hooks.json."""
+    import shutil as _shutil
+    submit_cmd = "waystone-hook-submit" if _shutil.which("waystone-hook-submit") else (
+        f"python {hook_dir / 'waystone_submit.py'}" if hook_dir else "waystone-hook-submit"
+    )
+    stop_cmd = "waystone-hook-stop" if _shutil.which("waystone-hook-stop") else (
+        f"python {hook_dir / 'waystone_stop.py'}" if hook_dir else "waystone-hook-stop"
+    )
+    return _install_hooks_json(CODEX_HOOKS_PATH, submit_cmd, stop_cmd, "Codex")
+
+
+def register_codex_mcp() -> tuple[bool, str]:
+    """Add Waystone as an MCP server in ~/.codex/config.toml."""
+    try:
+        import tomlkit
+    except ImportError:
+        existing = CODEX_CONFIG_PATH.read_text() if CODEX_CONFIG_PATH.exists() else ""
+        if "waystone" in existing and "mcp_servers" in existing:
+            return True, f"MCP server already in {CODEX_CONFIG_PATH}"
+        snippet = '\n[mcp_servers.waystone]\ncommand = "waystone"\nargs = ["mcp-serve"]\n'
+        CODEX_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        CODEX_CONFIG_PATH.write_text(existing + snippet)
+        return True, f"MCP server appended to {CODEX_CONFIG_PATH}"
+
+    doc = tomlkit.parse(CODEX_CONFIG_PATH.read_text()) if CODEX_CONFIG_PATH.exists() else tomlkit.document()
+    mcp = doc.get("mcp_servers", tomlkit.table())
+    if "waystone" in mcp:
+        return True, f"MCP server already in {CODEX_CONFIG_PATH}"
+    entry = tomlkit.table()
+    entry.add("command", "waystone")
+    entry.add("args", ["mcp-serve"])
+    mcp["waystone"] = entry
+    doc["mcp_servers"] = mcp
+    CODEX_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    CODEX_CONFIG_PATH.write_text(tomlkit.dumps(doc))
+    return True, f"MCP server written to {CODEX_CONFIG_PATH}"
+
+
+# ---------------------------------------------------------------------------
+# OpenHands integration  (https://docs.openhands.dev)
+# ---------------------------------------------------------------------------
+
+OPENHANDS_HOOKS_PATH = Path.home() / ".openhands" / "hooks.json"
+
+
+def install_openhands_hooks(hook_dir: Path | None = None) -> tuple[list[str], list[str]]:
+    """Add Waystone hooks to ~/.openhands/hooks.json.
+
+    OpenHands uses the same UserPromptSubmit/Stop events and additionalContext
+    protocol as Claude Code (added in OpenHands 1.6.0, March 2026).
+    """
+    import shutil as _shutil
+    submit_cmd = "waystone-hook-submit" if _shutil.which("waystone-hook-submit") else (
+        f"python {hook_dir / 'waystone_submit.py'}" if hook_dir else "waystone-hook-submit"
+    )
+    stop_cmd = "waystone-hook-stop" if _shutil.which("waystone-hook-stop") else (
+        f"python {hook_dir / 'waystone_stop.py'}" if hook_dir else "waystone-hook-stop"
+    )
+    return _install_hooks_json(OPENHANDS_HOOKS_PATH, submit_cmd, stop_cmd, "OpenHands")
+
+
+# ---------------------------------------------------------------------------
 # Integration mode persistence
 # ---------------------------------------------------------------------------
 
@@ -389,8 +573,8 @@ _INTEGRATION_MODES = {
 }
 
 
-def save_integration_mode(choice: str) -> None:
-    """Persist the chosen integration mode (1-4) to ~/.waystone/config.yaml."""
+def save_integration_mode(choice: str, extra_tools: list[str] | None = None) -> None:
+    """Persist the chosen integration mode and extra tools to ~/.waystone/config.yaml."""
     mode = _INTEGRATION_MODES.get(choice, "skip")
     WAYSTONE_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     existing: dict = {}
@@ -398,5 +582,7 @@ def save_integration_mode(choice: str) -> None:
         with open(WAYSTONE_CONFIG_PATH) as f:
             existing = yaml.safe_load(f) or {}
     existing["integration_mode"] = mode
+    if extra_tools is not None:
+        existing["integration_tools"] = extra_tools
     with open(WAYSTONE_CONFIG_PATH, "w") as f:
         yaml.dump(existing, f, default_flow_style=False, sort_keys=False)
