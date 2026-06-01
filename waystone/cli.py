@@ -2796,7 +2796,11 @@ def doctor_cmd(ctx, do_fix):
     if llm_auth_failed:
         api_key_env = llm_cfg.get("api_key_env", "OPENAI_API_KEY")
         click.echo(f"  API key fix — your {api_key_env} is missing or invalid.")
+        click.echo("  (Your key will not be shown as you type — this is normal)")
         new_key = click.prompt(f"  Enter your {api_key_env}", hide_input=True, default="", prompt_suffix=" (leave blank to skip): ").strip()
+        if new_key:
+            masked = new_key[:4] + "..." + new_key[-4:] if len(new_key) > 8 else "****"
+            click.echo(f"  ✓  Key received ({masked})")
         if new_key:
             write_llm_config(
                 base_url=llm_cfg.get("base_url", ""),
@@ -2945,13 +2949,17 @@ def configure_cmd(non_interactive):
         else:
             if prov.get("key_url"):
                 click.echo(f"  Get a key: {prov['key_url']}")
+            click.echo("  (Your key will not be shown as you type — this is normal)")
             raw = click.prompt(
                 f"  {api_key_env}",
                 default="",
                 hide_input=True,
-                prompt_suffix=" (leave blank to set later): ",
+                prompt_suffix=": ",
             )
             api_key = raw.strip() or None
+            if api_key:
+                masked = api_key[:4] + "..." + api_key[-4:] if len(api_key) > 8 else "****"
+                click.echo(f"  ✓  Key received ({masked})")
 
     # base_url for custom
     base_url = prov["base_url"]
