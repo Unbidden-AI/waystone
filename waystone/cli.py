@@ -2819,6 +2819,11 @@ def doctor_cmd(ctx, do_fix):
         _check("OpenHands hook", _oh_has_hooks,
                "" if _oh_has_hooks else "run 'waystone configure' to reinstall OpenHands hooks")
 
+    if "opencode" in _extra_tools:
+        from .setup import OPENCODE_PLUGIN_PATH
+        _check("OpenCode plugin installed", OPENCODE_PLUGIN_PATH.exists(),
+               "" if OPENCODE_PLUGIN_PATH.exists() else "run 'waystone configure' to reinstall OpenCode plugin")
+
     click.echo()
     if ok:
         click.echo("All checks passed. Waystone is ready.")
@@ -2936,6 +2941,7 @@ def configure_cmd(non_interactive):
         install_claude_md,
         install_codex_hooks,
         install_hooks,
+        install_opencode_plugin,
         install_openhands_hooks,
         register_antigravity_mcp,
         register_codex_mcp,
@@ -3139,6 +3145,13 @@ def configure_cmd(non_interactive):
                 click.echo(f"  ✓  {label} added")
             for label in oh_skipped:
                 click.echo(f"  –  {label} already installed")
+
+        if click.confirm("  Also install for OpenCode?", default=False):
+            extra_tools.append("opencode")
+            oc_ok, oc_msg = install_opencode_plugin()
+            click.echo(f"  {'✓' if oc_ok else '✗'}  {oc_msg}")
+            if oc_ok:
+                click.echo("  (OpenCode auto-loads plugins from ~/.config/opencode/plugins/ — no restart needed)")
 
     # Save the chosen mode so waystone doctor can contextualize its output
     from .setup import save_integration_mode as _save_mode

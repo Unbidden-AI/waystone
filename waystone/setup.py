@@ -562,6 +562,75 @@ def install_openhands_hooks(hook_dir: Path | None = None) -> tuple[list[str], li
 
 
 # ---------------------------------------------------------------------------
+# OpenCode integration  (https://opencode.ai)
+# ---------------------------------------------------------------------------
+
+OPENCODE_PLUGIN_DIR = Path.home() / ".config" / "opencode" / "plugins"
+OPENCODE_PLUGIN_PATH = OPENCODE_PLUGIN_DIR / "waystone-context.js"
+
+# JavaScript plugin for OpenCode — uses the chat.message hook to inject
+# Waystone graph context before each user message reaches the model.
+_OPENCODE_PLUGIN = """\
+// waystone-context.js — Waystone context injection for OpenCode
+// Auto-loaded from ~/.config/opencode/plugins/
+// Requires: waystone installed (pip install waystone)
+
+import { execSync } from "child_process";
+import { existsSync, readFileSync } from "fs";
+import { join, dirname } from "path";
+
+function detectProject(cwd) {
+  let dir = cwd || process.cwd();
+  const home = process.env.HOME || process.env.USERPROFILE || "/";
+  while (dir && dir !== home && dir !== dirname(dir)) {
+    const marker = join(dir, ".waystone");
+    if (existsSync(marker)) {
+      try { return readFileSync(marker, "utf8").trim(); } catch {}
+    }
+    dir = dirname(dir);
+  }
+  return (cwd || process.cwd()).split(/[\\/]/).pop();
+}
+
+export const WaystoneContext = async ({ directory }) => {
+  return {
+    "chat.message": async (message) => {
+      if (!message?.content) return message;
+      const projectName = detectProject(directory);
+      try {
+        const query = JSON.stringify(String(message.content).slice(0, 500));
+        const result = execSync(
+          `waystone query ${JSON.stringify(projectName)} ${query} --format markdown --top-k 10`,
+          { timeout: 5000, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }
+        );
+        if (result?.trim()) {
+          message.content = `[Waystone: project context]\\n${result.trim()}\\n\\n${message.content}`;
+        }
+      } catch {}
+      return message;
+    }
+  };
+};
+"""
+
+
+def install_opencode_plugin() -> tuple[bool, str]:
+    """Write the Waystone JS plugin to ~/.config/opencode/plugins/.
+
+    OpenCode auto-loads .js files from this directory without any config change.
+    Returns (success, message).
+    """
+    if OPENCODE_PLUGIN_PATH.exists():
+        return True, f"OpenCode plugin already at {OPENCODE_PLUGIN_PATH}"
+    try:
+        OPENCODE_PLUGIN_DIR.mkdir(parents=True, exist_ok=True)
+        OPENCODE_PLUGIN_PATH.write_text(_OPENCODE_PLUGIN)
+        return True, f"OpenCode plugin written to {OPENCODE_PLUGIN_PATH}"
+    except Exception as exc:
+        return False, f"Could not write OpenCode plugin: {exc}"
+
+
+# ---------------------------------------------------------------------------
 # Integration mode persistence
 # ---------------------------------------------------------------------------
 
