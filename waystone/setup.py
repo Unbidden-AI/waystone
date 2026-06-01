@@ -323,30 +323,80 @@ def test_llm_connection(
 # MCP server registration
 # ---------------------------------------------------------------------------
 
-def register_mcp_server() -> tuple[bool, str]:
-    """Register Waystone as a Claude Code MCP server via `claude mcp add`.
+def _write_mcp_config_directly() -> tuple[bool, str]:
+    """Write Waystone MCP entry directly to ~/.claude/claude_desktop_config.json.
 
+    Used as a fallback when the `claude` CLI is not in PATH.
+    """
+    config_path = Path.home() / ".claude" / "claude_desktop_config.json"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+
+    existing: dict = {}
+    if config_path.exists():
+        try:
+            existing = json.loads(config_path.read_text())
+        except Exception:
+            pass
+
+    servers = existing.setdefault("mcpServers", {})
+    if "waystone" in servers:
+        return True, f"MCP server already registered in {config_path}"
+
+    servers["waystone"] = {"command": "waystone", "args": ["mcp-serve"]}
+    config_path.write_text(json.dumps(existing, indent=2))
+    return True, f"MCP server config written to {config_path}"
+
+
+def register_mcp_server() -> tuple[bool, str]:
+    """Register Waystone as a Claude Code MCP server.
+
+    Tries `claude mcp add` first; falls back to writing claude_desktop_config.json
+    directly when the claude CLI is not in PATH (e.g. first-time Windows installs).
     Returns (success, message).
     """
     import shutil as _shutil
     import subprocess as _subprocess
 
-    if not _shutil.which("claude"):
-        snippet = json.dumps(
-            {"mcpServers": {"waystone": {"command": "waystone", "args": ["mcp-serve"]}}},
-            indent=2,
+    if _shutil.which("claude"):
+        result = _subprocess.run(
+            ["claude", "mcp", "add", "waystone", "waystone", "mcp-serve"],
+            capture_output=True,
+            text=True,
         )
-        return False, (
-            "claude CLI not found in PATH.\n"
-            "Add this to ~/.claude/claude_desktop_config.json manually:\n\n"
-            + snippet
-        )
+        if result.returncode == 0:
+            return True, "MCP server registered via `claude mcp add waystone`"
+        # CLI present but command failed — try direct write as fallback
+        cli_err = result.stderr.strip() or result.stdout.strip()
+    else:
+        cli_err = ""
 
-    result = _subprocess.run(
-        ["claude", "mcp", "add", "waystone", "waystone", "mcp-serve"],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode == 0:
-        return True, "MCP server registered via `claude mcp add waystone`"
-    return False, f"claude mcp add failed: {result.stderr.strip() or result.stdout.strip()}"
+    ok, msg = _write_mcp_config_directly()
+    if ok:
+        return True, msg
+    hint = f" (cli error: {cli_err})" if cli_err else ""
+    return False, f"Could not register MCP server{hint}. Add manually to ~/.claude/claude_desktop_config.json"
+
+
+# ---------------------------------------------------------------------------
+# Integration mode persistence
+# ---------------------------------------------------------------------------
+
+_INTEGRATION_MODES = {
+    "1": "mcp",
+    "2": "hooks",
+    "3": "both",
+    "4": "skip",
+}
+
+
+def save_integration_mode(choice: str) -> None:
+    """Persist the chosen integration mode (1-4) to ~/.waystone/config.yaml."""
+    mode = _INTEGRATION_MODES.get(choice, "skip")
+    WAYSTONE_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    existing: dict = {}
+    if WAYSTONE_CONFIG_PATH.exists():
+        with open(WAYSTONE_CONFIG_PATH) as f:
+            existing = yaml.safe_load(f) or {}
+    existing["integration_mode"] = mode
+    with open(WAYSTONE_CONFIG_PATH, "w") as f:
+        yaml.dump(existing, f, default_flow_style=False, sort_keys=False)

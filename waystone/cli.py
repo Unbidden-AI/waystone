@@ -2724,9 +2724,12 @@ def doctor_cmd(ctx, do_fix):
     settings_path = Path.home() / ".claude" / "settings.json"
     mcp_config_path = Path.home() / ".claude" / "claude_desktop_config.json"
 
-    # Check if waystone MCP server is registered (hooks become optional if so).
-    # Claude Code writes MCP config to claude_desktop_config.json; some versions
-    # also write or read from settings.json — check both.
+    # Read the integration mode saved by `waystone configure`
+    _int_mode = config.get("integration_mode", None)   # mcp | hooks | both | skip | None
+    wants_mcp   = _int_mode in (None, "mcp", "both")
+    wants_hooks = _int_mode in (None, "hooks", "both")
+
+    # Detect MCP registration (check both claude_desktop_config.json and settings.json)
     mcp_registered = False
     import json as _json
     for _mcp_path in [mcp_config_path, settings_path]:
@@ -2739,12 +2742,18 @@ def doctor_cmd(ctx, do_fix):
             except Exception:
                 pass
 
-    _check(
-        "MCP server registered",
-        mcp_registered,
-        "" if mcp_registered else "run 'waystone configure' and choose MCP, or: claude mcp add waystone waystone mcp-serve",
-    )
+    if _int_mode == "hooks":
+        click.echo("  –  MCP server (not selected — hooks-only mode)")
+    elif _int_mode == "skip":
+        click.echo("  –  MCP server (skipped during configure)")
+    else:
+        _check(
+            "MCP server registered",
+            mcp_registered,
+            "" if mcp_registered else "run 'waystone configure' and choose MCP, or: claude mcp add waystone waystone mcp-serve",
+        )
 
+    # Detect hooks
     if settings_path.exists():
         try:
             settings = _json.loads(settings_path.read_text())
@@ -2757,26 +2766,27 @@ def doctor_cmd(ctx, do_fix):
                 "waystone" in str(h)
                 for h in hooks.get("Stop", [])
             )
-            if mcp_registered:
-                # Hooks are optional when MCP is active — show as info, not failure
-                click.echo(
-                    f"  {'✓' if has_submit else '–'}  UserPromptSubmit hook"
-                    f"{'  (active)' if has_submit else '  (optional — MCP is active)'}"
-                )
-                click.echo(
-                    f"  {'✓' if has_stop else '–'}  Stop hook (transcript recording)"
-                    f"{'  (active)' if has_stop else '  (optional — MCP is active)'}"
-                )
-            else:
-                _check("UserPromptSubmit hook installed", has_submit,
-                       "" if has_submit else "run 'waystone configure' and choose Hooks")
-                _check("Stop hook installed", has_stop,
-                       "" if has_stop else "run 'waystone configure' and choose Hooks")
         except Exception:
+            has_submit = has_stop = False
             _check("Claude Code settings readable", False, str(settings_path))
     else:
+        has_submit = has_stop = False
         _check("Claude Code settings found", False,
                f"{settings_path} missing — Claude Code not installed or not yet run")
+
+    if _int_mode == "mcp":
+        # Hooks are optional — show as info
+        click.echo(f"  {'✓' if has_submit else '–'}  UserPromptSubmit hook"
+                   f"{'  (active)' if has_submit else '  (optional — MCP-only mode)'}")
+        click.echo(f"  {'✓' if has_stop else '–'}  Stop hook (transcript recording)"
+                   f"{'  (active)' if has_stop else '  (optional — MCP-only mode)'}")
+    elif _int_mode == "skip":
+        click.echo("  –  Hooks (skipped during configure)")
+    else:
+        _check("UserPromptSubmit hook installed", has_submit,
+               "" if has_submit else "run 'waystone configure' and choose Hooks")
+        _check("Stop hook installed", has_stop,
+               "" if has_stop else "run 'waystone configure' and choose Hooks")
 
     click.echo()
     if ok:
@@ -2894,6 +2904,7 @@ def configure_cmd(non_interactive):
         install_claude_md,
         install_hooks,
         register_mcp_server,
+        save_integration_mode,
         write_llm_config,
     )
 
@@ -3057,15 +3068,9 @@ def configure_cmd(non_interactive):
     if integration_choice == "4":
         click.echo("  –  Skipped. See GETTING_STARTED.md for manual setup instructions.")
 
-    # Always try to register the MCP server — it's idempotent and safe to run
-    # even when hooks were the primary choice. This ensures `waystone doctor`
-    # shows ✓ MCP server registered without requiring a second configure pass.
-    if not non_interactive and integration_choice != "1":
-        # Only auto-register when the user didn't already pick MCP (avoid double output)
-        ok, msg = register_mcp_server()
-        if ok:
-            click.echo(f"  ✓  MCP server also registered (for good measure)")
-        # If it fails (e.g. claude not in PATH), stay silent — not a blocker
+    # Save the chosen mode so waystone doctor can contextualize its output
+    from .setup import save_integration_mode as _save_mode
+    _save_mode(integration_choice)
 
     # ----------------------------------------------- Step 3: Project marker
     click.echo()
