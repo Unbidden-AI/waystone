@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "waystone"
-version = "0.3.1"
+version = "0.3.2"
 description = "A context intelligence layer for LLM workflows"
 readme = "README.md"
 license = { text = "MIT" }
@@ -36,6 +36,8 @@ openclaw = ["pyyaml>=6.0"]  # no extra deps beyond core; pyyaml already required
 [project.scripts]
 waystone = "waystone.cli:cli"
 waystone-mcp = "waystone.mcp_server:run_server"
+waystone-hook-submit = "waystone._hooks.submit:main"
+waystone-hook-stop = "waystone._hooks.stop:main"
 
 [tool.setuptools.packages.find]
 include = ["waystone*"]

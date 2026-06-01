@@ -43,7 +43,7 @@ def main():
     print("Waystone Installer")
     print("=" * 40)
 
-    added, skipped = install_hooks(HOOK_DIR)
+    added, skipped = install_hooks(hook_dir=HOOK_DIR)
 
     for label in added:
         print(f"\n  ✓  {label}: added")

@@ -2700,10 +2700,27 @@ def doctor_cmd(ctx):
                 "" if has_nodes else f"run 'waystone onboard {marker_project}' to import sessions",
             )
 
-    # --- Claude Code hooks ---
+    # --- Claude Code integration ---
     settings_path = Path.home() / ".claude" / "settings.json"
+    mcp_config_path = Path.home() / ".claude" / "claude_desktop_config.json"
+
+    # Check if waystone MCP server is registered (hooks become optional if so)
+    mcp_registered = False
+    import json as _json
+    if mcp_config_path.exists():
+        try:
+            mcp_cfg = _json.loads(mcp_config_path.read_text())
+            mcp_registered = "waystone" in mcp_cfg.get("mcpServers", {})
+        except Exception:
+            pass
+
+    _check(
+        "MCP server registered",
+        mcp_registered,
+        "" if mcp_registered else "run 'waystone configure' and choose MCP, or: claude mcp add waystone waystone mcp-serve",
+    )
+
     if settings_path.exists():
-        import json as _json
         try:
             settings = _json.loads(settings_path.read_text())
             hooks = settings.get("hooks", {})
@@ -2715,10 +2732,21 @@ def doctor_cmd(ctx):
                 "waystone" in str(h)
                 for h in hooks.get("Stop", [])
             )
-            _check("UserPromptSubmit hook installed", has_submit,
-                   "" if has_submit else "run hooks/install.py or use MCP server instead")
-            _check("Stop hook installed", has_stop,
-                   "" if has_stop else "run hooks/install.py or use MCP server instead")
+            if mcp_registered:
+                # Hooks are optional when MCP is active — show as info, not failure
+                click.echo(
+                    f"  {'✓' if has_submit else '–'}  UserPromptSubmit hook"
+                    f"{'  (active)' if has_submit else '  (optional — MCP is active)'}"
+                )
+                click.echo(
+                    f"  {'✓' if has_stop else '–'}  Stop hook (transcript recording)"
+                    f"{'  (active)' if has_stop else '  (optional — MCP is active)'}"
+                )
+            else:
+                _check("UserPromptSubmit hook installed", has_submit,
+                       "" if has_submit else "run 'waystone configure' and choose Hooks")
+                _check("Stop hook installed", has_stop,
+                       "" if has_stop else "run 'waystone configure' and choose Hooks")
         except Exception:
             _check("Claude Code settings readable", False, str(settings_path))
     else:

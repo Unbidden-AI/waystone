@@ -127,14 +127,33 @@ def write_llm_config(
 # Claude Code settings.json
 # ---------------------------------------------------------------------------
 
-def install_hooks(hook_dir: Path) -> tuple[list[str], list[str]]:
+def install_hooks(hook_dir: Path | None = None) -> tuple[list[str], list[str]]:
     """Add Waystone hooks and status line to ~/.claude/settings.json.
+
+    Uses pip-installed entry points (waystone-hook-submit / waystone-hook-stop)
+    when available; falls back to repo-relative script paths when hook_dir is given
+    and the entry points are not installed.
 
     Returns (added, skipped) lists of label strings.
     """
-    submit_cmd = f"python {hook_dir / 'waystone_submit.py'}"
-    stop_cmd = f"python {hook_dir / 'waystone_stop.py'}"
-    statusline_cmd = f"python {hook_dir / 'statusline.py'}"
+    import shutil as _shutil
+
+    # Prefer entry-point commands (pip install) over raw script paths (repo clone)
+    if _shutil.which("waystone-hook-submit"):
+        submit_cmd = "waystone-hook-submit"
+        stop_cmd = "waystone-hook-stop"
+        statusline_cmd = "waystone-statusline" if _shutil.which("waystone-statusline") else (
+            f"python {hook_dir / 'statusline.py'}" if hook_dir else "waystone-statusline"
+        )
+    elif hook_dir:
+        submit_cmd = f"python {hook_dir / 'waystone_submit.py'}"
+        stop_cmd = f"python {hook_dir / 'waystone_stop.py'}"
+        statusline_cmd = f"python {hook_dir / 'statusline.py'}"
+    else:
+        raise RuntimeError(
+            "waystone-hook-submit entry point not found and no hook_dir provided. "
+            "Run 'pip install waystone' first."
+        )
 
     settings: dict = {}
     if SETTINGS_PATH.exists():
@@ -159,7 +178,7 @@ def install_hooks(hook_dir: Path) -> tuple[list[str], list[str]]:
         for e in submit_entries
         for h in e.get("hooks", [])
     ]
-    if any("waystone_submit" in c or "engram_submit" in c for c in existing_submit):
+    if any("waystone_submit" in c or "engram_submit" in c or "waystone-hook-submit" in c for c in existing_submit):
         skipped.append("UserPromptSubmit hook")
     else:
         submit_entries.append({"hooks": [{"type": "command", "command": submit_cmd}]})
@@ -172,7 +191,7 @@ def install_hooks(hook_dir: Path) -> tuple[list[str], list[str]]:
         for e in stop_entries
         for h in e.get("hooks", [])
     ]
-    if any("waystone_stop" in c or "engram_stop" in c for c in existing_stop):
+    if any("waystone_stop" in c or "engram_stop" in c or "waystone-hook-stop" in c for c in existing_stop):
         skipped.append("Stop hook")
     else:
         stop_entries.append({"hooks": [{"type": "command", "command": stop_cmd}]})
