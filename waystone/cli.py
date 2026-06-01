@@ -3063,87 +3063,81 @@ def configure_cmd(non_interactive):
     click.echo()
     click.echo("Step 2 of 3 — Integration Targets")
     click.echo("-" * 35)
-    click.echo("  Enter numbers space-separated (e.g. '1 3'), or Enter to skip.\n")
 
     _TOOL_MENU = [
-        # (key, label, description)
-        ("claude_hooks",  "Claude Code — hooks",
-         "auto-inject context before every prompt + status line + extraction"),
-        ("claude_mcp",    "Claude Code — MCP server",
-         "on-demand query tool; Claude calls Waystone when relevant"),
-        ("claude_both",   "Claude Code — hooks + MCP (recommended)",
-         "full per-prompt injection AND on-demand tool"),
-        ("antigravity",   "Google Antigravity — hooks + MCP",
-         "same per-prompt injection via PreTurnHook"),
-        ("codex",         "OpenAI Codex CLI — hooks + MCP",
-         "UserPromptSubmit hook, ~/.codex/hooks.json"),
-        ("openhands",     "OpenHands — hooks",
-         "UserPromptSubmit hook, ~/.openhands/hooks.json"),
-        ("opencode",      "OpenCode — JS plugin",
-         "chat.message hook, ~/.config/opencode/plugins/"),
+        # (key, label, note)
+        ("claude_code",  "Claude Code",         "hooks / MCP / both — you'll choose next"),
+        ("antigravity",  "Google Antigravity",  "hooks + MCP"),
+        ("codex",        "OpenAI Codex CLI",    "hooks + MCP"),
+        ("openhands",    "OpenHands",           "hooks"),
+        ("opencode",     "OpenCode",            "JS plugin (chat.message hook)"),
     ]
 
-    for i, (key, label, desc) in enumerate(_TOOL_MENU, 1):
-        click.echo(f"  [{i}] {label}")
-        click.echo(f"       {desc}")
-
+    click.echo("  Select tools — enter numbers space-separated (e.g. '1 3').\n")
+    for i, (key, label, note) in enumerate(_TOOL_MENU, 1):
+        click.echo(f"  [{i}] {label}  —  {note}")
     click.echo()
 
     if non_interactive:
-        raw_selection = "3"
+        raw_selection = "1"
     else:
         raw_selection = click.prompt(
             "  Tools",
-            default="3",
-            prompt_suffix=" (e.g. '3 5' or Enter for Claude Code hooks+MCP): ",
+            default="1",
+            prompt_suffix=" (Enter for Claude Code): ",
         )
 
-    # Parse selection
     import re as _re
     selected_keys: list[str] = []
     for token in _re.split(r"[,\s]+", raw_selection.strip()):
         try:
             idx = int(token) - 1
             if 0 <= idx < len(_TOOL_MENU):
-                selected_keys.append(_TOOL_MENU[idx][0])
+                key = _TOOL_MENU[idx][0]
+                if key not in selected_keys:
+                    selected_keys.append(key)
         except ValueError:
             pass
 
     if not selected_keys:
         click.echo("  –  No tools selected. Skipped.")
 
-    # Determine backward-compat integration_choice from Claude Code selection
-    if "claude_both" in selected_keys:
-        integration_choice = "3"
-    elif "claude_mcp" in selected_keys:
-        integration_choice = "1"
-    elif "claude_hooks" in selected_keys:
-        integration_choice = "2"
-    else:
-        integration_choice = "4"
+    # ----- Claude Code sub-menu -----
+    integration_choice = "4"
+    if "claude_code" in selected_keys:
+        click.echo()
+        click.echo("  → Claude Code — choose integration method:")
+        click.echo("    [1] Hooks (recommended) — auto-inject context before every prompt")
+        click.echo("    [2] MCP server — Claude calls Waystone as a tool on-demand")
+        click.echo("    [3] Both hooks + MCP")
+        click.echo()
+        if non_interactive:
+            cc_method = "1"
+        else:
+            cc_method = click.prompt("    Method", default="1")
+        integration_choice = {"1": "2", "2": "1", "3": "3"}.get(cc_method, "2")
 
-    # ----- Claude Code -----
-    if integration_choice in ("1", "3"):
-        ok, msg = register_mcp_server()
-        prefix = "  ✓ " if ok else "  ✗ "
-        for line in msg.splitlines():
-            click.echo(f"{prefix}{line}")
-            prefix = "    "
+        if integration_choice in ("1", "3"):  # MCP
+            ok, msg = register_mcp_server()
+            prefix = "  ✓ " if ok else "  ✗ "
+            for line in msg.splitlines():
+                click.echo(f"{prefix}{line}")
+                prefix = "    "
 
-    if integration_choice in ("2", "3"):
-        hooks_dir = Path(__file__).resolve().parent.parent / "hooks"
-        if not hooks_dir.exists():
-            hooks_dir = Path(__file__).resolve().parent / "hooks"
-        if hooks_dir.exists():
-            added, skipped = install_hooks(hooks_dir)
-            for label in added:
-                click.echo(f"  ✓  {label} added to ~/.claude/settings.json")
-            for label in skipped:
-                click.echo(f"  –  {label} already installed")
-            if install_claude_md():
-                click.echo("  ✓  Waystone section appended to ~/.claude/CLAUDE.md")
-            else:
-                click.echo("  –  CLAUDE.md already has Waystone section")
+        if integration_choice in ("2", "3"):  # hooks
+            hooks_dir = Path(__file__).resolve().parent.parent / "hooks"
+            if not hooks_dir.exists():
+                hooks_dir = Path(__file__).resolve().parent / "hooks"
+            if hooks_dir.exists():
+                added, skipped = install_hooks(hooks_dir)
+                for label in added:
+                    click.echo(f"  ✓  {label} added to ~/.claude/settings.json")
+                for label in skipped:
+                    click.echo(f"  –  {label} already installed")
+                if install_claude_md():
+                    click.echo("  ✓  Waystone section appended to ~/.claude/CLAUDE.md")
+                else:
+                    click.echo("  –  CLAUDE.md already has Waystone section")
 
     # ----- Additional tools -----
     extra_tools: list[str] = []
