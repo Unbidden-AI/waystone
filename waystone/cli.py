@@ -2918,9 +2918,22 @@ def configure_cmd(non_interactive):
         default_name = Path.cwd().name
         project_name = click.prompt("  Project name", default=default_name)
         marker = Path.cwd() / ".waystone"
-        marker.write_text(project_name + "\n")
-        click.echo(f"  ✓  Created {marker} → project '{project_name}'")
-        click.echo(f"\n  Next: extract your first transcript or run 'waystone onboard {project_name}'")
+        if marker.is_dir():
+            click.echo(
+                f"  ✗  Cannot create marker: {marker} is already a directory (Waystone's data folder).",
+                err=True,
+            )
+            click.echo("  Run 'waystone configure' from your project directory instead, or run:")
+            click.echo(f"    echo '{project_name}' > /path/to/your/project/.waystone")
+        else:
+            try:
+                marker.write_text(project_name + "\n", encoding="utf-8")
+                click.echo(f"  ✓  Created {marker} → project '{project_name}'")
+                click.echo(f"\n  Next: extract your first transcript or run 'waystone onboard {project_name}'")
+            except PermissionError:
+                click.echo(f"  ✗  Permission denied writing {marker}.", err=True)
+                click.echo("  Run 'waystone configure' from your project directory instead, or run:")
+                click.echo(f"    echo '{project_name}' > /path/to/your/project/.waystone")
     else:
         click.echo("  Skipped. When ready:")
         click.echo("    echo 'myproject' > /path/to/your/project/.waystone")
