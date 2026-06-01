@@ -2711,25 +2711,33 @@ def doctor_cmd(ctx, do_fix):
             stats = store.get_stats()
             store.close()
             has_nodes = stats["node_count"] > 0
-            _check(
-                f"Graph populated ({stats['node_count']} nodes)",
-                has_nodes,
-                "" if has_nodes else f"run 'waystone onboard {marker_project}' to import sessions",
-            )
+            if has_nodes:
+                _check(f"Graph populated ({stats['node_count']} nodes)", True)
+            else:
+                # Empty graph is normal on first install — informational, not a failure
+                click.echo(
+                    f"  –  Graph is empty  "
+                    f"(run 'waystone onboard {marker_project}' to import past sessions)"
+                )
 
     # --- Claude Code integration ---
     settings_path = Path.home() / ".claude" / "settings.json"
     mcp_config_path = Path.home() / ".claude" / "claude_desktop_config.json"
 
-    # Check if waystone MCP server is registered (hooks become optional if so)
+    # Check if waystone MCP server is registered (hooks become optional if so).
+    # Claude Code writes MCP config to claude_desktop_config.json; some versions
+    # also write or read from settings.json — check both.
     mcp_registered = False
     import json as _json
-    if mcp_config_path.exists():
-        try:
-            mcp_cfg = _json.loads(mcp_config_path.read_text())
-            mcp_registered = "waystone" in mcp_cfg.get("mcpServers", {})
-        except Exception:
-            pass
+    for _mcp_path in [mcp_config_path, settings_path]:
+        if _mcp_path.exists():
+            try:
+                _cfg = _json.loads(_mcp_path.read_text())
+                if "waystone" in _cfg.get("mcpServers", {}):
+                    mcp_registered = True
+                    break
+            except Exception:
+                pass
 
     _check(
         "MCP server registered",
@@ -3048,6 +3056,16 @@ def configure_cmd(non_interactive):
 
     if integration_choice == "4":
         click.echo("  –  Skipped. See GETTING_STARTED.md for manual setup instructions.")
+
+    # Always try to register the MCP server — it's idempotent and safe to run
+    # even when hooks were the primary choice. This ensures `waystone doctor`
+    # shows ✓ MCP server registered without requiring a second configure pass.
+    if not non_interactive and integration_choice != "1":
+        # Only auto-register when the user didn't already pick MCP (avoid double output)
+        ok, msg = register_mcp_server()
+        if ok:
+            click.echo(f"  ✓  MCP server also registered (for good measure)")
+        # If it fails (e.g. claude not in PATH), stay silent — not a blocker
 
     # ----------------------------------------------- Step 3: Project marker
     click.echo()
