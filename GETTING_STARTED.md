@@ -2,22 +2,19 @@
 
 Waystone extracts facts from your Claude Code conversations into a knowledge graph, then injects relevant context into every future prompt — so Claude always knows your project's decisions, constraints, and history.
 
-**Two setup paths — pick one:**
-
-| | MCP Server (recommended) | Hooks (manual) |
-|---|---|---|
-| **Setup** | One JSON snippet in Claude Code config | Run `hooks/install.py` |
-| **Extraction** | `waystone onboard` or call `context_broker_extract` from Claude | `waystone extract` after each session |
-| **Context injection** | Claude calls `context_broker_query` automatically | Hook injects on every `UserPromptSubmit` |
-| **Best for** | New users, quick start | Power users, background auto-extraction |
+> **Waystone requires an external LLM API key for extraction.** It uses Gemini, OpenAI, Anthropic, or a local model (LM Studio / Ollama) to read your transcripts and pull out facts. Retrieval — the per-prompt context injection — is 100% local SQLite with no API calls. You're only paying for extraction.
 
 ---
 
 ## Prerequisites
 
 - Python 3.11+
-- Claude Code CLI installed
-- An LLM API key for extraction (Gemini recommended — see Step 2)
+- Claude Code CLI (or another supported tool — see Step 2)
+- **An API key** from a supported LLM provider:
+  - [Gemini](https://aistudio.google.com/app/apikey) (recommended — fast, affordable, best recall)
+  - [OpenAI](https://platform.openai.com/api-keys)
+  - [Anthropic](https://console.anthropic.com/settings/keys)
+  - Local model via [LM Studio](https://lmstudio.ai) or Ollama (no key needed)
 
 ---
 

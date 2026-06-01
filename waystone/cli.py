@@ -2956,6 +2956,11 @@ def configure_cmd(non_interactive):
     click.echo("=" * 50)
     click.echo("This wizard configures Waystone in about 2 minutes.")
     click.echo("Press Ctrl-C at any time to quit without saving.\n")
+    click.echo("  Important: Waystone needs an external LLM API to extract facts from")
+    click.echo("  your transcripts. You'll need an API key from a supported provider")
+    click.echo("  (Gemini, OpenAI, Anthropic, or a local model like LM Studio).")
+    click.echo("  Retrieval — the per-prompt context injection — is fully local (SQLite,")
+    click.echo("  no API calls). Only extraction uses the LLM.\n")
 
     # --------------------------------------------------------- Step 1: LLM
     click.echo("Step 1 of 3 — LLM for Extraction")
