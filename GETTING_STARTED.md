@@ -413,6 +413,11 @@ waystone configure
 ```
 → Alternatively, create the marker manually: `echo 'myproject' > /path/to/your/project/.waystone`
 
+**`waystone doctor` shows ✗ for UserPromptSubmit / Stop hooks**
+→ If you chose the **MCP server** integration during `waystone configure`, hooks are optional — the MCP path doesn't need them. Doctor shows them as `–  (optional — MCP is active)` in 0.3.2+.
+→ If you're on an older version or chose hooks integration: run `waystone configure` from your project directory and choose option 2 (Hooks) or 3 (Both).
+→ Hooks require the `waystone-hook-submit` and `waystone-hook-stop` entry points, which are only available in 0.3.2+. Upgrade: `pip install waystone --upgrade`
+
 **"No graph found" in the status line**
 → Run `waystone onboard myproject` or `waystone extract myproject <transcript>` to build the graph first.
 
