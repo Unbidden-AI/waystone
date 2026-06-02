@@ -32,23 +32,42 @@ waystone configure
 ```
 
 The wizard walks you through three steps:
-1. **LLM provider** — choose Gemini, OpenAI, Anthropic, Local, or Custom; enter your API key
-2. **Claude Code integration** — MCP server (recommended) or hooks
-3. **Project marker** — marks the current directory so Waystone knows which graph to use
 
-Verify everything is working:
+**Step 2a — LLM provider**: choose Gemini, OpenAI, Anthropic, Local, or Custom; enter your API key; the wizard tests the connection immediately.
+
+**Step 2b — Integration targets**: select which tools to integrate (space-separated numbers):
+
+```
+  [1] Claude Code  —  hooks / MCP / both — you'll choose next
+  [2] Google Antigravity  —  hooks + MCP
+  [3] OpenAI Codex CLI  —  hooks + MCP
+  [4] OpenHands  —  hooks
+  [5] OpenCode  —  JS plugin
+
+  Tools: 1
+
+  → Claude Code — choose integration method:
+    [1] Hooks (recommended) — auto-inject context before every prompt
+    [2] MCP server — Claude calls Waystone as a tool on-demand
+    [3] Both hooks + MCP
+```
+
+**Step 2c — Project marker**: optionally marks the current directory so Waystone knows which graph to use.
+
+Then verify everything is working:
 
 ```bash
-waystone doctor
+waystone doctor       # check only
+waystone doctor --fix # check + automatically fix what's possible
 ```
 
 > **Important:** Run `waystone configure` from inside your project directory, not your home directory. Waystone stores its data in `~/.waystone/` — running configure there causes a conflict with the project marker file. If you see a "Permission denied" or "already a directory" error, `cd` into your project first and re-run.
 
 ---
 
-## Step 2: Configure your LLM API key
+## Step 2: Update your LLM API key later
 
-`waystone configure` handles this for you. If you need to update it later, edit `~/.waystone/config.yaml`:
+`waystone configure` handles the initial API key setup. To update it later:
 
 ```bash
 # macOS / Linux
@@ -58,43 +77,13 @@ open ~/.waystone/config.yaml
 notepad %USERPROFILE%\.waystone\config.yaml
 ```
 
-> **Tip:** If you prefer environment variables over a config file, set `GEMINI_API_KEY` (or `OPENAI_API_KEY`) in your shell and leave `api_key` out of the config.
+> **Tip:** If you prefer environment variables, set `GEMINI_API_KEY` (or `OPENAI_API_KEY`) in your shell and leave `api_key` out of the config.
 
 ---
 
-## Step 3A: Set up the MCP server (recommended)
+## Step 3: Seed your graph
 
-Add Waystone as an MCP server so Claude Code can call it directly as a tool.
-
-**Option 1 — Claude Code CLI:**
-```bash
-claude mcp add waystone waystone mcp-serve
-```
-
-**Option 2 — Manual config:**
-
-Edit `~/.claude/claude_desktop_config.json` (create it if it doesn't exist) and add:
-
-```json
-{
-  "mcpServers": {
-    "waystone": {
-      "command": "waystone",
-      "args": ["mcp-serve"]
-    }
-  }
-}
-```
-
-A ready-to-paste snippet is at `claude_mcp_config.json` in this repo.
-
-**Restart Claude Code.** You should see `waystone` appear in the MCP server list.
-
-> **Skip ahead:** Once the MCP server is running, jump to [Step 3A Quick Start](#step-3a-quick-start-waystone-onboard) to import your existing sessions with one command.
-
----
-
-## Step 3A Quick Start: `waystone onboard`
+**Option A — Import existing sessions (recommended)**
 
 If you've already used Claude Code, import your recent sessions in one step:
 
@@ -102,183 +91,30 @@ If you've already used Claude Code, import your recent sessions in one step:
 waystone onboard myproject
 ```
 
-You'll see a menu of your recent Claude Code sessions:
+You'll see a menu of your recent sessions, pick which to import, and it builds the graph immediately.
 
-```
-Found 12 recent Claude Code session(s):
+**Option B — Extract a project brief (new projects)**
 
-  [ 1] 2026-03-10 14:22   42KB  -Users-you-Apps-MyApp/abc123.jsonl
-  [ 2] 2026-03-09 11:08   18KB  -Users-you-Apps-MyApp/def456.jsonl
-  ...
-
-Import which sessions? (e.g. 1,3-5 or 'all' or Enter to import all): all
-```
-
-After import, it runs a sample query so you immediately see your own knowledge reflected back. Then every new Claude Code conversation will have that context available.
-
----
-
-## Step 3B: Install the Claude Code hooks (alternative)
-
-Use this path if you prefer automatic background extraction after every session.
-
-```bash
-python hooks/install.py
-```
-
-This makes four changes:
-
-| What | Where |
-|------|-------|
-| `UserPromptSubmit` hook | `~/.claude/settings.json` — queries the graph and injects relevant context into every prompt |
-| `Stop` hook | `~/.claude/settings.json` — records each session transcript to `~/.waystone/transcripts/<project>/` |
-| Status line | `~/.claude/settings.json` — shows retrieval metrics (nodes retrieved, tokens injected, latency) |
-| Waystone usage guide | `~/.claude/CLAUDE.md` — teaches Claude Code how to use Waystone and interpret injected context |
-
-**Restart Claude Code** after running the installer.
-
----
-
-## Step 4: Mark your project directory
-
-In the root of the project you want to track:
-
-```bash
-waystone hook-init myproject
-```
-
-Or manually:
-
-```bash
-echo 'myproject' > /path/to/your/project/.waystone
-```
-
-Replace `myproject` with any short name (e.g. `ContextBroker`, `MyApp`). This name is how your graph is stored and identified.
-
-> The hook walks up the directory tree looking for this file, so it works from any subdirectory of your project.
-
----
-
-## Step 4B: Seed the graph before your first session (new projects)
-
-If the project has no prior sessions to import, the graph starts empty and the first few turns get no context injection. You can fix this in a few minutes.
-
-**Write a short project brief.** Create a file — `project_brief.md` is a good name — with 1–3 paragraphs covering:
-
-- What the project does (one sentence is enough)
-- The core tech stack and key architectural choices
-- Any hard constraints the model should always respect (e.g. "no vendor lock-in", "must run offline", "Python 3.11+")
-
-```markdown
-# MyApp
-
-MyApp is a mobile-first expense tracker that syncs across devices via a self-hosted
-PostgreSQL backend and a React Native frontend. All amounts are stored in cents to
-avoid floating-point rounding.
-
-Key constraints: offline-first (all local writes must succeed before sync),
-no third-party auth providers (we roll our own JWT), iOS 16+ minimum.
-
-Tech stack: React Native 0.73, Expo, PostgreSQL 15, FastAPI, SQLAlchemy 2.0.
-```
-
-**Extract it:**
+If you have no sessions yet, write a short `project_brief.md` covering what the project does, your tech stack, and any hard constraints, then:
 
 ```bash
 waystone extract myproject project_brief.md
 ```
 
-You'll get 20–50 nodes covering the decisions and constraints you wrote down. Every session from that point forward will have those facts available.
+You'll get 20–50 nodes. Every session from that point forward will have those facts as context.
 
-> **Tip:** Design documents, ADRs, a README, or existing specifications work just as well — `waystone extract` handles any markdown file, not just conversation transcripts.
-
----
-
-## Step 4C: Set a project brief in the orchestrator static prompt (orchestrator mode only)
-
-If you're using `waystone orchestrate` instead of the hooks/MCP path, add a 1–2 sentence project brief to the `static` field in your config. This gives the model orientation before it sees any retrieved graph context — particularly important on the first turn of a session when the graph may return nothing relevant.
-
-Open `~/.waystone/config.yaml` and find the `orchestrator.system_prompt` section:
-
-```yaml
-orchestrator:
-  system_prompt:
-    static_files:
-      - CLAUDE.md        # optional: carry project instructions into every session
-    static: |
-      You are a senior engineer on MyApp — a mobile-first expense tracker with an
-      offline-first architecture, self-hosted PostgreSQL backend, and React Native
-      frontend. All monetary values are stored in cents.
-
-      ## Non-negotiables
-      - Run tests before declaring anything done
-      - Read files before modifying them
-      - Store amounts as integers (cents), never floats
-```
-
-**What belongs here vs. the graph:**
-
-| Belongs in `static` | Belongs in the graph |
-|---------------------|---------------------|
-| Project name + 1-sentence description | Architecture details, data flow |
-| Universal behavioral rules ("always run tests") | Specific decisions made in past sessions |
-| Hard constraints that apply to every turn | Tech choices explained in context |
-
-The graph fills in the rich knowledge; `static` just gives the model a hook to hang that knowledge on.
+> Design docs, ADRs, a README, or existing specs work equally well — `waystone extract` handles any markdown file.
 
 ---
 
-## Step 5: Have a Claude Code session
+## Step 4: Start working
 
-Just work normally in your project. The `Stop` hook automatically saves each session as a markdown transcript to:
+Just work normally in your project. The hooks automatically:
+- Inject relevant graph context before every prompt (UserPromptSubmit)
+- Save each session transcript at the end (Stop hook)
+- Background-extract new facts from each transcript
 
-```
-~/.waystone/transcripts/<project>/YYYYMMDD_HHMMSS_<id>.md
-~/.waystone/transcripts/<project>/latest.md  ← always points to most recent
-```
-
-No action needed — it happens automatically at the end of every session.
-
----
-
-## Step 6: Extract your first transcript
-
-After a session (or using any existing transcript):
-
-```bash
-waystone extract myproject ~/.waystone/transcripts/myproject/latest.md
-```
-
-You'll see output like:
-```
-Extracted 47 nodes, 23 edges from latest.md  [density=3.2/1kc  avg_tags=7.1  edge/node=0.49]
-```
-
-The graph is now stored at `~/.waystone/projects/myproject/context.db`.
-
-> **Have an existing transcript?** You can also extract from any exported Claude conversation (File → Export in Claude.ai, or a manually written markdown file). The format should use `**Name**: message` speaker labels, but the extractor handles most common formats.
-
----
-
-## Step 7: Verify retrieval is working
-
-```bash
-waystone query myproject "how does the authentication work" --stats
-```
-
-Then check what the hook would inject for that query:
-
-```bash
-waystone last-context
-```
-
----
-
-## Step 8: Start a new Claude Code session
-
-With the graph built, open Claude Code in your project directory. Every prompt you submit will automatically have relevant context injected from the graph.
-
-The status line shows live metrics:
+The status line shows live metrics (hooks integration):
 ```
 Claude Sonnet 4.6 │ ctx [████░░░░] 12% │ $0.0041 │ CB(myproject): 8/47 nodes ~240tok [18ms]
 ```
@@ -366,8 +202,8 @@ cp ~/.claude/settings.json.bak.YYYYMMDD_HHMMSS ~/.claude/settings.json
 ```
 
 If you prefer to edit manually instead, open `~/.claude/settings.json` and remove:
-- The `UserPromptSubmit` entry containing `context_broker_submit`
-- The `Stop` entry containing `context_broker_stop`
+- The `UserPromptSubmit` entry containing `waystone`
+- The `Stop` entry containing `waystone`
 - The `statusLine` entry (or restore it to your previous value)
 
 **Restart Claude Code** after editing settings.
@@ -416,14 +252,14 @@ waystone configure
 
 **`waystone doctor` shows ✗ for UserPromptSubmit / Stop hooks**
 → Doctor output depends on what you chose during `waystone configure`:
-- **MCP-only (option 1)**: hooks show as `–  optional — MCP-only mode` — this is correct, not an error.
-- **Hooks-only (option 2)** or **Both (option 3)**: hooks are required and the ✗ is real. Re-run `waystone configure` from your project directory and choose option 2 or 3.
+- **MCP-only**: hooks show as `–  optional — MCP-only mode` — this is correct, not an error.
+- **Hooks or Both**: hooks are required and the ✗ is real. Re-run `waystone configure` and select Claude Code with hooks.
 - **No configure run yet**: run `waystone configure` first.
 → If you see ✗ after running configure, try `waystone doctor --fix` to auto-install the hooks.
 
 **`waystone doctor` shows ✗ for MCP server registered**
-→ If you chose hooks-only (option 2), doctor shows `–  not selected — hooks-only mode` — this is informational, not a failure.
-→ If you chose MCP (option 1 or 3): re-run `waystone configure` to register it, or run manually:
+→ If you chose hooks-only, doctor shows `–  not selected — hooks-only mode` — this is informational, not a failure.
+→ If you chose MCP or Both: re-run `waystone configure` to register it, or run manually:
 ```bash
 claude mcp add waystone waystone mcp-serve
 ```
