@@ -6,6 +6,18 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.3] – 2026-06-05
+
+### Changed
+
+- **`sqlite-vec` is now a core dependency** (moved out of the optional `semantic` extra). It's a lightweight native extension with no transitive deps, so semantic storage works on a default `pip install waystone` and `waystone doctor` no longer warns about it. The heavier embedding stack (`sentence-transformers` → PyTorch) stays opt-in via `waystone[semantic]`.
+
+### Added
+
+- **Hermes Agent memory provider** (`hermes_plugin/`) reconciled with the verified `MemoryProvider` base class: `prefetch` / `queue_prefetch` / `sync_turn` / `on_session_end` signatures now match the base exactly, and `plugin.yaml` declares the `on_session_end` hook. Documented in the README.
+
+---
+
 ## [0.2.0] – 2026-05-19
 
 ### Added
