@@ -332,8 +332,13 @@ class WaystoneMemoryProvider(_get_base()):
         if text_to_extract:
             self._spawn_extraction(text_to_extract)
 
-    def on_session_end(self, messages: list | None = None) -> None:
-        """Flush remaining buffered turns on session end."""
+    def on_session_end(self, messages: list[dict[str, Any]]) -> None:
+        """Flush remaining buffered turns on session end.
+
+        Signature matches the MemoryProvider base class (required ``messages``).
+        Hermes always passes the full history list; we flush our own buffer and
+        don't read ``messages`` directly.
+        """
         if not self._store or not self._auto_extract:
             return
         with self._buffer_lock:
