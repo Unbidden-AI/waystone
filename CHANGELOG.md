@@ -6,6 +6,16 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.4] – 2026-06-05
+
+### Added
+
+- **Opt-in API embedding backend.** Set `embeddings.backend: api` in config to embed via `litellm` using your LLM API key — no PyTorch / `sentence-transformers` required. Configurable `model`/`dim`; default remains the local bge-small backend (unchanged). New `waystone reembed <project>` rebuilds the vector table when switching backends.
+- **Automatic chat-attachment extraction.** Long Discord/Telegram messages that arrive as `message.txt` attachments are now scanned from the plugin inbox and extracted into the graph automatically (per-project ledger prevents re-extraction).
+- **Advanced Configuration guide** (`ADVANCED.md`) covering API embeddings, retrieval strategy tuning, and attachment extraction.
+
+---
+
 ## [0.4.3] – 2026-06-05
 
 ### Changed
