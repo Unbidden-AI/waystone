@@ -279,6 +279,9 @@ def main():
             else:
                 store.save_buffer(buffer._turns)
 
+            # --- Auto-extract any new chat-plugin attachment files (message.txt) ---
+            _extract_new_inbox_attachments(cwd, project, db_path, session_id=session_id)
+
             # --- Check if reflect should be triggered ---
             _maybe_trigger_reflect(project, transcript_path)
         else:
@@ -380,6 +383,61 @@ def main():
     except Exception as e:
         _write_state({"status": "error", "error": str(e)}, session_id=session_id)
         sys.exit(0)
+
+
+def _extract_new_inbox_attachments(
+    cwd: str, project: str, db_path: Path, session_id: str = "",
+) -> None:
+    """Extract chat-plugin message.txt attachments that haven't been ingested yet.
+
+    Long Discord/Telegram messages arrive as text-file attachments; their content
+    never reaches the prompt (which shows only "(attachment)"). This scans the
+    plugin inbox for new ``.txt`` files and spawns background extraction for each,
+    so they land in the graph like any other turn. A per-project ledger prevents
+    re-extracting the same file.
+
+    Note: a file downloaded mid-turn is picked up on the next prompt (the hook
+    runs before the agent downloads the attachment), which is the soonest a
+    self-contained hook can see it.
+    """
+    try:
+        inbox_dirs = [
+            Path(cwd) / ".claude" / "discord" / "inbox",
+            Path(cwd) / ".claude" / "telegram" / "inbox",
+        ]
+        candidates: list[Path] = []
+        for d in inbox_dirs:
+            if d.is_dir():
+                candidates.extend(sorted(d.glob("*.txt")))
+        if not candidates:
+            return
+
+        ledger_path = db_path.parent / "extracted_inbox.json"
+        try:
+            ledger = set(json.loads(ledger_path.read_text())) if ledger_path.exists() else set()
+        except Exception:
+            ledger = set()
+
+        new_ledger = set(ledger)
+        for f in candidates:
+            if f.name in ledger:
+                continue
+            new_ledger.add(f.name)  # mark regardless so we never retry a bad file
+            try:
+                content = f.read_text(encoding="utf-8", errors="replace").strip()
+            except Exception:
+                content = ""
+            if not content or len(content) > 200_000:
+                continue
+            _spawn_extraction(content, project, db_path, source=f.name, session_id=session_id)
+
+        if new_ledger != ledger:
+            try:
+                ledger_path.write_text(json.dumps(sorted(new_ledger)))
+            except Exception:
+                pass
+    except Exception:
+        pass
 
 
 def _spawn_extraction(
