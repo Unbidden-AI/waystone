@@ -41,6 +41,17 @@ DEFAULTS = {
     "domain": {
         "name": "software_dev",
     },
+    "embeddings": {
+        # Semantic-search embedding backend. Default "local" = bge-small via
+        # sentence-transformers (the waystone[semantic] extra, pulls PyTorch).
+        # Set backend: "api" to embed through litellm using your LLM API key
+        # instead — no PyTorch. Switching backends requires `waystone reembed`
+        # (vector spaces differ). See docs/advanced.
+        "backend": "local",                      # "local" | "api"
+        "model": "gemini/text-embedding-004",    # litellm model id (api backend only)
+        "dim": 768,                              # api model's vector dim — MUST match it
+        "api_key_env": "",                       # env var for the key (else falls back to llm key)
+    },
     "pilot": {
         "system_prompt": {
             "static": """\

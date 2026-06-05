@@ -1085,6 +1085,48 @@ def impact_cmd(ctx, project, node_id, query_text, hops, reverse, node_types, fmt
         click.echo(report)
 
 
+@cli.command("reembed")
+@click.argument("project")
+@click.pass_context
+def reembed(ctx, project):
+    """Rebuild all node embeddings using the configured embedding backend.
+
+    Run this after changing `embeddings.backend` (or model/dim) in your config:
+    the vector table is recreated at the new dimension and every node is
+    re-embedded. Requires sqlite-vec; the `api` backend also needs an API key.
+    """
+    from waystone import embedder
+
+    config = _load_cfg(ctx.obj["config_path"])
+    db_path = get_db_path(config, project)
+    if not db_path.parent.exists():
+        click.echo(f"Error: Project '{project}' not found.", err=True)
+        sys.exit(1)
+
+    embedder.configure(config)
+    if not embedder.is_available():
+        click.echo(
+            "Error: embedding backend unavailable. For 'local', install "
+            "waystone[semantic]; for 'api', set your API key.",
+            err=True,
+        )
+        sys.exit(1)
+
+    store = GraphStore(db_path)
+    if not store._vec_available:
+        click.echo("Error: sqlite-vec is not loaded — cannot build embeddings.", err=True)
+        store.close()
+        sys.exit(1)
+
+    click.echo(
+        f"Rebuilding embeddings for '{project}' "
+        f"(backend={embedder.get_backend()}, dim={embedder.get_embedding_dim()})…"
+    )
+    count = store.rebuild_embeddings()
+    store.close()
+    click.echo(f"✓ Re-embedded {count} node(s).")
+
+
 @cli.command()
 @click.argument("project")
 @click.option("--failures", is_flag=True, help="Show recent extraction failures instead of nodes")

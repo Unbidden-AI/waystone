@@ -375,10 +375,10 @@ class GraphStore:
 
         # Create vec0 virtual table for semantic search (requires sqlite-vec loaded)
         if self._vec_available:
-            from waystone.embedder import EMBEDDING_DIM
+            from waystone.embedder import get_embedding_dim
             self.conn.execute(
                 f"CREATE VIRTUAL TABLE IF NOT EXISTS node_embeddings USING vec0("
-                f"node_id TEXT PRIMARY KEY, embedding float[{EMBEDDING_DIM}])"
+                f"node_id TEXT PRIMARY KEY, embedding float[{get_embedding_dim()}])"
             )
             self.conn.commit()
 
@@ -439,10 +439,10 @@ class GraphStore:
         )
         self.conn.commit()
         if self._vec_available:
-            from waystone.embedder import EMBEDDING_DIM
+            from waystone.embedder import get_embedding_dim
             self.conn.execute(
                 f"CREATE VIRTUAL TABLE IF NOT EXISTS vec_raw_sentences USING vec0("
-                f"sentence_id INTEGER PRIMARY KEY, embedding float[{EMBEDDING_DIM}])"
+                f"sentence_id INTEGER PRIMARY KEY, embedding float[{get_embedding_dim()}])"
             )
             self.conn.commit()
 
@@ -1896,6 +1896,27 @@ class GraphStore:
         self.store_embeddings(list(zip(ids, blobs)))
         log.debug("Embedded %d new nodes", len(ids))
         return len(ids)
+
+    def rebuild_embeddings(self) -> int:
+        """Drop and rebuild the node_embeddings table at the current backend's dim.
+
+        Required when switching embedding backends (e.g. local 384-dim →
+        api 768-dim): the vec0 column dimension is fixed at creation, so the
+        table must be recreated before re-embedding. Returns the number of
+        nodes embedded. No-op if sqlite-vec is unavailable.
+        """
+        if not self._vec_available:
+            return 0
+        from waystone import embedder
+        if not embedder.is_available():
+            return 0
+        self.conn.execute("DROP TABLE IF EXISTS node_embeddings")
+        self.conn.execute(
+            f"CREATE VIRTUAL TABLE node_embeddings USING vec0("
+            f"node_id TEXT PRIMARY KEY, embedding float[{embedder.get_embedding_dim()}])"
+        )
+        self.conn.commit()
+        return self.embed_missing_nodes()
 
     def store_embeddings(self, pairs: list[tuple[str, bytes]]) -> None:
         """Upsert (node_id, embedding_blob) pairs into node_embeddings.
