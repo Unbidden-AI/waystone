@@ -263,11 +263,13 @@ class WaystoneMemoryProvider(_get_base()):
         except Exception:
             return "[Waystone memory: active]"
 
-    def prefetch(self, query: str, session_id: str | None = None) -> str:
+    def prefetch(self, query: str, *, session_id: str = "") -> str:
         """Retrieve relevant context before the LLM call.
 
         Returns formatted markdown. Called synchronously but must complete
         within the Hermes 5-second deadline. BFS retrieval is sub-second.
+
+        Keyword-only ``session_id`` to match the MemoryProvider base class.
         """
         if not self._store:
             return ""
@@ -286,13 +288,13 @@ class WaystoneMemoryProvider(_get_base()):
             log.warning("waystone: prefetch failed: %s", e)
             return ""
 
-    def queue_prefetch(self, query: str, session_id: str | None = None) -> None:
+    def queue_prefetch(self, query: str, *, session_id: str = "") -> None:
         """Kick off a background prefetch for the next turn."""
         if not self._store:
             return
 
         def _run():
-            result = self.prefetch(query, session_id)
+            result = self.prefetch(query, session_id=session_id)
             with self._prefetch_lock:
                 self._prefetch_result = result
 
@@ -305,7 +307,8 @@ class WaystoneMemoryProvider(_get_base()):
         self,
         user_content: str,
         assistant_content: str,
-        session_id: str | None = None,
+        *,
+        session_id: str = "",
     ) -> None:
         """Persist a completed turn. MUST be non-blocking.
 

@@ -51,6 +51,22 @@ Claude Code · Cursor · Windsurf · Continue.dev · Cline · Zed · OpenClaw ·
 
 Full per-client setup: [unbidden.ai/docs/mcp-server/](https://unbidden.ai/docs/mcp-server/)
 
+### Hermes Agent (native memory provider)
+
+Beyond MCP, Waystone ships a first-class [Hermes Agent](https://github.com/NousResearch/hermes-agent) **memory provider** (`hermes_plugin/`). It plugs the knowledge graph into Hermes as a Tier-3 memory backend:
+
+- **`prefetch()`** injects relevant graph context before each LLM call (in-process — the embedding model loads once and stays warm, so per-turn retrieval stays sub-second).
+- **`waystone_query` / `waystone_recall`** tools let the agent search the graph on demand.
+- **`on_session_end`** extraction grows the graph in the background. Fully local — no data leaves the machine.
+
+Install:
+
+```bash
+cp -r hermes_plugin/ /path/to/hermes-agent/plugins/memory/waystone/
+pip install waystone
+hermes memory setup        # pick "waystone", set the project
+```
+
 ## Key CLI commands
 
 ```bash
@@ -95,6 +111,7 @@ The default store is local SQLite — no cloud dependency, no infra to manage. F
 - [MCP Server setup](https://unbidden.ai/docs/mcp-server/)
 - [CLI Reference](https://unbidden.ai/docs/cli/)
 - [REST API](https://unbidden.ai/docs/rest-api/)
+- [Hermes Agent integration](https://unbidden.ai/docs/integrations/hermes/)
 
 ## License
 
