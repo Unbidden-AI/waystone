@@ -112,6 +112,7 @@ The default store is local SQLite — no cloud dependency, no infra to manage. F
 - [CLI Reference](https://unbidden.ai/docs/cli/)
 - [REST API](https://unbidden.ai/docs/rest-api/)
 - [Hermes Agent integration](https://unbidden.ai/docs/integrations/hermes/)
+- [Advanced Configuration](./ADVANCED.md) — API embeddings (no PyTorch), strategy tuning, attachment extraction
 
 ## License
 

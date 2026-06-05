@@ -1,0 +1,112 @@
+# Advanced Configuration — How to Be a Waystone Rock Star
+
+The default install (`pip install waystone` → `waystone configure` → open your editor) is intentionally minimal — it should just work. This guide is for power users who want to tune Waystone past the defaults.
+
+Everything here lives in `~/.waystone/config.yaml`. Missing keys fall back to built-in defaults, so you only set what you want to change.
+
+---
+
+## Embeddings: local model vs. API
+
+Semantic search and paraphrase de-duplication need an embedding model. There are two backends.
+
+### `local` (default)
+
+Uses `BAAI/bge-small-en-v1.5` via `sentence-transformers`. Fully offline, no API cost — but `sentence-transformers` pulls in **PyTorch** (a large download), so it's an opt-in extra:
+
+```bash
+pip install "waystone[semantic]"
+```
+
+`sqlite-vec` (the vector store) is always installed; only the embedding model is optional.
+
+### `api` (no PyTorch)
+
+Embed through your LLM provider's embedding endpoint via `litellm` (already a core dependency) — **no PyTorch, no local model download**. Great for lightweight environments (Windows especially) where you'd rather use an API key than install a multi-GB ML stack.
+
+```yaml
+# ~/.waystone/config.yaml
+embeddings:
+  backend: api
+  model: gemini/text-embedding-004   # any litellm-supported embedding model
+  dim: 768                           # MUST match the model's output dimension
+  api_key_env: GEMINI_API_KEY        # optional; falls back to your llm api key
+```
+
+Common models and their dimensions:
+
+| Provider | `model` | `dim` |
+|---|---|---|
+| Gemini | `gemini/text-embedding-004` | `768` |
+| OpenAI | `text-embedding-3-small` | `1536` |
+| OpenAI | `text-embedding-3-large` | `3072` |
+
+> **`dim` must exactly match the model.** The vector table's column width is fixed at creation; a mismatch makes inserts fail.
+
+### Switching backends → re-embed
+
+Vector spaces from different models aren't comparable, and the vector table's dimension is fixed when it's created. So after changing `backend`, `model`, or `dim`, rebuild the embeddings:
+
+```bash
+waystone reembed <project>
+```
+
+This drops the vector table, recreates it at the new dimension, and re-embeds every node. (New/empty projects don't need this — the table is created at the configured dimension on first use.)
+
+### Tradeoffs
+
+| | `local` | `api` |
+|---|---|---|
+| Install weight | Heavy (PyTorch) | Light (litellm only) |
+| Cost | Free | Per-embedding API cost (tiny) |
+| Network | Offline | Required |
+| Privacy | 100% local | Text sent to provider |
+
+---
+
+## Retrieval strategy tuning
+
+The retrieval pipeline is a sequence of strategies, all toggleable in config or per-query with `--enable`/`--disable`:
+
+```yaml
+strategies:
+  superseded_pruning: true     # drop facts that have been superseded
+  confidence_threshold: 0.0    # e.g. 0.6 to hide tentative facts
+  recency_decay: false         # weight recent facts higher
+  recency_half_life_days: 30   # how fast old facts fade (when decay is on)
+  token_budget: 0              # 0 = unlimited; e.g. 500 to cap injected context
+  relevance_scoring: true      # rank entry nodes by tag overlap
+defaults:
+  hops: 3                      # BFS traversal depth
+  top_k: 10                    # max facts returned per query
+```
+
+Tuning tips:
+- **Noisy / over-large context?** Lower `top_k`, set a `token_budget`, or raise `confidence_threshold`.
+- **Missing relevant facts?** Raise `hops` and `top_k`.
+- **Fast-moving project?** Turn on `recency_decay` so stale decisions fade.
+
+Test changes live: `waystone query <project> "<question>" --stats`.
+
+---
+
+## Chat attachment auto-extraction
+
+Long Discord/Telegram messages arrive as `message.txt` attachments — their text never reaches the prompt directly. The submit hook now scans the plugin inbox (`.claude/discord/inbox/`, `.claude/telegram/inbox/`) and auto-extracts any new `.txt` attachment into the graph, just like a normal turn. A per-project ledger (`extracted_inbox.json`) prevents re-extraction. No action needed — it's automatic (a file downloaded mid-turn is picked up on the next prompt).
+
+---
+
+## Pausing extraction
+
+Extraction calls your LLM. To pause it (while keeping retrieval/injection from the existing graph):
+
+```bash
+waystone pause     # turns extracted while paused are still buffered, not lost
+waystone resume
+```
+
+---
+
+## Hermes Agent memory provider
+
+Beyond Claude Code/MCP, Waystone ships a native Hermes Agent memory provider (`hermes_plugin/`). See the README's "Hermes Agent" section and [unbidden.ai/docs/integrations/hermes/](https://unbidden.ai/docs/integrations/hermes/).
