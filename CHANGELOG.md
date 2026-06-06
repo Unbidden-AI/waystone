@@ -6,6 +6,14 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.10] – 2026-06-06
+
+### Fixed
+
+- **`onboard` / `import-claude-sessions` imported 0 nodes from every session** ("SKIP (empty after conversion)"). The `.jsonl` converter read top-level `role`/`content`, but Claude Code session files nest the message under a `{"type": ..., "message": {"role", "content"}}` envelope — so every session converted to empty text and nothing was extracted. The converter now delegates to the canonical `from_claude_jsonl` parser (which handles the nested schema, including text/thinking/tool_use blocks). Added a regression test using the real nested format.
+
+---
+
 ## [0.4.9] – 2026-06-06
 
 ### Fixed

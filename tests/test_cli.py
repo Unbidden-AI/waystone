@@ -283,6 +283,31 @@ class TestImportClaudeSessions:
 
 
 class TestJsonlToMarkdown:
+    def test_nested_claude_code_format(self, tmp_path):
+        """Real Claude Code session format nests the message under 'message'.
+
+        This is the schema actual sessions use; an earlier parser read top-level
+        role/content and produced empty output for every session, so onboard
+        imported 0 nodes. Guard against that regression here.
+        """
+        import json
+
+        from waystone.cli import _jsonl_to_markdown
+
+        f = tmp_path / "session.jsonl"
+        f.write_text(
+            json.dumps({"type": "summary", "summary": "ignore me"}) + "\n"
+            + json.dumps({"type": "user", "message": {"role": "user", "content": "Hello"}}) + "\n"
+            + json.dumps({"type": "assistant", "message": {
+                "role": "assistant",
+                "content": [{"type": "text", "text": "Hi there"}],
+            }}) + "\n"
+        )
+        md = _jsonl_to_markdown(f)
+        assert md.strip(), "nested Claude Code session must not convert to empty"
+        assert "Hello" in md
+        assert "Hi there" in md
+
     def test_plain_string_content(self, tmp_path):
         import json
 
@@ -294,8 +319,8 @@ class TestJsonlToMarkdown:
             + json.dumps({"role": "assistant", "content": "Hi there"}) + "\n"
         )
         md = _jsonl_to_markdown(f)
-        assert "**Human:** Hello" in md
-        assert "**Assistant:** Hi there" in md
+        assert "Hello" in md
+        assert "Hi there" in md
 
     def test_content_block_list(self, tmp_path):
         import json
@@ -305,8 +330,11 @@ class TestJsonlToMarkdown:
         f = tmp_path / "session.jsonl"
         f.write_text(
             json.dumps({
-                "role": "assistant",
-                "content": [{"type": "text", "text": "Block content here"}],
+                "type": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "Block content here"}],
+                },
             }) + "\n"
         )
         md = _jsonl_to_markdown(f)

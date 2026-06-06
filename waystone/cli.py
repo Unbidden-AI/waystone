@@ -2359,41 +2359,19 @@ def mcp_serve_cmd(transport):
 
 
 def _jsonl_to_markdown(jsonl_path: Path) -> str:
-    """Convert a Claude Code .jsonl session file to markdown transcript format."""
-    import json as _json
+    """Convert a Claude Code .jsonl session file to transcript text for extraction.
 
-    lines = []
-    for raw in jsonl_path.read_text(encoding="utf-8", errors="replace").splitlines():
-        raw = raw.strip()
-        if not raw:
-            continue
-        try:
-            msg = _json.loads(raw)
-        except Exception:
-            continue
+    Delegates to the canonical parser in ``transcript.py``. Claude Code session
+    files nest the message under a top-level ``{"type": ..., "message": {"role",
+    "content"}}`` envelope (with thinking/tool_use blocks); ``from_claude_jsonl``
+    handles that schema. (An earlier hand-rolled version read top-level
+    ``role``/``content``, which don't exist in that format, so every session came
+    out empty — "SKIP (empty after conversion)".)
+    """
+    from .transcript import from_claude_jsonl, to_prompt_text
 
-        role = msg.get("role", "")
-        content = msg.get("content", "")
-
-        # content can be a list of content blocks (Claude API format)
-        if isinstance(content, list):
-            text_parts = []
-            for block in content:
-                if isinstance(block, dict) and block.get("type") == "text":
-                    text_parts.append(block["text"])
-                elif isinstance(block, str):
-                    text_parts.append(block)
-            content = "\n".join(text_parts)
-
-        if not content or not isinstance(content, str):
-            continue
-
-        if role == "user":
-            lines.append(f"**Human:** {content}\n")
-        elif role == "assistant":
-            lines.append(f"**Assistant:** {content}\n")
-
-    return "\n".join(lines)
+    utterances = from_claude_jsonl(jsonl_path)
+    return to_prompt_text(utterances) if utterances else ""
 
 
 def _find_claude_sessions(project_hint: str | None) -> list[dict]:
