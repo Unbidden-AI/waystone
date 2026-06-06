@@ -3354,7 +3354,23 @@ def configure_cmd(non_interactive):
                         click.echo(f"  ✓  Initialized empty graph for '{project_name}'")
                 except (PermissionError, OSError) as e:
                     click.echo(f"  ✗  Could not initialize graph: {e}", err=True)
-                click.echo(f"\n  Next: extract your first transcript or run 'waystone onboard {project_name}'")
+
+                # Offer to backfill the fresh graph from past Claude Code sessions
+                # so it's useful immediately instead of starting empty. This runs
+                # the LLM extractor, so we prompt rather than do it silently.
+                onboarded = False
+                if not non_interactive and click.confirm(
+                    f"\n  Import your recent Claude Code sessions into '{project_name}' now?"
+                    "\n  (uses your configured extraction LLM; may take a few minutes)",
+                    default=True,
+                ):
+                    click.echo("  Importing recent sessions — this can take a few minutes...\n")
+                    import subprocess as _sp
+                    _result = _sp.run([sys.executable, "-m", "waystone.cli", "onboard", project_name])
+                    onboarded = _result.returncode == 0
+                if not onboarded:
+                    click.echo(f"\n  Next: run 'waystone onboard {project_name}' to import past sessions"
+                               " (or just keep working — new sessions extract automatically)")
             except PermissionError:
                 click.echo(f"  ✗  Permission denied writing {marker}.", err=True)
                 click.echo("  Run 'waystone configure' from your project directory instead, or run:")
@@ -3935,3 +3951,10 @@ def auto_import_cmd(ctx, project, directory, verify, extensions, force, dry_run)
 
     elapsed = _time.monotonic() - t_start
     click.echo(f"\nDone: {total_imported}/{len(to_import)} files imported in {elapsed:.0f}s.")
+
+
+# Allow `python -m waystone.cli ...` to actually invoke the CLI. Several internal
+# subprocesses (auto-import, watch, doctor's onboard-fix) spawn the CLI this way;
+# without this guard the module just imports and exits 0, silently doing nothing.
+if __name__ == "__main__":
+    cli()

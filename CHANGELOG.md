@@ -6,6 +6,19 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.9] – 2026-06-06
+
+### Fixed
+
+- **Extraction ignored the inline `api_key` when `api_key_env` was set.** If config had both `api_key_env` and an inline `api_key`, the extractor *required* the env var and aborted (`API key env var 'X' is not set`) instead of falling back to the inline key — so extraction failed and the graph stayed empty even though a valid key was sitting in `config.yaml`. (`doctor` accepted either, so it passed while extraction failed — a confusing mismatch.) Key resolution is now: configured env var → inline `api_key` → generic env vars, in both the OpenAI-compatible and native-Gemini paths.
+- **`auto-import`, `watch`, and `doctor`'s onboard-fix silently did nothing.** They spawn the CLI via `python -m waystone.cli …`, but `cli.py` had no `__main__` guard, so the module imported and exited 0 without running. `auto-import` reported "N/N imported" while extracting zero nodes — which also meant the **SessionEnd Auto Memory hook (0.4.6) extracted nothing**. Added the guard; all four call sites now work.
+
+### Added
+
+- **`waystone configure` offers to backfill history.** After creating a project, configure prompts to import your recent Claude Code sessions (`waystone onboard`) so the graph is useful immediately. Defaults to yes; runs the extractor only on confirmation; skipped in `--non-interactive`.
+
+---
+
 ## [0.4.8] – 2026-06-06
 
 ### Fixed
