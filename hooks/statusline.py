@@ -28,6 +28,17 @@ STATE_MAX_AGE_SECS = 300  # Don't show stale CB state after 5 min
 
 
 def main():
+    # Harden stdout/stderr against legacy consoles (Windows cp1252) so the
+    # status line's Unicode glyphs never raise UnicodeEncodeError.
+    for _name in ("stdout", "stderr"):
+        _stream = getattr(sys, _name, None)
+        _reconf = getattr(_stream, "reconfigure", None)
+        if _reconf is not None:
+            try:
+                _reconf(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+
     try:
         session = json.loads(sys.stdin.read())
     except Exception:
@@ -41,6 +52,8 @@ def main():
     ctx_size = ctx.get("context_window_size") or 0
 
     session_id = session.get("session_id", "")
+    cwd = (session.get("workspace") or {}).get("current_dir") or session.get("cwd") or "."
+    cfg = _load_statusline_cfg()
     cb = _load_cb_state(session_id)
 
     parts = []
@@ -54,11 +67,46 @@ def main():
     if total_cost:
         parts.append(f"${total_cost:.4f}")
 
-    cb_str = _format_cb(cb, ctx_size)
+    cb_str = _format_cb(cb, ctx_size, cwd=cwd, cfg=cfg)
     if cb_str:
         parts.append(cb_str)
 
     print(" │ ".join(parts))
+
+
+def _load_statusline_cfg() -> dict:
+    """Load statusline display config (defensive — defaults if config unavailable)."""
+    cfg = {"enabled": True, "alert_on_error": True}
+    try:
+        from waystone.config import load_config
+        sl = (load_config() or {}).get("statusline", {}) or {}
+        for key in ("enabled", "alert_on_error"):
+            if key in sl:
+                cfg[key] = sl[key]
+    except Exception:
+        pass
+    return cfg
+
+
+def _detect_project(cwd: str) -> str:
+    """Resolve project name from the nearest .waystone marker (cwd upward)."""
+    try:
+        start = Path(cwd).resolve()
+    except Exception:
+        return ""
+    home = Path.home()
+    for directory in [start, *start.parents]:
+        marker = directory / ".waystone"
+        if marker.exists():
+            try:
+                name = marker.read_text(encoding="utf-8").strip()
+                if name:
+                    return name
+            except Exception:
+                pass
+        if directory == home:
+            break
+    return ""
 
 
 def _load_cb_state(session_id: str = "") -> dict:
@@ -77,32 +125,53 @@ def _load_cb_state(session_id: str = "") -> dict:
         return {}
 
 
-def _format_cb(state: dict, ctx_size: int) -> str:
+def _error_label(err: str) -> str:
+    """Compact ⚠ label classifying an extraction error string."""
+    e = err.lower()
+    if "leaked" in e or "permission_denied" in e or "403" in e:
+        return "⚠ key"
+    if "401" in e or "auth" in e or "invalid api" in e:
+        return "⚠ auth"
+    if "429" in e or "rate" in e:
+        return "⚠ rate"
+    if "timeout" in e:
+        return "⚠ timeout"
+    return "⚠ extract"
+
+
+def _format_cb(state: dict, ctx_size: int, cwd: str = ".", cfg: dict | None = None) -> str:
+    cfg = cfg or {}
+    if not cfg.get("enabled", True):
+        return ""
+    alert_on_error = cfg.get("alert_on_error", True)
+
     status = state.get("status")
-    project = state.get("project", "?")
+    project = state.get("project") or _detect_project(cwd) or "?"
     extracting = state.get("extracting", False)
     extract_started_at = state.get("extract_started_at")
-
-    # Extraction suffix shown whenever a background worker is running
     extract_error = state.get("extract_error", "")
+
+    # Extraction suffix: a progress spinner while running, or an error alert.
     if extracting and extract_started_at:
         elapsed_s = int(time.time() - extract_started_at)
         extract_str = f" ⟳{elapsed_s}s"
-    elif extract_error and not extracting:
-        # Classify the error for a compact label
-        err_lower = extract_error.lower()
-        if "leaked" in err_lower or "permission_denied" in err_lower or "403" in err_lower:
-            extract_str = " ⚠ key"
-        elif "401" in err_lower or "auth" in err_lower or "invalid api" in err_lower:
-            extract_str = " ⚠ auth"
-        elif "429" in err_lower or "rate" in err_lower:
-            extract_str = " ⚠ rate"
-        elif "timeout" in err_lower:
-            extract_str = " ⚠ timeout"
-        else:
-            extract_str = " ⚠ extract"
+    elif extract_error and not extracting and alert_on_error:
+        extract_str = " " + _error_label(extract_error)
     else:
         extract_str = ""
+
+    # No state yet (session start / idle) — show a "ready" segment so Waystone
+    # is visible from the very first render, as long as we can name the project.
+    if not status:
+        if project == "?":
+            return ""
+        return f"WS({project}): ready{extract_str}"
+
+    if status == "error":
+        if not alert_on_error:
+            return f"WS({project}): ready"
+        err = state.get("error", "")
+        return f"⚠ WS({project}): error{(' — ' + err[:40]) if err else ''}"
 
     if status in ("no_graph", "empty"):
         return f"WS({project}): building graph…{extract_str}"
@@ -114,9 +183,6 @@ def _format_cb(state: dict, ctx_size: int) -> str:
         if nodes_total:
             return f"WS({project}): paused ({nodes_total} nodes)"
         return f"WS({project}): paused"
-    if status == "error":
-        err = state.get("error", "")
-        return f"WS({project}): error{(' — ' + err[:40]) if err else ''}"
     if status != "ok":
         return ""
 

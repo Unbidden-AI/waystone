@@ -72,6 +72,12 @@ from the graph; use it to answer questions about this project accurately.""",
         "short_turn_words": 20, # turns shorter than this don't count toward min_words
         "prior_turns_window": 0, # raw turns to append to retrieval context (0 = disabled)
     },
+    "statusline": {
+        # Claude Code status-line display. The Waystone segment shows from the
+        # start of a session (project + "ready") and surfaces extraction errors.
+        "enabled": True,
+        "alert_on_error": True,   # show a ⚠ alert when extraction errors occur
+    },
     "posttool": {
         # PostToolUse capture: during long autonomous runs (plan/auto mode) the
         # UserPromptSubmit and Stop hooks don't fire, so the graph stays empty

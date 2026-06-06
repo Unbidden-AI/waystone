@@ -133,6 +133,18 @@ waystone remember "We chose Postgres over MySQL for JSONB support" --pin
 
 and it lands in the graph without derailing what the agent is doing.
 
+## Status line
+
+The Claude Code status line shows a Waystone segment from the **start** of a session — `WS(<project>): ready` as soon as a `.waystone` marker is found — then live retrieval metrics once you start working. It also surfaces extraction errors with a `⚠` alert (e.g. `⚠ auth`, `⚠ rate`). Configure it:
+
+```yaml
+statusline:
+  enabled: true          # show the Waystone segment at all
+  alert_on_error: true   # surface a ⚠ alert when extraction errors occur
+```
+
+> **Windows note:** Waystone forces its hook/CLI/status-line output to UTF-8, so the Unicode glyphs (`✓`, `⚠`, …) no longer crash on legacy `cp1252` consoles. If you're on an older build and see `UnicodeEncodeError`, upgrade, or set `PYTHONUTF8=1` in the `env` block of `~/.claude/settings.json` as a stopgap.
+
 ## Pausing extraction
 
 Extraction calls your LLM. To pause it (while keeping retrieval/injection from the existing graph):
