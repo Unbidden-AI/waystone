@@ -37,6 +37,11 @@ PAUSE_FILE = STATE_DIR / "paused"
 
 
 def main():
+    try:
+        from waystone._io import force_utf8
+        force_utf8()
+    except Exception:
+        pass
     parser = argparse.ArgumentParser()
     parser.add_argument("--project", required=True)
     parser.add_argument("--db-path", required=True)

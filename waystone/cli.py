@@ -65,6 +65,8 @@ def _load_cfg(config_path):
 @click.pass_context
 def cli(ctx, config_path):
     """Waystone — DAG-based context intelligence for LLM workflows."""
+    from ._io import force_utf8
+    force_utf8()  # ensure ✓/glyph output never crashes on legacy consoles (Windows cp1252)
     init_sentry()
     ctx.ensure_object(dict)
     ctx.obj["config_path"] = config_path
@@ -313,7 +315,7 @@ def extract_cmd(ctx, project, transcript_file, verify, lessons, decisions, quest
     dest = get_project_dir(config, project) / "transcripts" / transcript_path.name
     dest.parent.mkdir(parents=True, exist_ok=True)
     if not dest.exists():
-        dest.write_text(transcript_text)
+        dest.write_text(transcript_text, encoding="utf-8")
 
     quality = score_extraction_quality(nodes, edges, transcript_text)
     click.echo(
@@ -990,7 +992,7 @@ def conflicts_cmd(ctx, project, min_overlap, tags, output):
     report = "\n".join(report_lines)
     if output:
         from pathlib import Path
-        Path(output).write_text(report)
+        Path(output).write_text(report, encoding="utf-8")
         click.echo(f"Conflict report written to {output} ({len(unique_pairs)} pair(s)).")
     else:
         click.echo(report)
@@ -1078,7 +1080,7 @@ def impact_cmd(ctx, project, node_id, query_text, hops, reverse, node_types, fmt
 
     if output:
         from pathlib import Path
-        Path(output).write_text(report)
+        Path(output).write_text(report, encoding="utf-8")
         total = sum(len(v) for v in impact.values())
         click.echo(f"Impact report written to {output} ({total} node(s) found).")
     else:
@@ -1545,7 +1547,7 @@ def export(ctx, project, output, fmt, include_superseded, enable, disable, confi
         out_path = get_project_dir(config, project) / "exports" / "current.md"
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(markdown)
+    out_path.write_text(markdown, encoding="utf-8")
     click.echo(f"Exported {len(all_nodes)} nodes to {out_path}")
 
 
@@ -2197,7 +2199,7 @@ def extract_replay_cmd(ctx, project, transcript_file, turn_size, context_k, cont
     dest = get_project_dir(config, project) / "transcripts" / transcript_path.name
     dest.parent.mkdir(parents=True, exist_ok=True)
     if not dest.exists():
-        dest.write_text(transcript_text)
+        dest.write_text(transcript_text, encoding="utf-8")
 
     avg_ctx = total_ctx_nodes / llm_calls if llm_calls else 0
     click.echo(f"\nTotal: {total_nodes} nodes, {total_edges} edges from {llm_calls} LLM calls on {len(turns)} turns")

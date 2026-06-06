@@ -212,6 +212,11 @@ def _read_active_session_state(session_state_path: Path) -> str:
 
 def main():
     try:
+        from waystone._io import force_utf8
+        force_utf8()
+    except Exception:
+        pass
+    try:
         hook_input = json.loads(sys.stdin.read())
     except Exception:
         sys.exit(0)
@@ -370,7 +375,7 @@ def main():
         if session_state:
             additional_context += "\n\n## Recent session activity\n" + session_state
 
-        last_context_path.write_text(additional_context)
+        last_context_path.write_text(additional_context, encoding="utf-8")
 
         output = {
             "hookSpecificOutput": {

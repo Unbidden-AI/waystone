@@ -76,6 +76,11 @@ def _summarize(tool_name: str, tool_input: dict) -> str:
 
 def main() -> None:
     try:
+        from waystone._io import force_utf8
+        force_utf8()
+    except Exception:
+        pass
+    try:
         hook_input = json.loads(sys.stdin.read())
     except Exception:
         sys.exit(0)

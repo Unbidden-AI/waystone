@@ -54,6 +54,11 @@ DEFAULT_RECONCILE_MIN_TOTAL = 100  # minimum graph size before reconcile
 
 def main():
     try:
+        from waystone._io import force_utf8
+        force_utf8()
+    except Exception:
+        pass
+    try:
         hook_input_raw = sys.stdin.read()
         hook_input = json.loads(hook_input_raw)
     except Exception:
@@ -112,7 +117,7 @@ def main():
 
         # Save full transcript (for history and the latest symlink)
         md = _turns_to_markdown(turns)
-        out_path.write_text(md)
+        out_path.write_text(md, encoding="utf-8")
 
         # Update the symlink to always point to the latest transcript
         latest_link = out_dir / "latest.md"
@@ -150,7 +155,7 @@ def main():
 
         # Write delta to a temp file for extraction
         delta_path = out_dir / f"{timestamp}_{short_id}_delta.md"
-        delta_path.write_text(snippet)
+        delta_path.write_text(snippet, encoding="utf-8")
 
         # Update state before spawning (prevent double-extraction if hook fires twice)
         state["last_extracted_idx"] = len(turns)
