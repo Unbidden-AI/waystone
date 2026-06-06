@@ -27,8 +27,13 @@ Key commands:
 - `waystone query <project> "<question>" [--stats]` — query the graph manually
 - `waystone last-context` — see exactly what was injected into the last prompt
 - `waystone extract <project> <file>` — extract a transcript or document into the graph
+- `waystone remember "<fact>" [--pin]` — record a decision/fact instantly (no LLM)
 - `waystone onboard <project>` — bulk-import recent Claude Code sessions
 - `waystone show <project>` — inspect the graph (node count, types, recent entries)
+
+During long autonomous work, checkpoint important decisions as you go with
+`waystone remember "<decision and why>"` (or the `/btw` slash command) so they
+persist even within a single turn.
 
 When Waystone context appears above a user message, treat it as authoritative
 project history — prefer it over generic assumptions about the codebase.
@@ -142,12 +147,14 @@ def install_hooks(hook_dir: Path | None = None) -> tuple[list[str], list[str]]:
     if _shutil.which("waystone-hook-submit"):
         submit_cmd = "waystone-hook-submit"
         stop_cmd = "waystone-hook-stop"
+        posttool_cmd = "waystone-hook-posttool"
         statusline_cmd = "waystone-statusline" if _shutil.which("waystone-statusline") else (
             f"python {hook_dir / 'statusline.py'}" if hook_dir else "waystone-statusline"
         )
     elif hook_dir:
         submit_cmd = f"python {hook_dir / 'waystone_submit.py'}"
         stop_cmd = f"python {hook_dir / 'waystone_stop.py'}"
+        posttool_cmd = f"python {hook_dir / 'waystone_posttool.py'}"
         statusline_cmd = f"python {hook_dir / 'statusline.py'}"
     else:
         raise RuntimeError(
@@ -197,6 +204,19 @@ def install_hooks(hook_dir: Path | None = None) -> tuple[list[str], list[str]]:
         stop_entries.append({"hooks": [{"type": "command", "command": stop_cmd}]})
         added.append("Stop hook")
 
+    # PostToolUse — capture state-changing tool calls during long autonomous runs
+    posttool_entries = hooks.setdefault("PostToolUse", [])
+    existing_posttool = [
+        h.get("command", "")
+        for e in posttool_entries
+        for h in e.get("hooks", [])
+    ]
+    if any("waystone_posttool" in c or "waystone-hook-posttool" in c for c in existing_posttool):
+        skipped.append("PostToolUse hook")
+    else:
+        posttool_entries.append({"hooks": [{"type": "command", "command": posttool_cmd}]})
+        added.append("PostToolUse hook")
+
     # Status line
     existing_sl = settings.get("statusLine")
     existing_sl_cmd = (
@@ -233,6 +253,34 @@ def install_claude_md() -> bool:
     with CLAUDE_MD_PATH.open("a") as f:
         f.write(CLAUDE_MD_SECTION)
     return True
+
+
+COMMANDS_DIR = Path.home() / ".claude" / "commands"
+
+_BTW_COMMAND = """\
+---
+description: Remember a fact or decision in Waystone (instant, no LLM)
+allowed-tools: Bash(waystone remember:*)
+---
+
+!`waystone remember "$ARGUMENTS"`
+"""
+
+
+def install_slash_commands() -> list[str]:
+    """Install Waystone slash commands into ~/.claude/commands/.
+
+    Currently installs /btw — a quick "remember this" capture that writes a
+    fact straight to the graph without derailing the current task. Returns the
+    list of command names written (empty if already present).
+    """
+    written: list[str] = []
+    COMMANDS_DIR.mkdir(parents=True, exist_ok=True)
+    btw_path = COMMANDS_DIR / "btw.md"
+    if not btw_path.exists():
+        btw_path.write_text(_BTW_COMMAND)
+        written.append("btw")
+    return written
 
 
 # ---------------------------------------------------------------------------

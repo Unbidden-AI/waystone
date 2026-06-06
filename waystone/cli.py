@@ -1085,6 +1085,76 @@ def impact_cmd(ctx, project, node_id, query_text, hops, reverse, node_types, fmt
         click.echo(report)
 
 
+def _detect_marker_project(cwd: Path | None = None) -> str | None:
+    """Resolve a project name from the nearest .waystone marker (cwd upward)."""
+    start = (cwd or Path.cwd()).resolve()
+    home = Path.home()
+    for directory in [start, *start.parents]:
+        marker = directory / ".waystone"
+        if marker.exists():
+            try:
+                name = marker.read_text().strip()
+                if name:
+                    return name
+            except Exception:
+                pass
+        if directory == home:
+            break
+    return None
+
+
+@cli.command("remember")
+@click.argument("text")
+@click.option("--project", default=None, help="Project name (auto-detected from .waystone if omitted)")
+@click.option("--type", "node_type", default="decision", help="Node type (default: decision)")
+@click.option("--pin", is_flag=True, help="Pin the fact so it's always injected")
+@click.option("--tags", default="", help="Comma-separated extra tags")
+@click.pass_context
+def remember(ctx, text, project, node_type, pin, tags):
+    """Add a fact to the graph immediately — no LLM, no buffering.
+
+    The instant, deterministic capture behind the /btw slash command: stores
+    your text verbatim as one high-confidence node, keyword-tagged and
+    retrievable in every future session. Use --pin for "never forget this" facts.
+    """
+    from uuid import uuid4
+
+    config = _load_cfg(ctx.obj["config_path"])
+    project = project or _detect_marker_project()
+    if not project:
+        click.echo(
+            "Error: no project given and no .waystone marker found. Pass --project.",
+            err=True,
+        )
+        sys.exit(1)
+
+    db_path = get_db_path(config, project)
+    # vec disabled → instant (no embedding-model load). Tags make it immediately
+    # retrievable; embeddings backfill on the next extraction or `waystone reembed`.
+    store = GraphStore(db_path, vec_enabled=False)
+    base_tags = list(extract_keywords(text))
+    if tags:
+        base_tags += [t.strip() for t in tags.split(",") if t.strip()]
+    now = datetime.now(timezone.utc).isoformat()
+    node = {
+        "id": f"n_{uuid4().hex[:8]}",
+        "fact": text,
+        "type": node_type,
+        "confidence": 1.0,
+        "tags": sorted(set(base_tags)),
+        "source_transcript": "manual",
+        "created_at": now,
+        "occurred_at": now,
+    }
+    node_id = store.add_node(node)
+    if pin:
+        store.pin_node(node_id)
+    store.close()
+    click.echo(
+        f"✓ Remembered [{node_type}{', pinned' if pin else ''}] in '{project}': {text[:80]}"
+    )
+
+
 @cli.command("reembed")
 @click.argument("project")
 @click.pass_context
@@ -2985,6 +3055,7 @@ def configure_cmd(non_interactive):
         install_hooks,
         install_opencode_plugin,
         install_openhands_hooks,
+        install_slash_commands,
         register_antigravity_mcp,
         register_codex_mcp,
         register_mcp_server,
@@ -3185,6 +3256,11 @@ def configure_cmd(non_interactive):
                     click.echo("  ✓  Waystone section appended to ~/.claude/CLAUDE.md")
                 else:
                     click.echo("  –  CLAUDE.md already has Waystone section")
+
+        # Slash commands (e.g. /btw) — useful with any Claude Code method
+        installed_cmds = install_slash_commands()
+        for name in installed_cmds:
+            click.echo(f"  ✓  /{name} command installed to ~/.claude/commands/")
 
     # ----- Additional tools -----
     extra_tools: list[str] = []

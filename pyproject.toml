@@ -43,6 +43,7 @@ waystone = "waystone.cli:cli"
 waystone-mcp = "waystone.mcp_server:run_server"
 waystone-hook-submit = "waystone._hooks.submit:main"
 waystone-hook-stop = "waystone._hooks.stop:main"
+waystone-hook-posttool = "waystone._hooks.posttool:main"
 
 [tool.setuptools.packages.find]
 include = ["waystone*"]

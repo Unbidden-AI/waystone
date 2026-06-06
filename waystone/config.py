@@ -72,6 +72,16 @@ from the graph; use it to answer questions about this project accurately.""",
         "short_turn_words": 20, # turns shorter than this don't count toward min_words
         "prior_turns_window": 0, # raw turns to append to retrieval context (0 = disabled)
     },
+    "posttool": {
+        # PostToolUse capture: during long autonomous runs (plan/auto mode) the
+        # UserPromptSubmit and Stop hooks don't fire, so the graph stays empty
+        # until the run ends. When enabled, state-changing tool calls are
+        # buffered and flushed to background extraction mid-run.
+        "enabled": True,
+        "min_events": 8,       # flush after this many captured tool calls
+        "max_chars": 4000,     # …or when buffered summaries exceed this many chars
+        "tools": ["Write", "Edit", "MultiEdit", "NotebookEdit", "Bash"],
+    },
     "sentence_index": {
         # Per-sentence raw transcript indexing for semantic fallback retrieval.
         # When enabled, every sentence from ingested transcripts is stored in a
