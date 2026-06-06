@@ -6,6 +6,14 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.8] – 2026-06-06
+
+### Fixed
+
+- **Status line never rendered on pip installs.** `waystone configure` wired the status line to a `waystone-statusline` command, but that console script was never registered and the status-line code lived only in the repo's `hooks/` dir — so pip-installed users (e.g. on Windows) got a status line pointing at a non-existent binary, which silently rendered nothing. The status line is now a packaged module (`waystone._hooks.statusline`) with a real `waystone-statusline` entry point; the repo `hooks/statusline.py` is now a thin shim over it. **Existing installs self-heal on upgrade** — the wired command was correct all along, it just had no backing executable; `pip install waystone --upgrade` makes it work (no re-configure needed).
+
+---
+
 ## [0.4.7] – 2026-06-06
 
 ### Fixed

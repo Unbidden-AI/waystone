@@ -1,12 +1,6 @@
 """Tests for the status line: from-start visibility + configurable error alerts."""
 
-import importlib.util
-from pathlib import Path
-
-_SL_PATH = Path(__file__).resolve().parent.parent / "hooks" / "statusline.py"
-_spec = importlib.util.spec_from_file_location("waystone_statusline", _SL_PATH)
-statusline = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(statusline)
+from waystone._hooks import statusline
 
 
 def test_ready_segment_shows_from_start(tmp_path):
