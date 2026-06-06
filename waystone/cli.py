@@ -273,6 +273,80 @@ def verify_cmd(ctx, as_json):
         sys.exit(1)
 
 
+@cli.command("selfcheck")
+@click.option("--json", "as_json", is_flag=True, help="Emit a machine-readable JSON result")
+@click.pass_context
+def selfcheck_cmd(ctx, as_json):
+    """Fast, offline health check: does Waystone install and run here?
+
+    Verifies the package imports + version, config loads, the API key resolves,
+    and optional deps (sqlite-vec) are present — with NO network or LLM calls, so
+    it's safe/cheap to run on every install, session start, or in CI right after
+    a publish. For a real extraction round-trip (which costs an LLM call) use
+    'waystone verify'. Exit 0 if runnable, 1 if a core check fails.
+    """
+    import json as _json
+
+    from .config import resolve_llm_api_key
+
+    # Prefer the installed package metadata (the real released version) over the
+    # module __version__ constant, which can be stale in editable installs.
+    try:
+        from importlib.metadata import version as _pkg_version
+        _ver = _pkg_version("waystone")
+    except Exception:  # noqa: BLE001
+        try:
+            from . import __version__ as _ver
+        except Exception:  # noqa: BLE001
+            _ver = "unknown"
+
+    checks: list[dict] = []
+
+    def _add(name, ok, detail="", fatal=True):
+        checks.append({"name": name, "ok": bool(ok), "detail": detail, "fatal": fatal})
+
+    # Core: the package imports and reports a version (we're running, so import is OK).
+    _add("import waystone", True, _ver)
+
+    # Config loads without error.
+    try:
+        config = _load_cfg(ctx.obj["config_path"])
+        _add("config loads", True)
+    except Exception as e:  # noqa: BLE001
+        config = {}
+        _add("config loads", False, str(e)[:120])
+
+    # API key resolves (non-fatal: keyless local models are valid).
+    key, source = resolve_llm_api_key(config.get("llm", {}) or {})
+    _add("api key resolves", key is not None,
+         source if key else "none configured (ok for keyless local models)", fatal=False)
+
+    # sqlite-vec extension importable (semantic search; non-fatal — keyword fallback exists).
+    try:
+        import sqlite_vec  # noqa: F401
+        _add("sqlite-vec available", True, fatal=False)
+    except Exception as e:  # noqa: BLE001
+        _add("sqlite-vec available", False, f"{type(e).__name__}: keyword-only fallback", fatal=False)
+
+    ok = all(c["ok"] for c in checks if c["fatal"])
+    result = {"ok": ok, "version": _ver, "checks": checks}
+
+    if as_json:
+        click.echo(_json.dumps(result))
+    else:
+        click.echo(f"Waystone selfcheck — v{_ver}\n")
+        for c in checks:
+            icon = "✓" if c["ok"] else ("✗" if c["fatal"] else "–")
+            line = f"  {icon}  {c['name']}"
+            if c["detail"]:
+                line += f"  ({c['detail']})"
+            click.echo(line)
+        click.echo("\n" + ("OK — Waystone installs and runs." if ok else "FAILED — see above."))
+
+    if not ok:
+        sys.exit(1)
+
+
 _MAX_FILE_BYTES = 50 * 1024 * 1024  # 50 MB hard limit
 
 

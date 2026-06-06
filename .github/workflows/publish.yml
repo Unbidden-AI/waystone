@@ -27,3 +27,29 @@ jobs:
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+
+  smoke:
+    name: Smoke-test the published package
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install the just-published version from PyPI (retry for propagation)
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Smoke-testing waystone==$VERSION fresh from PyPI"
+          for i in 1 2 3 4 5 6 7 8; do
+            if pip install "waystone==$VERSION"; then exit 0; fi
+            echo "  not on PyPI yet — retry $i in 20s"; sleep 20
+          done
+          # Final attempt: fail the job loudly if it never became installable.
+          pip install "waystone==$VERSION"
+
+      - name: Verify it installs and runs
+        run: |
+          waystone --version
+          waystone selfcheck

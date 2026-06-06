@@ -6,6 +6,15 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.14] – 2026-06-06
+
+### Added
+
+- **`waystone selfcheck`** — fast, offline health check (no network/LLM call): confirms the package imports + reports its version, config loads, the API key resolves, and optional deps (sqlite-vec) are present. Exit 0/1, `--json`. Cheap enough to run on every install / session start / in CI. (`waystone verify` remains the deeper real-extraction check.)
+- **Post-publish CI smoke test** — the publish workflow now installs the just-published version fresh from PyPI (retrying for propagation) and runs `waystone --version` + `waystone selfcheck`, so every release is automatically verified to actually install and run. Would have caught the 0.4.x packaging regressions (statusline, hook entry points) before users hit them.
+
+---
+
 ## [0.4.13] – 2026-06-06
 
 ### Added

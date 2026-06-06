@@ -469,3 +469,37 @@ class TestVerify:
             r = runner.invoke(cli, ["verify", "--json"], env=env)
         d = json.loads(r.output.strip().splitlines()[-1])
         assert r.exit_code == 1 and d["ok"] is False and d["category"] == "model"
+
+
+class TestSelfcheck:
+    """`waystone selfcheck` — fast offline 'does it install & run' check."""
+
+    def test_selfcheck_passes(self, tmp_path):
+        runner = CliRunner()
+        env = {"HOME": str(tmp_path), "USERPROFILE": str(tmp_path)}
+        r = runner.invoke(cli, ["selfcheck"], env=env)
+        assert r.exit_code == 0
+        assert "installs and runs" in r.output
+
+    def test_selfcheck_json_shape(self, tmp_path):
+        import json
+        runner = CliRunner()
+        env = {"HOME": str(tmp_path), "USERPROFILE": str(tmp_path)}
+        r = runner.invoke(cli, ["selfcheck", "--json"], env=env)
+        d = json.loads(r.output.strip().splitlines()[-1])
+        assert d["ok"] is True
+        names = {c["name"] for c in d["checks"]}
+        assert {"import waystone", "config loads", "api key resolves"} <= names
+
+    def test_selfcheck_no_key_still_ok(self, tmp_path, monkeypatch):
+        """Missing API key is non-fatal — a fresh install with no key still 'runs'."""
+        import json
+        for v in ("GEMINI_API_KEY", "CTX_API_KEY", "WAYSTONE_API_KEY", "OPENAI_API_KEY"):
+            monkeypatch.delenv(v, raising=False)
+        runner = CliRunner()
+        env = {"HOME": str(tmp_path), "USERPROFILE": str(tmp_path)}
+        r = runner.invoke(cli, ["selfcheck", "--json"], env=env)
+        d = json.loads(r.output.strip().splitlines()[-1])
+        assert r.exit_code == 0 and d["ok"] is True
+        keycheck = next(c for c in d["checks"] if c["name"] == "api key resolves")
+        assert keycheck["fatal"] is False
