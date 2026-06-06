@@ -99,6 +99,73 @@ def init(ctx, project):
     click.echo(f"Initialized project '{project}' at {project_dir}")
 
 
+@cli.command("reset")
+@click.argument("project")
+@click.option("--yes", is_flag=True, help="Skip the confirmation prompt")
+@click.option("--purge", is_flag=True,
+              help="Also delete saved transcripts/exports (default keeps them)")
+@click.pass_context
+def reset_cmd(ctx, project, yes, purge):
+    """Delete a project's graph and re-initialize it empty (destructive).
+
+    Wipes the knowledge graph (context.db) for PROJECT so you can extract from
+    scratch. By default the saved transcripts/exports are kept (pass --purge to
+    delete those too). Your raw Claude Code session files under ~/.claude are
+    never touched, so 'waystone onboard <project>' can re-import them afterward.
+    """
+    import shutil as _shutil
+
+    config = _load_cfg(ctx.obj["config_path"])
+    project_dir = get_project_dir(config, project)
+    db_path = get_db_path(config, project)
+
+    if not project_dir.exists():
+        click.echo(f"Project '{project}' has no graph at {project_dir} — nothing to reset.")
+        return
+
+    # Summarize what's about to be deleted (best-effort; counts only, no sqlite-vec).
+    summary = "existing graph"
+    try:
+        store = GraphStore(db_path, vec_enabled=False)
+        stats = store.get_stats()
+        store.close()
+        summary = f"{stats['node_count']} nodes, {stats['edge_count']} edges"
+    except Exception:
+        pass
+
+    if not yes:
+        scope = "graph DB, transcripts, and exports" if purge else "graph DB (saved transcripts kept)"
+        click.echo(f"This will DELETE the {scope} for '{project}' ({summary}).")
+        click.echo("Raw Claude Code session files in ~/.claude are not affected.")
+        if not click.confirm("Proceed?", default=False):
+            click.echo("Aborted.")
+            return
+
+    try:
+        if purge:
+            _shutil.rmtree(project_dir, ignore_errors=True)
+        else:
+            # Default: remove only the SQLite files (db + WAL/SHM sidecars),
+            # leaving saved transcripts/exports intact.
+            for p in (db_path, Path(f"{db_path}-wal"), Path(f"{db_path}-shm")):
+                try:
+                    p.unlink()
+                except FileNotFoundError:
+                    pass
+    except OSError as e:
+        click.echo(f"Error: could not clear project '{project}': {e}", err=True)
+        click.echo("If a Waystone MCP server is running, stop it (it may hold the DB open) and retry.", err=True)
+        sys.exit(1)
+
+    # Re-initialize an empty graph (vec0 table needs the extension loaded).
+    project_dir.mkdir(parents=True, exist_ok=True)
+    (project_dir / "transcripts").mkdir(exist_ok=True)
+    (project_dir / "exports").mkdir(exist_ok=True)
+    GraphStore(get_db_path(config, project)).close()
+
+    click.echo(f"Reset '{project}' — empty graph re-initialized at {project_dir}.")
+    click.echo(f"Re-populate with: waystone onboard {project}")
+
 
 _MAX_FILE_BYTES = 50 * 1024 * 1024  # 50 MB hard limit
 

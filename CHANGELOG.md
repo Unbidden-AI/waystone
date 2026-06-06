@@ -6,6 +6,14 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.12] – 2026-06-06
+
+### Added
+
+- **`waystone reset <project>`** — delete a project's graph and re-initialize it empty, to re-extract from scratch. Keeps saved transcripts/exports by default (pass `--purge` to delete those too); never touches your raw Claude Code session files under `~/.claude`. Prompts for confirmation unless `--yes`. Re-populate afterward with `waystone onboard <project>`.
+
+---
+
 ## [0.4.11] – 2026-06-06
 
 ### Fixed

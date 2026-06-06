@@ -358,3 +358,67 @@ class TestJsonlToMarkdown:
         f = tmp_path / "empty.jsonl"
         f.write_text("")
         assert _jsonl_to_markdown(f) == ""
+
+
+class TestReset:
+    def _seed(self, env, runner):
+        from waystone.config import get_db_path
+        runner.invoke(cli, ["init", "proj"], env=env)
+        cfg = {"projects_dir": env["HOME"] + "/.waystone/projects"}
+        db = get_db_path(cfg, "proj")
+        s = GraphStore(db, vec_enabled=False)
+        s.add_node({"id": "n1", "fact": "hello", "type": "decision", "confidence": 1.0, "tags": []})
+        s.close()
+        return db
+
+    def test_reset_clears_graph_keeps_transcripts(self, tmp_path):
+        runner = CliRunner()
+        home = tmp_path / "home"; home.mkdir()
+        env = {"HOME": str(home), "USERPROFILE": str(home)}
+        db = self._seed(env, runner)
+        # A saved transcript that must survive the default reset.
+        transcript = db.parent / "transcripts" / "old_session.md"
+        transcript.parent.mkdir(parents=True, exist_ok=True)
+        transcript.write_text("Human: hi\n", encoding="utf-8")
+
+        assert GraphStore(db, vec_enabled=False).get_stats()["node_count"] == 1
+        r = runner.invoke(cli, ["reset", "proj", "--yes"], env=env)
+        assert r.exit_code == 0
+        # graph emptied but re-initialized (db still present)
+        assert db.exists()
+        assert GraphStore(db, vec_enabled=False).get_stats()["node_count"] == 0
+        # default keeps transcripts
+        assert transcript.exists()
+
+    def test_reset_purge_removes_transcripts(self, tmp_path):
+        runner = CliRunner()
+        home = tmp_path / "home"; home.mkdir()
+        env = {"HOME": str(home), "USERPROFILE": str(home)}
+        db = self._seed(env, runner)
+        transcript = db.parent / "transcripts" / "old_session.md"
+        transcript.parent.mkdir(parents=True, exist_ok=True)
+        transcript.write_text("Human: hi\n", encoding="utf-8")
+
+        r = runner.invoke(cli, ["reset", "proj", "--yes", "--purge"], env=env)
+        assert r.exit_code == 0
+        assert not transcript.exists()
+        assert GraphStore(db, vec_enabled=False).get_stats()["node_count"] == 0
+
+    def test_reset_abort_keeps_graph(self, tmp_path):
+        runner = CliRunner()
+        home = tmp_path / "home"; home.mkdir()
+        env = {"HOME": str(home), "USERPROFILE": str(home)}
+        db = self._seed(env, runner)
+
+        r = runner.invoke(cli, ["reset", "proj"], input="n\n", env=env)
+        assert r.exit_code == 0
+        assert "Aborted" in r.output
+        assert GraphStore(db, vec_enabled=False).get_stats()["node_count"] == 1
+
+    def test_reset_missing_project(self, tmp_path):
+        runner = CliRunner()
+        home = tmp_path / "home"; home.mkdir()
+        env = {"HOME": str(home), "USERPROFILE": str(home)}
+        r = runner.invoke(cli, ["reset", "ghost", "--yes"], env=env)
+        assert r.exit_code == 0
+        assert "nothing to reset" in r.output
