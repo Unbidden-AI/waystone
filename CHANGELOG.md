@@ -6,6 +6,14 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.7] – 2026-06-06
+
+### Fixed
+
+- **`waystone configure` crashed with `NameError: name 'config' is not defined`** when marking a project (the new graph-init step in 0.4.6 referenced an undefined `config`). It now loads the config via `load_config()` before initializing the graph. Verified end-to-end through the real wizard. If you hit this on 0.4.6, upgrade and re-run `waystone configure` (or `waystone init <project>`) — the marker was written but the graph wasn't created.
+
+---
+
 ## [0.4.6] – 2026-06-06
 
 ### Fixed

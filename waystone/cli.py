@@ -3342,14 +3342,15 @@ def configure_cmd(non_interactive):
                 # (appears in list_projects, stats work) instead of landing in a
                 # confusing "marked but not initialized" state.
                 try:
-                    project_dir = get_project_dir(config, project_name)
+                    cfg = load_config(None)
+                    project_dir = get_project_dir(cfg, project_name)
                     if project_dir.exists():
                         click.echo(f"  –  Graph already initialized at {project_dir}")
                     else:
                         project_dir.mkdir(parents=True)
                         (project_dir / "transcripts").mkdir()
                         (project_dir / "exports").mkdir()
-                        GraphStore(get_db_path(config, project_name)).close()
+                        GraphStore(get_db_path(cfg, project_name)).close()
                         click.echo(f"  ✓  Initialized empty graph for '{project_name}'")
                 except (PermissionError, OSError) as e:
                     click.echo(f"  ✗  Could not initialize graph: {e}", err=True)
