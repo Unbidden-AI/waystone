@@ -6,6 +6,20 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.5] – 2026-06-06
+
+### Fixed
+
+- **Windows `UnicodeEncodeError` crash.** Hooks/CLI/status-line forced their Unicode glyphs (✓, ⚠) through the Windows cp1252 console and crashed — silently killing the Stop hook before it could extract, so the graph stayed empty. Output is now forced to UTF-8 at every entry point and content file writes pin `encoding="utf-8"`. No `PYTHONUTF8=1` workaround needed.
+
+### Added
+
+- **PostToolUse capture hook.** Captures state-changing tool calls (Write/Edit/MultiEdit/NotebookEdit/Bash) during long autonomous (plan/auto) runs and flushes them to background extraction mid-run, so the graph fills in while the agent works instead of only at the end. Tunable via the `posttool` config section.
+- **`waystone remember` + `/btw`.** Instant, no-LLM single-node capture; `waystone configure` installs a `/btw` Claude Code slash command that wraps it.
+- **Status line from session start + error alerts.** Shows `WS(<project>): ready` from the first render and surfaces extraction errors with a ⚠ alert (configurable via `statusline.alert_on_error`).
+
+---
+
 ## [0.4.4] – 2026-06-05
 
 ### Added
