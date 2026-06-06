@@ -25,7 +25,11 @@ def from_claude_jsonl(path: Path) -> list[Utterance]:
     - Nested: message.role + message.content (Claude Code session format)
     """
     utterances = []
-    for line in path.read_text().splitlines():
+    # Always read as UTF-8 (Claude Code session files are UTF-8). Without this,
+    # Windows defaults to cp1252 and crashes on bytes like 0x90/0x8f ("'charmap'
+    # codec can't decode byte ..."). errors="replace" keeps a stray bad byte from
+    # aborting a whole session and avoids introducing surrogate chars.
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
         line = line.strip()
         if not line:
             continue

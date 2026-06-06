@@ -6,6 +6,14 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.11] – 2026-06-06
+
+### Fixed
+
+- **Windows: `onboard`/`import-claude-sessions` crashed reading some sessions** (`'charmap' codec can't decode byte 0x90/0x8f`). `from_claude_jsonl` read session files with the platform-default encoding (cp1252 on Windows) instead of UTF-8, so any byte outside cp1252 aborted that session. Now reads UTF-8 with `errors="replace"` — which also prevents the surrogate-on-encode crash (`'utf-8' codec can't encode '\udc8f'`) seen on the same files.
+
+---
+
 ## [0.4.10] – 2026-06-06
 
 ### Fixed
