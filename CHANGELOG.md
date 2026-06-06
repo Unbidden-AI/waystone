@@ -6,6 +6,14 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.15] – 2026-06-06
+
+### Fixed
+
+- **`waystone --version` now works.** The CLI group had no version flag, so `waystone --version` errored — caught immediately by the new post-publish smoke test on its first run. Added `--version` (reads installed package metadata).
+
+---
+
 ## [0.4.14] – 2026-06-06
 
 ### Added

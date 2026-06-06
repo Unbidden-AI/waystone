@@ -61,6 +61,7 @@ def _load_cfg(config_path):
 
 
 @click.group()
+@click.version_option(package_name="waystone", prog_name="waystone")
 @click.option("--config", "config_path", default=None, help="Path to config.yaml")
 @click.pass_context
 def cli(ctx, config_path):

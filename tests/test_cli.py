@@ -503,3 +503,11 @@ class TestSelfcheck:
         assert r.exit_code == 0 and d["ok"] is True
         keycheck = next(c for c in d["checks"] if c["name"] == "api key resolves")
         assert keycheck["fatal"] is False
+
+
+class TestVersionFlag:
+    def test_version_flag_works(self):
+        """`waystone --version` must work — the post-publish smoke test runs it."""
+        r = CliRunner().invoke(cli, ["--version"])
+        assert r.exit_code == 0
+        assert "version" in r.output.lower()
