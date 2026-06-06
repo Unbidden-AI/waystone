@@ -96,6 +96,43 @@ Long Discord/Telegram messages arrive as `message.txt` attachments — their tex
 
 ---
 
+## Capturing long autonomous runs (PostToolUse)
+
+In plan/auto mode the agent can run for a long time inside a *single* turn — and since neither `UserPromptSubmit` nor `Stop` fires until that turn ends, nothing reaches the graph until the very end. The **PostToolUse** hook fixes this: it summarizes state-changing tool calls (`Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Bash`) into a buffer and flushes them to background extraction *mid-run*, so the graph fills in while the agent works.
+
+It's installed automatically with the hooks integration. Tune or disable it in config:
+
+```yaml
+posttool:
+  enabled: true
+  min_events: 8       # flush after this many captured tool calls
+  max_chars: 4000     # …or when buffered summaries exceed this many chars
+  tools: [Write, Edit, MultiEdit, NotebookEdit, Bash]
+```
+
+Set `enabled: false` to turn it off, or trim `tools` to capture fewer kinds of action.
+
+## Quick capture: `waystone remember` and `/btw`
+
+`waystone remember` writes a fact straight to the graph — no LLM, no buffering, instantly retrievable:
+
+```bash
+waystone remember "We chose Postgres over MySQL for JSONB support" --pin
+```
+
+- Stored as one high-confidence node, keyword-tagged, `source=manual`.
+- `--pin` makes it always-injected ("never forget this"); omit it for an ordinary fact.
+- `--type` sets the node type (default `decision`); `--project` overrides the auto-detected project.
+- Embeddings backfill on the next extraction or `waystone reembed` (the node is immediately retrievable via tags regardless).
+
+`waystone configure` also installs a **`/btw`** Claude Code slash command that wraps it, so mid-task you can type:
+
+```
+/btw the staging DB password rotates every Sunday
+```
+
+and it lands in the graph without derailing what the agent is doing.
+
 ## Pausing extraction
 
 Extraction calls your LLM. To pause it (while keeping retrieval/injection from the existing graph):
