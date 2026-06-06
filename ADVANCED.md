@@ -159,3 +159,17 @@ waystone resume
 ## Hermes Agent memory provider
 
 Beyond Claude Code/MCP, Waystone ships a native Hermes Agent memory provider (`hermes_plugin/`). See the README's "Hermes Agent" section and [unbidden.ai/docs/integrations/hermes/](https://unbidden.ai/docs/integrations/hermes/).
+
+---
+
+## Windows: slow first query / one-time hang
+
+On a **fresh Windows install**, the very first semantic query can pause for a long time — sometimes minutes — before responding (and an MCP call may appear to hang with "Tool result missing due to internal error"). This is a **one-time** cost: the first load of the native `sqlite-vec` vector-search extension triggers Windows Defender / SmartScreen scanning the unsigned binary. Once it's loaded once, every later query is instant.
+
+Waystone already mitigates this:
+
+- **Counts-only operations** (`waystone_stats`, `waystone_list_projects`, "how's my DB doing?") skip the extension entirely, so they're always instant.
+- `waystone configure` **pre-warms** the extension at the end of setup — pay the one-time cost there (and answer any security prompt) instead of mid-query.
+- The MCP server warms it in the background on startup.
+
+If you still hit a stall on first use, either let it finish once (it won't recur), or add a **Microsoft Defender exclusion** for your Python environment's `site-packages` (where `sqlite_vec` lives) to skip the scan.

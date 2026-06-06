@@ -3305,6 +3305,19 @@ def configure_cmd(non_interactive):
     click.echo("  Waystone identifies which graph to use via a '.waystone' file")
     click.echo("  in your project root.\n")
 
+    # Warm the sqlite-vec native extension BEFORE we touch any graph DB. The
+    # first load of the native binary can stall on a fresh install (the OS
+    # scanning/gating it, notably Windows Defender). Paying it here — during
+    # interactive setup, where the user is present for any security prompt —
+    # keeps it off their first query AND off the project-init below, which
+    # creates the vec0 table and so needs the extension loaded.
+    from .store import prewarm_sqlite_vec
+    click.echo("  Warming up semantic search (one-time, may pause on a fresh install)...")
+    if prewarm_sqlite_vec():
+        click.echo("  ✓  Vector search engine ready\n")
+    else:
+        click.echo("  –  Vector search extension not loaded (semantic search will use keyword fallback)\n")
+
     if non_interactive:
         mark = False
     else:
@@ -3325,6 +3338,21 @@ def configure_cmd(non_interactive):
             try:
                 marker.write_text(project_name + "\n", encoding="utf-8")
                 click.echo(f"  ✓  Created {marker} → project '{project_name}'")
+                # Initialize the graph now so the project is immediately usable
+                # (appears in list_projects, stats work) instead of landing in a
+                # confusing "marked but not initialized" state.
+                try:
+                    project_dir = get_project_dir(config, project_name)
+                    if project_dir.exists():
+                        click.echo(f"  –  Graph already initialized at {project_dir}")
+                    else:
+                        project_dir.mkdir(parents=True)
+                        (project_dir / "transcripts").mkdir()
+                        (project_dir / "exports").mkdir()
+                        GraphStore(get_db_path(config, project_name)).close()
+                        click.echo(f"  ✓  Initialized empty graph for '{project_name}'")
+                except (PermissionError, OSError) as e:
+                    click.echo(f"  ✗  Could not initialize graph: {e}", err=True)
                 click.echo(f"\n  Next: extract your first transcript or run 'waystone onboard {project_name}'")
             except PermissionError:
                 click.echo(f"  ✗  Permission denied writing {marker}.", err=True)

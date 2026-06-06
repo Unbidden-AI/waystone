@@ -148,6 +148,7 @@ def install_hooks(hook_dir: Path | None = None) -> tuple[list[str], list[str]]:
         submit_cmd = "waystone-hook-submit"
         stop_cmd = "waystone-hook-stop"
         posttool_cmd = "waystone-hook-posttool"
+        import_memory_cmd = "waystone-hook-import-memory"
         statusline_cmd = "waystone-statusline" if _shutil.which("waystone-statusline") else (
             f"python {hook_dir / 'statusline.py'}" if hook_dir else "waystone-statusline"
         )
@@ -155,6 +156,7 @@ def install_hooks(hook_dir: Path | None = None) -> tuple[list[str], list[str]]:
         submit_cmd = f"python {hook_dir / 'waystone_submit.py'}"
         stop_cmd = f"python {hook_dir / 'waystone_stop.py'}"
         posttool_cmd = f"python {hook_dir / 'waystone_posttool.py'}"
+        import_memory_cmd = f"python {hook_dir / 'waystone_import_memory.py'}"
         statusline_cmd = f"python {hook_dir / 'statusline.py'}"
     else:
         raise RuntimeError(
@@ -216,6 +218,21 @@ def install_hooks(hook_dir: Path | None = None) -> tuple[list[str], list[str]]:
     else:
         posttool_entries.append({"hooks": [{"type": "command", "command": posttool_cmd}]})
         added.append("PostToolUse hook")
+
+    # SessionEnd — import Claude Code Auto Memory files into the graph on exit
+    sessionend_entries = hooks.setdefault("SessionEnd", [])
+    existing_sessionend = [
+        h.get("command", "")
+        for e in sessionend_entries
+        for h in e.get("hooks", [])
+    ]
+    if any("import_memory" in c or "import-memory" in c for c in existing_sessionend):
+        skipped.append("SessionEnd hook")
+    else:
+        sessionend_entries.append(
+            {"matcher": "", "hooks": [{"type": "command", "command": import_memory_cmd}]}
+        )
+        added.append("SessionEnd hook")
 
     # Status line
     existing_sl = settings.get("statusLine")

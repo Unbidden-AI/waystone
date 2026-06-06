@@ -6,6 +6,19 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.6] – 2026-06-06
+
+### Fixed
+
+- **Windows: multi-minute hang / "internal error" on first MCP call.** On a fresh install the first load of the native `sqlite-vec` extension (Windows Defender scanning/gating the unsigned binary) could block for minutes — surfacing as `waystone_stats` appearing to hang, then failing with "Tool result missing due to internal error." Count-only tools (`waystone_stats`, `waystone_list_projects`) now skip the vector extension entirely (they only count), and the extension is pre-warmed during `waystone configure` and in a background thread at MCP-server startup, so the first real query never pays the cold-load cost. See ADVANCED.md → "Windows: slow first query."
+- **`waystone configure` left projects un-initialized.** Configure wrote the `.waystone` marker but never created the graph, leaving the project showing as "No projects found" / "not initialized." Configure now initializes the empty graph (project dir + `context.db`) immediately after marking, so the project is usable right away.
+
+### Added
+
+- **SessionEnd Auto Memory import hook.** Claude Code "Auto Memory" files (`~/.claude/projects/<slug>/memory/`) are now imported into the Waystone graph when a session ends, via a `SessionEnd` hook (`waystone-hook-import-memory`) wired automatically by `waystone configure`. Idempotent (manifest-based, skips unchanged files), detached so teardown isn't blocked, and scoped to the curated memory files only (transcripts are handled by the existing extraction worker).
+
+---
+
 ## [0.4.5] – 2026-06-06
 
 ### Fixed

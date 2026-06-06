@@ -294,7 +294,10 @@ def waystone_stats(
         if not db_path.exists():
             raise FileNotFoundError(f"No graph found for project '{project_name}'.")
 
-        store = GraphStore(db_path)
+        # Counts only — no semantic search, so skip the sqlite-vec extension.
+        # On a cold Windows box the first `import sqlite_vec` can stall for
+        # minutes (Defender scanning the native binary); stats must never pay it.
+        store = GraphStore(db_path, vec_enabled=False)
         stats = store.get_stats()
         store.close()
 
@@ -355,7 +358,7 @@ def waystone_list_projects() -> str:
         lines = [f"Available projects ({len(projects)}):"]
         for name in projects:
             db_path = get_db_path(config, name)
-            store = GraphStore(db_path)
+            store = GraphStore(db_path, vec_enabled=False)  # counts only — skip sqlite-vec
             stats = store.get_stats()
             store.close()
             lines.append(f"  {name}  ({stats['node_count']} nodes, {stats['edge_count']} edges)")
@@ -375,4 +378,12 @@ def run_server(transport: str = "stdio") -> None:
     """Start the MCP server."""
     _setup_logging()
     init_sentry()
+    # Warm the sqlite-vec native extension off the critical path: the first cold
+    # load can stall (OS scanning the binary on a fresh install, esp. Windows).
+    # Doing it in a background daemon thread means the first semantic query
+    # doesn't pay it. Counts-only tools (stats/list) already skip sqlite-vec.
+    import threading
+
+    from .store import prewarm_sqlite_vec
+    threading.Thread(target=prewarm_sqlite_vec, name="prewarm-sqlite-vec", daemon=True).start()
     mcp.run(transport=transport)

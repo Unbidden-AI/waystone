@@ -10,6 +10,32 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
+
+def prewarm_sqlite_vec() -> bool:
+    """Force the one-time cold load of the sqlite-vec native extension.
+
+    On a fresh install — notably Windows — the *first* ``import sqlite_vec`` +
+    ``sqlite_vec.load()`` can stall for a long time (the OS scanning/gating the
+    unsigned native binary on first load). After it's loaded once the cost is
+    gone for good. Calling this at install time (``waystone configure``) or in a
+    background thread at MCP-server startup moves that one-time cost off the
+    user's first semantic query. Best-effort and idempotent — returns True on
+    success, False if sqlite-vec isn't available.
+    """
+    try:
+        import sqlite_vec
+        conn = sqlite3.connect(":memory:")
+        try:
+            conn.enable_load_extension(True)
+            sqlite_vec.load(conn)
+        finally:
+            conn.close()
+        return True
+    except Exception as e:  # noqa: BLE001 — never let warming break the caller
+        log.debug("prewarm_sqlite_vec failed (%s: %s)", type(e).__name__, e)
+        return False
+
+
 # Increment when any schema change is made (new table, column, index, trigger).
 # init_db() checks PRAGMA user_version and skips all DDL if already current.
 SCHEMA_VERSION = 19
