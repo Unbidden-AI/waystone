@@ -332,17 +332,12 @@ def test_llm_connection(
     Falls back to a minimal chat completion if /models returns 404.
     Resolves the API key from: explicit api_key arg → api_key_env env var → OPENAI_API_KEY.
     """
-    import os as _os
-
     import httpx as _httpx
 
-    # Resolve key
-    resolved_key = (
-        api_key
-        or (api_key_env and _os.environ.get(api_key_env))
-        or _os.environ.get("OPENAI_API_KEY")
-        or ""
-    )
+    # Resolve key via the single shared resolver so this check validates exactly
+    # the key extraction will use (env var → inline → generic env vars).
+    from .config import resolve_llm_api_key
+    resolved_key = resolve_llm_api_key({"api_key": api_key, "api_key_env": api_key_env})[0] or ""
 
     headers = {"Authorization": f"Bearer {resolved_key}"} if resolved_key else {}
     models_url = base_url.rstrip("/") + "/models"

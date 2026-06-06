@@ -6,6 +6,19 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.13] – 2026-06-06
+
+### Added
+
+- **`waystone verify`** — confirms the configured LLM actually works for extraction by running a real tiny extraction round-trip (native or OpenAI-compatible path) and asserting facts come back. Reports backend, model, resolved key source, latency, and a failure category (`auth`/`model`/`quota`/`network`/`config`); `--json` for scripts. Exit 0/1. Catches auth, wrong model names, missing structured-output support, and endpoint issues that a connectivity ping misses.
+- **`scripts/verify_providers.py`** — a real-key provider matrix that runs configure → verify → extract across Gemini/OpenAI/Anthropic (any provider whose key is in the env), each in an isolated temp HOME; `--fresh-install` also pip-installs the repo into a throwaway venv first. Mocked, always-on counterpart: `tests/test_cli.py::TestVerify`.
+
+### Changed
+
+- **Unified LLM API-key resolution** into one shared `config.resolve_llm_api_key()` used by the extractor (both paths), `verify`, `doctor`, and `configure`'s connection test — so they can no longer disagree about which key extraction will use (the root of the "doctor passes but extraction fails" mismatch). `doctor` now also reports the resolved key source.
+
+---
+
 ## [0.4.12] – 2026-06-06
 
 ### Added

@@ -401,17 +401,9 @@ def get_provider(config: dict) -> LLMProvider | None:
         return None
 
     # Resolve API key (same env var logic as extractor.py)
-    # Resolution order: configured env var (if any) → inline api_key → generic
-    # env var. A configured api_key_env is a preference, not a requirement: fall
-    # back to the inline key when its env var isn't set.
-    api_key = None
-    api_key_env = llm_cfg.get("api_key_env")
-    if api_key_env:
-        api_key = os.environ.get(api_key_env)
-    if not api_key:
-        api_key = llm_cfg.get("api_key")
-    if not api_key:
-        api_key = os.environ.get("CTX_API_KEY")
+    # Single source of truth for key resolution (env var → inline → generic).
+    from .config import resolve_llm_api_key
+    api_key, _key_source = resolve_llm_api_key(llm_cfg)
 
     if not api_key:
         log.warning("use_native_sdk=true but no API key found — falling back to OpenAI-compatible path")

@@ -422,3 +422,50 @@ class TestReset:
         r = runner.invoke(cli, ["reset", "ghost", "--yes"], env=env)
         assert r.exit_code == 0
         assert "nothing to reset" in r.output
+
+
+class TestVerify:
+    """`waystone verify` runs a real extraction round-trip (mocked here)."""
+
+    def test_verify_success(self, tmp_path):
+        from unittest.mock import AsyncMock, patch
+        runner = CliRunner()
+        env = {"HOME": str(tmp_path), "USERPROFILE": str(tmp_path)}
+        with patch("waystone.extractor.extract",
+                   new=AsyncMock(return_value={"nodes": [{"fact": "PostgreSQL is the DB"}], "edges": []})):
+            r = runner.invoke(cli, ["verify"], env=env)
+        assert r.exit_code == 0
+        assert "Extraction works" in r.output
+
+    def test_verify_json_shape(self, tmp_path):
+        import json
+        from unittest.mock import AsyncMock, patch
+        runner = CliRunner()
+        env = {"HOME": str(tmp_path), "USERPROFILE": str(tmp_path)}
+        with patch("waystone.extractor.extract",
+                   new=AsyncMock(return_value={"nodes": [{"fact": "x"}], "edges": []})):
+            r = runner.invoke(cli, ["verify", "--json"], env=env)
+        d = json.loads(r.output.strip().splitlines()[-1])
+        assert d["ok"] is True and d["nodes"] == 1
+        assert {"backend", "model", "key_source", "elapsed_ms", "category"} <= set(d)
+
+    def test_verify_auth_failure_exit1(self, tmp_path):
+        from unittest.mock import AsyncMock, patch
+        runner = CliRunner()
+        env = {"HOME": str(tmp_path), "USERPROFILE": str(tmp_path)}
+        with patch("waystone.extractor.extract",
+                   new=AsyncMock(side_effect=Exception("API error 401 invalid api key"))):
+            r = runner.invoke(cli, ["verify"], env=env)
+        assert r.exit_code == 1
+        assert "[auth]" in r.output
+
+    def test_verify_zero_nodes_exit1(self, tmp_path):
+        import json
+        from unittest.mock import AsyncMock, patch
+        runner = CliRunner()
+        env = {"HOME": str(tmp_path), "USERPROFILE": str(tmp_path)}
+        with patch("waystone.extractor.extract",
+                   new=AsyncMock(return_value={"nodes": [], "edges": []})):
+            r = runner.invoke(cli, ["verify", "--json"], env=env)
+        d = json.loads(r.output.strip().splitlines()[-1])
+        assert r.exit_code == 1 and d["ok"] is False and d["category"] == "model"

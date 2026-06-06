@@ -167,6 +167,112 @@ def reset_cmd(ctx, project, yes, purge):
     click.echo(f"Re-populate with: waystone onboard {project}")
 
 
+_VERIFY_FIXTURE = (
+    "Human: For the new service we decided to use PostgreSQL as the primary "
+    "database, and we set the API rate limit to 100 requests per minute.\n\n"
+    "Assistant: Understood — PostgreSQL is the primary database and the rate "
+    "limit is 100 requests/minute. I'll also note we're deploying on AWS "
+    "us-east-1."
+)
+
+
+def _classify_llm_error(msg: str) -> tuple[str, str]:
+    """Map an extraction error string to (category, human guidance)."""
+    m = (msg or "").lower()
+    if "no api key found" in m or "api key env var" in m:
+        return "config", "No usable API key — add 'api_key:' to your llm config or set the env var."
+    if "401" in m or "unauthorized" in m or "invalid api" in m or "api_key_invalid" in m:
+        return "auth", "The API key was rejected — check it's correct and active."
+    if "403" in m or "permission" in m or "leaked" in m:
+        return "auth", "Access denied (403) — key may be revoked, restricted, or disabled."
+    if "429" in m or "rate" in m or "quota" in m or "resource_exhausted" in m:
+        return "quota", "Rate-limited or out of quota — wait, or check billing/limits."
+    if "timeout" in m or "timed out" in m:
+        return "network", "Request timed out — check connectivity and the endpoint URL."
+    if "connect" in m or "getaddrinfo" in m or "connection" in m or "name or service" in m:
+        return "network", "Could not reach the LLM endpoint — check base_url and connectivity."
+    if "404" in m or "model" in m:
+        return "model", "Model/endpoint issue — check the 'model' name and base_url for your provider."
+    return "error", "Unexpected extraction error (see message above)."
+
+
+@cli.command("verify")
+@click.option("--json", "as_json", is_flag=True, help="Emit a machine-readable JSON result")
+@click.pass_context
+def verify_cmd(ctx, as_json):
+    """Verify the configured LLM actually works for extraction.
+
+    Resolves the API key the same way extraction does, then runs a REAL tiny
+    extraction round-trip (through the native or OpenAI-compatible path, whichever
+    is configured) and asserts facts come back. This catches auth, wrong model
+    name, missing JSON support, and endpoint problems that a connectivity ping
+    misses. Exit code 0 on success, 1 on failure.
+    """
+    import json as _json
+    import time as _t
+
+    from .config import resolve_llm_api_key
+    from .extractor import extract
+
+    config = _load_cfg(ctx.obj["config_path"])
+    llm_cfg = config.get("llm", {}) or {}
+    key, source = resolve_llm_api_key(llm_cfg)
+    model = llm_cfg.get("model", "?")
+    base_url = llm_cfg.get("base_url", "")
+    try:
+        from .llm import get_provider
+        backend = "native (Gemini SDK)" if get_provider(config) is not None else "OpenAI-compatible HTTP"
+    except Exception:
+        backend = "OpenAI-compatible HTTP"
+
+    result_obj = {
+        "ok": False, "backend": backend, "model": model,
+        "key_source": source, "nodes": 0, "edges": 0,
+        "elapsed_ms": 0, "error": None, "category": None,
+    }
+
+    if not as_json:
+        click.echo("Waystone — Verify\n")
+        click.echo(f"  Backend : {backend}")
+        click.echo(f"  Model   : {model}")
+        click.echo(f"  API key : {source}" + ("" if key or source != "none" else " (none — fine only for keyless local models)"))
+        click.echo("  Running a real extraction round-trip...")
+
+    t0 = _t.monotonic()
+    try:
+        out = asyncio.run(extract(_VERIFY_FIXTURE, config))
+        elapsed_ms = int((_t.monotonic() - t0) * 1000)
+        nodes = out.get("nodes", []) or []
+        edges = out.get("edges", []) or []
+        result_obj.update(nodes=len(nodes), edges=len(edges), elapsed_ms=elapsed_ms)
+
+        if nodes:
+            result_obj["ok"] = True
+            if not as_json:
+                click.echo(f"\n  ✓  Extraction works — {len(nodes)} node(s), {len(edges)} edge(s) in {elapsed_ms}ms")
+                sample = str(nodes[0].get("fact", nodes[0]))[:80]
+                click.echo(f"     e.g. {sample}")
+        else:
+            result_obj["category"] = "model"
+            result_obj["error"] = "reached the LLM but it returned no extractable facts"
+            if not as_json:
+                click.echo(f"\n  ✗  Reached the LLM ({elapsed_ms}ms) but it returned 0 facts.")
+                click.echo("     Likely a model/JSON-mode issue — check the 'model' supports structured output.")
+    except Exception as e:  # noqa: BLE001 — verify must report, not crash
+        elapsed_ms = int((_t.monotonic() - t0) * 1000)
+        category, guidance = _classify_llm_error(str(e))
+        result_obj.update(elapsed_ms=elapsed_ms, error=str(e)[:300], category=category)
+        if not as_json:
+            click.echo(f"\n  ✗  Extraction failed [{category}] after {elapsed_ms}ms")
+            click.echo(f"     {guidance}")
+            click.echo(f"     {str(e)[:200]}")
+
+    if as_json:
+        click.echo(_json.dumps(result_obj))
+    if not result_obj["ok"]:
+        sys.exit(1)
+
+
 _MAX_FILE_BYTES = 50 * 1024 * 1024  # 50 MB hard limit
 
 
@@ -2806,18 +2912,16 @@ def doctor_cmd(ctx, do_fix):
         click.echo("\nCannot continue without a valid config.")
         sys.exit(1)
 
-    # --- API key ---
+    # --- API key --- (use the shared resolver so this matches what extraction uses)
+    from .config import resolve_llm_api_key
     llm_cfg = config.get("llm", {})
-    has_key = bool(
-        llm_cfg.get("api_key")
-        or (llm_cfg.get("api_key_env") and _os.environ.get(llm_cfg["api_key_env"]))
-        or _os.environ.get("CTX_API_KEY")
-        or _os.environ.get("OPENAI_API_KEY")
-    )
+    _key, _key_source = resolve_llm_api_key(llm_cfg)
+    has_key = _key is not None
     _check(
         "API key configured",
         has_key,
-        "set CTX_API_KEY or add api_key to config.yaml" if not has_key else "",
+        "set CTX_API_KEY or add api_key to config.yaml" if not has_key
+        else f"source: {_key_source}",
     )
 
     # --- LLM endpoint reachability ---

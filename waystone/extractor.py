@@ -157,29 +157,18 @@ async def _call_llm(prompt: str, config: dict, domain_profile=None) -> str:
                     continue
                 raise
 
+    # Single source of truth for key resolution (env var → inline → generic).
+    from .config import resolve_llm_api_key
     headers = {}
-    api_key_env = llm_cfg.get("api_key_env")
-    # Resolution order: the configured env var (if any) → the inline api_key →
-    # generic env vars. A configured api_key_env is a *preference*, not a
-    # requirement: if its env var isn't set we fall back to the inline key
-    # rather than aborting (otherwise a config with both fields fails whenever
-    # the env var happens to be unset).
-    api_key = None
-    if api_key_env:
-        api_key = os.environ.get(api_key_env)
-    if not api_key:
-        api_key = llm_cfg.get("api_key")
-    if not api_key:
-        api_key = os.environ.get("CTX_API_KEY") or os.environ.get("OPENAI_API_KEY")
-
+    api_key, _key_source = resolve_llm_api_key(llm_cfg)
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
-    elif api_key_env:
+    elif llm_cfg.get("api_key_env"):
         # The user asked for a key (named an env var) but none could be resolved.
         raise ValueError(
-            f"No API key found: env var '{api_key_env}' is not set and no inline "
-            f"'api_key' is configured. Set {api_key_env}, or add 'api_key:' to your "
-            f"llm config."
+            f"No API key found: env var '{llm_cfg['api_key_env']}' is not set and no "
+            f"inline 'api_key' is configured. Set {llm_cfg['api_key_env']}, or add "
+            f"'api_key:' to your llm config."
         )
     # else: no key configured at all (e.g. a local model that needs none) — send
     # no Authorization header.

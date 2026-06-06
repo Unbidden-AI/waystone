@@ -156,6 +156,33 @@ waystone resume
 
 ---
 
+## Verifying your LLM / API key
+
+Extraction needs a working LLM. To confirm yours is set up correctly — including that the API key actually works for *extraction*, not just that it's present — run:
+
+```bash
+waystone verify          # human-readable
+waystone verify --json   # machine-readable (for scripts/CI)
+```
+
+`verify` resolves the API key exactly the way extraction does (configured `api_key_env` → inline `api_key` → generic env vars), then runs a **real tiny extraction round-trip** through whichever path is configured (native Gemini SDK or OpenAI-compatible HTTP) and asserts facts come back. This catches auth failures, wrong model names, missing JSON/structured-output support, and endpoint problems that a simple connectivity check misses. Exit code is `0` on success, `1` on failure, with a category (`auth` / `model` / `quota` / `network` / `config`). `waystone configure` and `waystone doctor` use the same resolver, so they can't disagree about which key extraction will use.
+
+### Testing across providers (real keys)
+
+To test the configure → verify → extract path against multiple providers at once, set the keys you want to test and run the matrix script:
+
+```bash
+export GEMINI_API_KEY=...
+export OPENAI_API_KEY=...
+export ANTHROPIC_API_KEY=...
+python3.13 scripts/verify_providers.py            # tests each provider with a key
+python3.13 scripts/verify_providers.py --fresh-install   # also pip-installs into a throwaway venv first
+```
+
+Each provider runs in an isolated temp `HOME` (your real `~/.waystone` is untouched), does one real ~$0.001 extraction, and the script exits non-zero if any *configured* provider fails. Providers without a key are skipped. The always-on, no-network tier of these checks lives in `tests/test_cli.py::TestVerify`.
+
+---
+
 ## Hermes Agent memory provider
 
 Beyond Claude Code/MCP, Waystone ships a native Hermes Agent memory provider (`hermes_plugin/`). See the README's "Hermes Agent" section and [unbidden.ai/docs/integrations/hermes/](https://unbidden.ai/docs/integrations/hermes/).

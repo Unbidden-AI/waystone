@@ -180,6 +180,37 @@ def get_api_key(config: dict) -> str | None:
     return os.environ.get("WAYSTONE_API_KEY") or config.get("api_key") or None
 
 
+def resolve_llm_api_key(llm_cfg: dict) -> tuple[str | None, str]:
+    """Resolve the extraction LLM's API key from an ``llm`` config block.
+
+    Single source of truth for key resolution — used by the extractor (both the
+    OpenAI-compatible and native-Gemini paths), ``waystone verify``, ``doctor``,
+    and ``configure`` so they can never disagree about which key extraction will
+    actually use.
+
+    Resolution order: the configured ``api_key_env`` (that env var) → the inline
+    ``api_key`` → generic env vars (CTX_API_KEY, WAYSTONE_API_KEY, OPENAI_API_KEY).
+
+    Returns ``(key, source)`` where ``source`` is ``"env:<NAME>"``, ``"inline"``,
+    or ``"none"`` (key is None only when source is "none" — e.g. a local model
+    that needs no key).
+    """
+    llm_cfg = llm_cfg or {}
+    env_name = llm_cfg.get("api_key_env")
+    if env_name:
+        val = os.environ.get(env_name)
+        if val:
+            return val, f"env:{env_name}"
+    inline = llm_cfg.get("api_key")
+    if inline:
+        return inline, "inline"
+    for generic in ("CTX_API_KEY", "WAYSTONE_API_KEY", "OPENAI_API_KEY"):
+        val = os.environ.get(generic)
+        if val:
+            return val, f"env:{generic}"
+    return None, "none"
+
+
 def make_remote_client(config: dict):
     """Build a RemoteContextBroker from config."""
     from .remote_client import RemoteContextBroker  # local import to avoid circular dep
