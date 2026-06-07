@@ -2935,9 +2935,15 @@ def onboard_cmd(ctx, project, limit, verify, chunk_size, timeout):
             node["source_transcript"] = source_name
             node.setdefault("created_at", now)
 
-        store = GraphStore(db_path)
-        store.merge_extraction(session_nodes, session_edges)
-        store.close()
+        # Isolate the merge: a bad node must not crash the whole onboard run.
+        try:
+            store = GraphStore(db_path)
+            store.merge_extraction(session_nodes, session_edges)
+            store.close()
+        except Exception as e:
+            click.echo(f"MERGE FAILED ({type(e).__name__}): {str(e)[:100]}", err=True)
+            skipped.append((path.name, f"merge failed: {type(e).__name__}"))
+            continue
 
         total_nodes += len(session_nodes)
         total_edges += len(session_edges)

@@ -6,6 +6,14 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.21] – 2026-06-06
+
+### Fixed
+
+- **`UnicodeEncodeError: '\udc8f' surrogates not allowed` crash.** LLM extraction output occasionally contains a lone surrogate code point; SQLite can't encode it, so `add_node`'s INSERT raised `UnicodeEncodeError` and crashed the entire extraction / `onboard` run mid-import. `add_node` now strips lone surrogates (→ U+FFFD) from the fact, source, and tags before storing — protecting every path that writes a node. Additionally, `onboard`'s per-session merge is isolated in a try/except so a single bad session is reported and skipped instead of killing the whole import.
+
+---
+
 ## [0.4.20] – 2026-06-06
 
 ### Added

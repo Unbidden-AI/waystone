@@ -64,6 +64,22 @@ def compute_fact_hash(fact: str) -> str:
     return _fact_hash(fact)
 
 
+_SURROGATE_RE = re.compile(r"[\ud800-\udfff]")
+
+
+def _strip_surrogates(s):
+    """Replace lone surrogate code points (e.g. '\\udc8f') with U+FFFD.
+
+    LLM extraction output occasionally contains lone surrogates; SQLite/UTF-8
+    cannot encode them, so the INSERT in add_node raises UnicodeEncodeError and
+    crashes the whole extraction/onboard run. Sanitizing at the storage gate
+    protects every path that writes a node.
+    """
+    if not isinstance(s, str):
+        return s
+    return _SURROGATE_RE.sub("�", s) if _SURROGATE_RE.search(s) else s
+
+
 def _auto_tag_numerics(fact: str, tags: list[str]) -> list[str]:
     """Augment tags with digit-containing tokens parsed from fact text.
 
@@ -504,7 +520,13 @@ class GraphStore:
         takes the maximum of the two values. Returns the canonical node ID
         (either the existing one or the newly inserted one).
         """
-        tags = _auto_tag_numerics(node["fact"], node.get("tags", []))
+        # Strip lone surrogates the LLM may have emitted — SQLite can't encode
+        # them and the INSERT below would raise UnicodeEncodeError, crashing the
+        # whole run. Sanitize fact + the other stored text fields up front.
+        node["fact"] = _strip_surrogates(node["fact"])
+        if node.get("source_transcript"):
+            node["source_transcript"] = _strip_surrogates(node["source_transcript"])
+        tags = [_strip_surrogates(t) for t in _auto_tag_numerics(node["fact"], node.get("tags", []))]
         fhash = _fact_hash(node["fact"])
         existing_row = self.conn.execute(
             "SELECT id, tags, confidence FROM nodes WHERE fact_hash = ? LIMIT 1",

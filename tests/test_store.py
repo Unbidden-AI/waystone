@@ -615,3 +615,21 @@ class TestWorldContainers:
 
         assert world_map[world1]["node_count"] == 2
         assert world_map[world2]["node_count"] == 1
+
+
+def test_add_node_sanitizes_surrogates(tmp_path):
+    """A lone surrogate in a node fact must not crash the INSERT (UnicodeEncodeError)."""
+    from waystone.store import GraphStore
+    db = tmp_path / "s.db"
+    s = GraphStore(db, vec_enabled=False)
+    nid = s.add_node({
+        "id": "n1",
+        "fact": "Decision text with a bad char \udc8f embedded",
+        "type": "decision", "confidence": 1.0, "tags": ["tag\udc8f"],
+    })
+    assert nid
+    fact = s.get_all_nodes()[0]["fact"]
+    s.close()
+    # surrogate replaced, no crash
+    assert not any(0xD800 <= ord(c) <= 0xDFFF for c in fact)
+    assert "Decision text with a bad char" in fact
