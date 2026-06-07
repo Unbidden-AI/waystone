@@ -1038,6 +1038,48 @@ def score_extraction_quality(nodes: list[dict], edges: list[dict], transcript_te
     }
 
 
+async def summarize_session(sample_text: str, config: dict) -> str:
+    """Best-effort one-line summary of a session, for menus (e.g. onboard picker).
+
+    A short, cheap completion — NOT extraction. Returns "" on ANY failure (no
+    key, unreachable, timeout, bad response) so the caller can fall back to a
+    cheaper preview. No retries: menus must stay snappy.
+    """
+    import httpx
+
+    from .config import resolve_llm_api_key
+
+    llm_cfg = config.get("llm", {}) or {}
+    base_url = llm_cfg.get("base_url")
+    model = llm_cfg.get("model")
+    if not base_url or not model or not (sample_text or "").strip():
+        return ""
+
+    key, _ = resolve_llm_api_key(llm_cfg)
+    headers = {"Content-Type": "application/json"}
+    if key:
+        headers["Authorization"] = f"Bearer {key}"
+    body = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content":
+                "You label coding sessions. Reply with ONLY a terse 6-10 word phrase "
+                "describing what the session worked on — no quotes, no preamble."},
+            {"role": "user", "content": sample_text[:6000]},
+        ],
+        "temperature": 0.1,
+        "max_tokens": 32,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            r = await client.post(base_url.rstrip("/") + "/chat/completions", headers=headers, json=body)
+            r.raise_for_status()
+            txt = r.json()["choices"][0]["message"]["content"]
+            return " ".join((txt or "").split())[:90]
+    except Exception:
+        return ""
+
+
 def split_into_chunks(text: str, max_chars: int) -> list[str]:
     """Split text into chunks at paragraph boundaries, each ≤ max_chars.
 

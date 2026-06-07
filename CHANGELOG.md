@@ -6,6 +6,14 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.23] – 2026-06-06
+
+### Changed
+
+- **`onboard` menu now shows an LLM one-line summary of each session** instead of just its first prompt. The first prompt is the session's *opener*, not its topic — a big session can start with a throwaway "is it configured?" and then do hours of real work, making it look skippable. The picker now summarizes each session's head/middle/tail in parallel (cheap, ~a penny total), so you can tell what a session was actually about. Falls back to the first-prompt snippet (then filename) if no LLM is reachable or a summary times out.
+
+---
+
 ## [0.4.22] – 2026-06-06
 
 ### Changed

@@ -629,3 +629,32 @@ class TestPrune:
         r = runner.invoke(cli, ["prune", "proj"], env=env)
         assert r.exit_code != 0
         assert "at least one filter" in r.output
+
+
+class TestSessionSummaries:
+    def test_no_llm_returns_empty_map(self, tmp_path, monkeypatch):
+        from waystone.cli import _summarize_sessions
+        for v in ("GEMINI_API_KEY", "CTX_API_KEY", "WAYSTONE_API_KEY", "OPENAI_API_KEY"):
+            monkeypatch.delenv(v, raising=False)
+        sessions = [{"path": tmp_path / "x.jsonl"}]
+        # no key + remote base_url => no LLM => {} (callers fall back to preview)
+        out = _summarize_sessions(sessions, {"llm": {"base_url": "https://api.example.com/v1", "model": "m"}})
+        assert out == {}
+
+    def test_summaries_used_when_available(self, tmp_path, monkeypatch):
+        import json
+        from unittest.mock import AsyncMock, patch
+        # make a session file with a misleading throwaway opener
+        f = tmp_path / "s.jsonl"
+        f.write_text(json.dumps({"type": "user", "message": {"role": "user", "content": "is waystone configured?"}}) + "\n",
+                     encoding="utf-8")
+        monkeypatch.setenv("GEMINI_API_KEY", "k")
+        with patch("waystone.cli.summarize_session", new=AsyncMock(return_value="Built extraction pipeline; fixed chunking")):
+            from waystone.cli import _summarize_sessions
+            out = _summarize_sessions([{"path": f}], {"llm": {"base_url": "https://x/v1", "model": "m", "api_key_env": "GEMINI_API_KEY"}})
+        assert out[str(f)] == "Built extraction pipeline; fixed chunking"
+
+    def test_summarize_session_no_baseurl_returns_empty(self):
+        import asyncio
+        from waystone.extractor import summarize_session
+        assert asyncio.run(summarize_session("some text", {"llm": {}})) == ""

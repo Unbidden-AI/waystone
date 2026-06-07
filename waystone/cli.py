@@ -23,6 +23,7 @@ from .extractor import (
     reconcile_group,
     score_extraction_quality,
     split_into_chunks,
+    summarize_session,
     split_transcript_into_turns,
     synthesize_extraction,
     verify_extraction,
@@ -2776,6 +2777,51 @@ def _session_preview(path: Path, max_len: int = 70) -> str:
     return ""
 
 
+def _session_sample(path: Path, budget: int = 4500) -> str:
+    """Head+middle+tail sample of a session's text, for LLM summarization.
+
+    The first prompt alone misrepresents big sessions (a session can open with a
+    throwaway question then do hours of real work). Sampling the arc lets the
+    summarizer see scope without sending the whole (possibly 1MB+) transcript.
+    """
+    try:
+        text = _jsonl_to_markdown(path)
+    except Exception:
+        return ""
+    if len(text) <= budget:
+        return text
+    third = budget // 3
+    mid = len(text) // 2
+    return (text[:third] + "\n…\n"
+            + text[mid:mid + third] + "\n…\n"
+            + text[-third:])
+
+
+def _summarize_sessions(sessions: list, config: dict) -> dict:
+    """Map session-path -> LLM one-line summary (parallel, best-effort).
+
+    Returns {} if no LLM is reachable (so callers fall back to first-prompt
+    previews). Any individual failure yields "" for that session.
+    """
+    from .config import resolve_llm_api_key
+    llm_cfg = config.get("llm", {}) or {}
+    base_url = llm_cfg.get("base_url", "")
+    has_llm = (resolve_llm_api_key(llm_cfg)[0] is not None
+               or "localhost" in base_url or "127.0.0.1" in base_url)
+    if not has_llm:
+        return {}
+
+    async def _run() -> dict:
+        async def one(s):
+            return str(s["path"]), await summarize_session(_session_sample(s["path"]), config)
+        return dict(await asyncio.gather(*[one(s) for s in sessions]))
+
+    try:
+        return asyncio.run(_run())
+    except Exception:
+        return {}
+
+
 @cli.command("onboard")
 @click.argument("project", required=False)
 @click.option("--limit", default=10, show_default=True, type=int,
@@ -2840,11 +2886,16 @@ def onboard_cmd(ctx, project, limit, verify, chunk_size, timeout):
     # Present menu
     from datetime import datetime as _dt
     click.echo(f"\nFound {len(sessions)} recent Claude Code session(s):\n")
+    # Prefer a concise LLM summary of each session (sees the whole arc, so it
+    # doesn't misjudge a big session that opens with a throwaway prompt). Falls
+    # back to the first-user-prompt snippet, then the filename.
+    summaries = _summarize_sessions(sessions, config)
     for i, s in enumerate(sessions, 1):
         ts = _dt.fromtimestamp(s["mtime"]).strftime("%Y-%m-%d %H:%M")
         size_k = s["chars"] // 1024
-        preview = _session_preview(s["path"])
-        label = preview if preview else f"{s['project_dir']}/{s['path'].name}"
+        label = (summaries.get(str(s["path"]))
+                 or _session_preview(s["path"])
+                 or f"{s['project_dir']}/{s['path'].name}")
         click.echo(f"  [{i:2d}] {ts}  {size_k:>5}KB  {label}")
 
     click.echo()
