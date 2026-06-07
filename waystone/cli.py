@@ -169,6 +169,28 @@ def reset_cmd(ctx, project, yes, purge):
     click.echo(f"Re-populate with: waystone onboard {project}")
 
 
+# Transient / self-referential "meta-noise" a graph should not carry as durable
+# facts — e.g. status reports about the tool's own emptiness. Kept narrow so it
+# won't match real (even negatively-phrased) project decisions/constraints.
+_META_NOISE_PATTERNS = [
+    r"\b(database|graph|project) is (currently )?empty\b",
+    r"\b0 nodes? and 0 edges?\b",
+    r"\b(has|have|with) 0 (nodes|edges)\b",
+    r"\bno (decisions?|constraints?|facts?|nodes?|edges?|projects?)\b[^.]*\b(have|has)? ?(been )?(captured|registered|recorded|extracted|found)\b",
+    r"\bnothing (has been|was) (captured|extracted|recorded)\b",
+    r"\bno projects? (are |is )?(registered|found|configured)\b",
+    r"\bno waystone context (will|is|was)\b",
+    r"\b(graph|database) is (not |un)populated\b",
+]
+
+
+def _is_meta_noise(fact: str, _compiled=[]) -> bool:  # noqa: B006 — cache compiled patterns
+    if not _compiled:
+        import re as _re
+        _compiled.extend(_re.compile(p, _re.IGNORECASE) for p in _META_NOISE_PATTERNS)
+    return any(p.search(fact or "") for p in _compiled)
+
+
 _VERIFY_FIXTURE = (
     "Human: For the new service we decided to use PostgreSQL as the primary "
     "database, and we set the API rate limit to 100 requests per minute.\n\n"
@@ -2018,39 +2040,53 @@ def reconcile_cmd(ctx, project, dry_run, max_cluster_size, semantic_dedup, dedup
     help="Remove nodes whose source_transcript contains this substring (e.g. 'live')",
 )
 @click.option(
+    "--meta-noise",
+    "meta_noise",
+    is_flag=True,
+    help="Remove transient self-referential 'noise' facts (e.g. 'database is empty', '0 nodes', 'no decisions captured')",
+)
+@click.option(
     "--execute",
     is_flag=True,
     help="Actually delete matched nodes (default: preview only)",
 )
 @click.pass_context
-def prune_cmd(ctx, project, older_than_days, confidence_below, source_pattern, execute):
+def prune_cmd(ctx, project, older_than_days, confidence_below, source_pattern, meta_noise, execute):
     """Preview or remove graph nodes matching the given criteria.
 
     Runs in preview mode by default — prints what would be removed.
-    Use --execute to actually delete. All criteria are ANDed.
+    Use --execute to actually delete. Matched sets are unioned.
 
     Examples:
 
     \b
       waystone prune myproject --source live
       waystone prune myproject --older-than 90 --confidence-below 0.5
-      waystone prune myproject --source live --execute
+      waystone prune myproject --meta-noise            # clean self-referential junk
+      waystone prune myproject --meta-noise --execute
     """
-    if older_than_days is None and confidence_below is None and source_pattern is None:
-        click.echo("Error: at least one filter (--older-than, --confidence-below, --source) is required.", err=True)
+    if older_than_days is None and confidence_below is None and source_pattern is None and not meta_noise:
+        click.echo("Error: at least one filter (--older-than, --confidence-below, --source, --meta-noise) is required.", err=True)
         ctx.exit(1)
 
     cfg = _load_cfg(ctx.obj["config_path"])
     db_path = get_db_path(cfg, project)
     store = GraphStore(db_path)
 
-    ids = store.prune_nodes(
-        older_than_days=older_than_days,
-        confidence_below=confidence_below,
-        source_pattern=source_pattern,
-        dry_run=not execute,
-    )
+    # Collect matched ids from each criterion (union). prune_nodes with
+    # dry_run=True returns ids without deleting; we delete uniformly below.
+    ids: set[str] = set()
+    if older_than_days is not None or confidence_below is not None or source_pattern is not None:
+        ids.update(store.prune_nodes(
+            older_than_days=older_than_days,
+            confidence_below=confidence_below,
+            source_pattern=source_pattern,
+            dry_run=True,
+        ))
+    if meta_noise:
+        ids.update(n["id"] for n in store.get_all_nodes() if _is_meta_noise(n.get("fact", "")))
 
+    ids = list(ids)
     if not ids:
         store.close()
         click.echo("No nodes matched the given criteria.")
@@ -2058,16 +2094,19 @@ def prune_cmd(ctx, project, older_than_days, confidence_below, source_pattern, e
 
     if not execute:
         click.echo(f"Would remove {len(ids)} node(s):")
-        for nid in ids:
+        for nid in ids[:100]:
             row = store.conn.execute(
                 "SELECT fact, confidence, source_transcript FROM nodes WHERE id = ?", (nid,)
             ).fetchone()
             if row:
                 fact_preview = (row["fact"][:77] + "...") if len(row["fact"]) > 80 else row["fact"]
                 click.echo(f"  [{nid}] (conf={row['confidence']:.2f}, src={row['source_transcript']}) {fact_preview}")
+        if len(ids) > 100:
+            click.echo(f"  … and {len(ids) - 100} more")
         click.echo("\nRun with --execute to delete.")
     else:
-        click.echo(f"Deleted {len(ids)} node(s) from '{project}'.")
+        removed = sum(1 for nid in ids if store.delete_node(nid))
+        click.echo(f"Deleted {removed} node(s) from '{project}'.")
 
     store.close()
 

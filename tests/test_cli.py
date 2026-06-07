@@ -586,3 +586,46 @@ class TestSessionPreview:
         f.write_text(json.dumps({"type": "assistant", "message": {"role": "assistant", "content": "hi"}}) + "\n",
                      encoding="utf-8")
         assert _session_preview(f) == ""
+
+
+class TestPrune:
+    def _seed(self, env, runner):
+        from waystone.config import get_db_path
+        runner.invoke(cli, ["init", "proj"], env=env)
+        db = get_db_path({"projects_dir": env["HOME"] + "/.waystone/projects"}, "proj")
+        s = GraphStore(db, vec_enabled=False)
+        s.add_node({"id": "junk1", "fact": "The Waystone database is currently empty.", "type": "implementation", "confidence": 1.0, "tags": []})
+        s.add_node({"id": "junk2", "fact": "The 'proj' graph has 0 nodes and 0 edges.", "type": "implementation", "confidence": 1.0, "tags": []})
+        s.add_node({"id": "real1", "fact": "Decided NOT to use Redis for caching.", "type": "decision", "confidence": 1.0, "tags": []})
+        s.add_node({"id": "real2", "fact": "PostgreSQL is the primary database.", "type": "decision", "confidence": 1.0, "tags": []})
+        s.close()
+        return db
+
+    def test_meta_noise_dry_run_deletes_nothing(self, tmp_path):
+        runner = CliRunner()
+        env = {"HOME": str(tmp_path), "USERPROFILE": str(tmp_path)}
+        db = self._seed(env, runner)
+        r = runner.invoke(cli, ["prune", "proj", "--meta-noise"], env=env)
+        assert r.exit_code == 0
+        assert "Would remove 2" in r.output and "--execute" in r.output
+        assert GraphStore(db, vec_enabled=False).get_stats()["node_count"] == 4  # nothing deleted
+
+    def test_meta_noise_execute_removes_only_junk(self, tmp_path):
+        runner = CliRunner()
+        env = {"HOME": str(tmp_path), "USERPROFILE": str(tmp_path)}
+        db = self._seed(env, runner)
+        r = runner.invoke(cli, ["prune", "proj", "--meta-noise", "--execute"], env=env)
+        assert r.exit_code == 0
+        assert "Deleted 2" in r.output
+        s = GraphStore(db, vec_enabled=False)
+        facts = {n["fact"] for n in s.get_all_nodes()}
+        s.close()
+        assert facts == {"Decided NOT to use Redis for caching.", "PostgreSQL is the primary database."}
+
+    def test_prune_requires_a_filter(self, tmp_path):
+        runner = CliRunner()
+        env = {"HOME": str(tmp_path), "USERPROFILE": str(tmp_path)}
+        self._seed(env, runner)
+        r = runner.invoke(cli, ["prune", "proj"], env=env)
+        assert r.exit_code != 0
+        assert "at least one filter" in r.output

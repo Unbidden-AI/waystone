@@ -6,6 +6,18 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.20] – 2026-06-06
+
+### Added
+
+- **`waystone prune --meta-noise`** — new filter on the `prune` command that removes transient self-referential "meta-noise" facts an extractor sometimes captures from debugging transcripts (e.g. "the database is empty", "0 nodes and 0 edges", "no decisions have been captured"). Preview by default; `--execute` to delete. Narrow by design — real facts, even negatively-phrased decisions like "decided NOT to use Redis", are left alone. (This is the post-hoc cleanup complement to the onboard preview and the extraction-time noise rule.)
+
+### Changed
+
+- `prune` now **unions** its filters (instead of requiring all) and deletes via the per-node path (cleans edges/tags), and previews up to 100 nodes.
+
+---
+
 ## [0.4.19] – 2026-06-06
 
 ### Added
