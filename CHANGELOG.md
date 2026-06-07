@@ -6,6 +6,15 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.16] – 2026-06-06
+
+### Added
+
+- **`waystone selfcheck --deep`** — integration smoke test that exercises the integrations the way Claude Code would, without driving a real session: runs every hook (submit/stop/posttool/import_memory/statusline) against a synthetic stdin payload in an isolated temp HOME (extraction paused so no LLM call), and checks the MCP server's tools are registered. Catches the import/packaging/encoding bugs that only surface through the hook and MCP entry points. (Entry-point-on-PATH is reported but non-fatal, since console scripts can be stale on editable dev installs.)
+- **CI post-publish smoke now runs `--deep`** plus a hard assertion that every console script (`waystone`, `waystone-mcp`, all `waystone-hook-*`, `waystone-statusline`) is installed on a fresh PyPI install — so a missing entry point or a crashing hook fails the release automatically.
+
+---
+
 ## [0.4.15] – 2026-06-06
 
 ### Fixed

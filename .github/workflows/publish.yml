@@ -52,4 +52,10 @@ jobs:
       - name: Verify it installs and runs
         run: |
           waystone --version
-          waystone selfcheck
+          # Hard-assert every console script installed (accurate on a fresh install).
+          for s in waystone waystone-mcp waystone-hook-submit waystone-hook-stop \
+                   waystone-hook-posttool waystone-hook-import-memory waystone-statusline; do
+            command -v "$s" >/dev/null || { echo "MISSING console script: $s"; exit 1; }
+          done
+          # Deep integration smoke: runs every hook + checks the MCP server's tools.
+          waystone selfcheck --deep

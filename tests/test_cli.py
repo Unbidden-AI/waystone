@@ -511,3 +511,23 @@ class TestVersionFlag:
         r = CliRunner().invoke(cli, ["--version"])
         assert r.exit_code == 0
         assert "version" in r.output.lower()
+
+
+class TestSelfcheckDeep:
+    """`waystone selfcheck --deep` exercises hooks + MCP without a Claude session."""
+
+    def test_deep_runs_all_hooks_and_mcp(self, tmp_path):
+        import json
+        runner = CliRunner()
+        env = {"HOME": str(tmp_path), "USERPROFILE": str(tmp_path)}
+        r = runner.invoke(cli, ["selfcheck", "--deep", "--json"], env=env)
+        d = json.loads(r.output.strip().splitlines()[-1])
+        names = {c["name"] for c in d["checks"]}
+        for h in ("hook: submit", "hook: stop", "hook: posttool",
+                  "hook: import_memory", "hook: statusline"):
+            assert h in names, f"missing {h}"
+        assert "MCP tools registered" in names
+        # No fatal check may fail (hooks + MCP are fatal; entry-points L1 is not).
+        fatal_failures = [c["name"] for c in d["checks"] if c["fatal"] and not c["ok"]]
+        assert not fatal_failures, fatal_failures
+        assert r.exit_code == 0

@@ -274,10 +274,81 @@ def verify_cmd(ctx, as_json):
         sys.exit(1)
 
 
+_EXPECTED_SCRIPTS = (
+    "waystone", "waystone-mcp", "waystone-hook-submit", "waystone-hook-stop",
+    "waystone-hook-posttool", "waystone-hook-import-memory", "waystone-statusline",
+)
+_HOOK_MODULES = ("submit", "stop", "posttool", "import_memory", "statusline")
+_EXPECTED_MCP_TOOLS = {"waystone_query", "waystone_extract", "waystone_stats", "waystone_list_projects"}
+
+
+def _selfcheck_deep(_add) -> None:
+    """Integration smoke checks: entry points (L1), hooks (L2), MCP tools (L3).
+
+    L1 is non-fatal — console scripts can be stale on editable dev installs even
+    though the package is fine; the CI post-publish job enforces them hard on a
+    fresh install. L2/L3 use `python -m` / in-process imports, so they're
+    reliable in every environment and are fatal.
+    """
+    import shutil as _shutil
+    import subprocess as _sp
+    import tempfile as _tf
+
+    # L1 — console scripts present on PATH (informational; see docstring).
+    missing_scripts = [s for s in _EXPECTED_SCRIPTS if not _shutil.which(s)]
+    _add("integration: entry points on PATH",
+         not missing_scripts,
+         "all present" if not missing_scripts
+         else f"not on PATH (stale on editable installs?): {missing_scripts}",
+         fatal=False)
+
+    # L2 — every hook runs against a synthetic stdin payload without crashing.
+    # Isolated temp HOME + a pause file so Stop/PostToolUse never fire a real
+    # extraction (we're testing the code path, not spending an LLM call).
+    with _tf.TemporaryDirectory(prefix="ws-selfcheck-") as _tmp:
+        home = Path(_tmp)
+        (home / ".waystone").mkdir(parents=True, exist_ok=True)
+        (home / ".waystone" / "paused").touch()
+        env = {**os.environ, "HOME": str(home), "USERPROFILE": str(home)}
+        payloads = {
+            "submit": {"prompt": "selfcheck smoke", "cwd": str(home), "session_id": "smoke"},
+            "stop": {"cwd": str(home), "session_id": "smoke"},
+            "posttool": {"tool_name": "Write", "tool_input": {"file_path": str(home / "x.txt"), "content": "hi"},
+                         "cwd": str(home), "session_id": "smoke"},
+            "import_memory": {"cwd": str(home), "session_id": "smoke"},
+            "statusline": {"model": {"display_name": "Test"},
+                           "context_window": {"used_percentage": 10, "context_window_size": 200000},
+                           "session_id": "smoke", "workspace": {"current_dir": str(home)}},
+        }
+        for mod in _HOOK_MODULES:
+            try:
+                proc = _sp.run(
+                    [sys.executable, "-m", f"waystone._hooks.{mod}"],
+                    input=json.dumps(payloads[mod]), text=True,
+                    capture_output=True, env=env, timeout=60,
+                )
+                ok = proc.returncode == 0
+                _add(f"hook: {mod}", ok, "" if ok else (proc.stderr.strip().splitlines() or [""])[-1][:120])
+            except Exception as e:  # noqa: BLE001
+                _add(f"hook: {mod}", False, str(e)[:120])
+
+    # L3 — MCP server imports and its tools are registered (in-process, no stdio).
+    try:
+        from .mcp_server import mcp as _mcp
+        names = {t.name for t in asyncio.run(_mcp.list_tools())}
+        miss = _EXPECTED_MCP_TOOLS - names
+        _add("MCP tools registered", not miss,
+             f"{len(names)} tools" if not miss else f"missing: {sorted(miss)}")
+    except Exception as e:  # noqa: BLE001
+        _add("MCP tools registered", False, str(e)[:120])
+
+
 @cli.command("selfcheck")
 @click.option("--json", "as_json", is_flag=True, help="Emit a machine-readable JSON result")
+@click.option("--deep", is_flag=True,
+              help="Also smoke-test integrations: entry points, hooks, MCP server")
 @click.pass_context
-def selfcheck_cmd(ctx, as_json):
+def selfcheck_cmd(ctx, as_json, deep):
     """Fast, offline health check: does Waystone install and run here?
 
     Verifies the package imports + version, config loads, the API key resolves,
@@ -285,6 +356,11 @@ def selfcheck_cmd(ctx, as_json):
     it's safe/cheap to run on every install, session start, or in CI right after
     a publish. For a real extraction round-trip (which costs an LLM call) use
     'waystone verify'. Exit 0 if runnable, 1 if a core check fails.
+
+    With --deep, also exercises the integrations the way Claude Code would (no
+    real session needed): every hook runs against a synthetic stdin payload and
+    the MCP server's tools are checked — catching the import/packaging/encoding
+    bugs that only surface through the hook and MCP entry points.
     """
     import json as _json
 
@@ -328,6 +404,9 @@ def selfcheck_cmd(ctx, as_json):
         _add("sqlite-vec available", True, fatal=False)
     except Exception as e:  # noqa: BLE001
         _add("sqlite-vec available", False, f"{type(e).__name__}: keyword-only fallback", fatal=False)
+
+    if deep:
+        _selfcheck_deep(_add)
 
     ok = all(c["ok"] for c in checks if c["fatal"])
     result = {"ok": ok, "version": _ver, "checks": checks}
