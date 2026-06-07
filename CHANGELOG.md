@@ -6,6 +6,14 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.19] – 2026-06-06
+
+### Added
+
+- **`onboard` session menu now shows a content preview** — each session is listed with its first user prompt (a cheap, no-LLM snippet read from the `.jsonl`), so you can tell at a glance which sessions are worth importing vs. which to skip, instead of guessing from filename + size.
+
+---
+
 ## [0.4.18] – 2026-06-06
 
 ### Fixed

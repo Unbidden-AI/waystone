@@ -2701,6 +2701,42 @@ def _find_claude_sessions(project_hint: str | None) -> list[dict]:
     return results
 
 
+def _session_preview(path: Path, max_len: int = 70) -> str:
+    """Cheap one-line preview of a session = its first real user prompt.
+
+    Lets the onboard menu answer "do I even want this session?" at a glance,
+    without an LLM call — just reads the .jsonl until the first user message with
+    text content. Returns "" if none found.
+    """
+    import json as _json
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    obj = _json.loads(line)
+                except Exception:
+                    continue
+                msg = obj.get("message") if isinstance(obj.get("message"), dict) else obj
+                if not isinstance(msg, dict) or msg.get("role") != "user":
+                    continue
+                content = msg.get("content", "")
+                if isinstance(content, list):
+                    content = " ".join(
+                        b.get("text", "") for b in content
+                        if isinstance(b, dict) and b.get("type") == "text"
+                    )
+                content = " ".join(str(content).split())  # collapse newlines/whitespace
+                # Skip empty / tool-result-only / obvious system-reminder turns.
+                if content and not content.startswith(("<", "Caveat:")):
+                    return content[:max_len] + "…" if len(content) > max_len else content
+    except Exception:
+        pass
+    return ""
+
+
 @cli.command("onboard")
 @click.argument("project", required=False)
 @click.option("--limit", default=10, show_default=True, type=int,
@@ -2768,7 +2804,9 @@ def onboard_cmd(ctx, project, limit, verify, chunk_size, timeout):
     for i, s in enumerate(sessions, 1):
         ts = _dt.fromtimestamp(s["mtime"]).strftime("%Y-%m-%d %H:%M")
         size_k = s["chars"] // 1024
-        click.echo(f"  [{i:2d}] {ts}  {size_k:>5}KB  {s['project_dir']}/{s['path'].name}")
+        preview = _session_preview(s["path"])
+        label = preview if preview else f"{s['project_dir']}/{s['path'].name}"
+        click.echo(f"  [{i:2d}] {ts}  {size_k:>5}KB  {label}")
 
     click.echo()
     selection = click.prompt(

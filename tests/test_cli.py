@@ -554,3 +554,35 @@ class TestSessionStartHook:
         names = {c["name"] for c in checks}
         assert {"import waystone", "config loads", "api key resolves", "sqlite-vec available"} <= names
         assert isinstance(ok, bool) and isinstance(ver, str)
+
+
+class TestSessionPreview:
+    def test_preview_returns_first_user_prompt(self, tmp_path):
+        import json
+        from waystone.cli import _session_preview
+        f = tmp_path / "s.jsonl"
+        f.write_text(
+            json.dumps({"type": "summary", "summary": "x"}) + "\n"
+            + json.dumps({"type": "user", "message": {"role": "user", "content": "Build the ASVAB test screen"}}) + "\n"
+            + json.dumps({"type": "assistant", "message": {"role": "assistant", "content": "ok"}}) + "\n",
+            encoding="utf-8",
+        )
+        assert _session_preview(f) == "Build the ASVAB test screen"
+
+    def test_preview_truncates_long_prompts(self, tmp_path):
+        import json
+        from waystone.cli import _session_preview
+        f = tmp_path / "s.jsonl"
+        long = "x" * 200
+        f.write_text(json.dumps({"type": "user", "message": {"role": "user", "content": long}}) + "\n",
+                     encoding="utf-8")
+        out = _session_preview(f, max_len=70)
+        assert out.endswith("…") and len(out) <= 71
+
+    def test_preview_empty_when_no_user_turn(self, tmp_path):
+        import json
+        from waystone.cli import _session_preview
+        f = tmp_path / "s.jsonl"
+        f.write_text(json.dumps({"type": "assistant", "message": {"role": "assistant", "content": "hi"}}) + "\n",
+                     encoding="utf-8")
+        assert _session_preview(f) == ""
