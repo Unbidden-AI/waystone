@@ -115,11 +115,17 @@ Either way: **validate the script with one real run on the runner first** — `c
 
 ## 4. Per-product status
 
-| Product | Headless auth? | Runner | e2e |
+All three support headless/server auth, so a per-product runner is feasible. Auth methods below are research-derived (Justin, 2026-06-07) — **confirm against each product's current docs when standing up its runner** (VERIFY-FIRST).
+
+| Product | Headless auth | Runner | e2e |
 |---------|---------------|--------|-----|
-| Claude Code | ✅ API key / token in env | `claude-runner` | this doc |
-| OpenClaw | ❓ **verify first** | `openclaw-runner` (TBD) | TBD |
-| Hermes Agent | ❓ **verify first** | `hermes-runner` (TBD) | TBD |
+| Claude Code | ✅ API key / token in env (`ANTHROPIC_API_KEY`) | `claude-runner` | this doc |
+| Hermes Agent | ✅ API keys + `.env` env vars; runs as a background service (`hermes gateway install` → systemd); also Codex OAuth | `hermes-runner` (TBD) | TBD |
+| OpenClaw | ✅ device-pairing + cryptographic **Ed25519 token** handshake with the gateway; tokens rotatable/revocable via CLI | `openclaw-runner` (TBD) | TBD |
+
+**Setup nuance per product:**
+- **Hermes** is the simplest — same shape as Claude (API key / `.env`), plus a `systemd` background-service install for 24/7. Wire the extraction LLM key + the Hermes auth env vars on the runner.
+- **OpenClaw** needs a **one-time device pairing** to mint an Ed25519 token for the runner node (every headless node signs a handshake with the gateway). Store that token as a runner secret; rotate/revoke via CLI as part of credential hygiene.
 
 ---
 
