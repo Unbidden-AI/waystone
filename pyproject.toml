@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "waystone"
-version = "0.4.16"
+version = "0.4.17"
 description = "A context intelligence layer for LLM workflows"
 readme = "README.md"
 license = { text = "MIT" }
@@ -45,6 +45,7 @@ waystone-hook-submit = "waystone._hooks.submit:main"
 waystone-hook-stop = "waystone._hooks.stop:main"
 waystone-hook-posttool = "waystone._hooks.posttool:main"
 waystone-hook-import-memory = "waystone._hooks.import_memory:main"
+waystone-hook-sessionstart = "waystone._hooks.sessionstart:main"
 waystone-statusline = "waystone._hooks.statusline:main"
 
 [tool.setuptools.packages.find]

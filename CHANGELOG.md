@@ -6,6 +6,19 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.17] – 2026-06-06
+
+### Added
+
+- **SessionStart hook** — runs a fast offline selfcheck when a Claude Code session starts and warns only if the install/config is broken (silent on success, never blocks the session). Wired automatically by `waystone configure`; entry point `waystone-hook-sessionstart`. So a broken install is surfaced at session start instead of via silent failures later.
+- **`waystone configure` now self-checks at the end** — prints the offline health check (import, config, key resolution, deps) so you immediately see whether the setup is runnable, and points you to `waystone verify` for the deeper extraction test.
+
+### Changed
+
+- Quick-check logic is now shared (`waystone/_selfcheck.py`) across `waystone selfcheck`, the SessionStart hook, and `configure`. `selfcheck --deep` and the post-publish CI smoke now also exercise the SessionStart hook.
+
+---
+
 ## [0.4.16] – 2026-06-06
 
 ### Added

@@ -149,6 +149,7 @@ def install_hooks(hook_dir: Path | None = None) -> tuple[list[str], list[str]]:
         stop_cmd = "waystone-hook-stop"
         posttool_cmd = "waystone-hook-posttool"
         import_memory_cmd = "waystone-hook-import-memory"
+        sessionstart_cmd = "waystone-hook-sessionstart"
         statusline_cmd = "waystone-statusline" if _shutil.which("waystone-statusline") else (
             f"python {hook_dir / 'statusline.py'}" if hook_dir else "waystone-statusline"
         )
@@ -157,6 +158,7 @@ def install_hooks(hook_dir: Path | None = None) -> tuple[list[str], list[str]]:
         stop_cmd = f"python {hook_dir / 'waystone_stop.py'}"
         posttool_cmd = f"python {hook_dir / 'waystone_posttool.py'}"
         import_memory_cmd = f"python {hook_dir / 'waystone_import_memory.py'}"
+        sessionstart_cmd = f"python {hook_dir / 'waystone_sessionstart.py'}"
         statusline_cmd = f"python {hook_dir / 'statusline.py'}"
     else:
         raise RuntimeError(
@@ -218,6 +220,21 @@ def install_hooks(hook_dir: Path | None = None) -> tuple[list[str], list[str]]:
     else:
         posttool_entries.append({"hooks": [{"type": "command", "command": posttool_cmd}]})
         added.append("PostToolUse hook")
+
+    # SessionStart — fast offline selfcheck; warns only if the install is broken
+    sessionstart_entries = hooks.setdefault("SessionStart", [])
+    existing_sessionstart = [
+        h.get("command", "")
+        for e in sessionstart_entries
+        for h in e.get("hooks", [])
+    ]
+    if any("sessionstart" in c or "session-start" in c for c in existing_sessionstart):
+        skipped.append("SessionStart hook")
+    else:
+        sessionstart_entries.append(
+            {"matcher": "", "hooks": [{"type": "command", "command": sessionstart_cmd}]}
+        )
+        added.append("SessionStart hook")
 
     # SessionEnd — import Claude Code Auto Memory files into the graph on exit
     sessionend_entries = hooks.setdefault("SessionEnd", [])

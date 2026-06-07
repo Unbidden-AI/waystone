@@ -276,9 +276,10 @@ def verify_cmd(ctx, as_json):
 
 _EXPECTED_SCRIPTS = (
     "waystone", "waystone-mcp", "waystone-hook-submit", "waystone-hook-stop",
-    "waystone-hook-posttool", "waystone-hook-import-memory", "waystone-statusline",
+    "waystone-hook-posttool", "waystone-hook-import-memory", "waystone-hook-sessionstart",
+    "waystone-statusline",
 )
-_HOOK_MODULES = ("submit", "stop", "posttool", "import_memory", "statusline")
+_HOOK_MODULES = ("submit", "stop", "posttool", "import_memory", "sessionstart", "statusline")
 _EXPECTED_MCP_TOOLS = {"waystone_query", "waystone_extract", "waystone_stats", "waystone_list_projects"}
 
 
@@ -316,6 +317,7 @@ def _selfcheck_deep(_add) -> None:
             "posttool": {"tool_name": "Write", "tool_input": {"file_path": str(home / "x.txt"), "content": "hi"},
                          "cwd": str(home), "session_id": "smoke"},
             "import_memory": {"cwd": str(home), "session_id": "smoke"},
+            "sessionstart": {"source": "startup", "cwd": str(home), "session_id": "smoke"},
             "statusline": {"model": {"display_name": "Test"},
                            "context_window": {"used_percentage": 10, "context_window_size": 200000},
                            "session_id": "smoke", "workspace": {"current_dir": str(home)}},
@@ -364,46 +366,13 @@ def selfcheck_cmd(ctx, as_json, deep):
     """
     import json as _json
 
-    from .config import resolve_llm_api_key
+    from ._selfcheck import run_quick
 
-    # Prefer the installed package metadata (the real released version) over the
-    # module __version__ constant, which can be stale in editable installs.
-    try:
-        from importlib.metadata import version as _pkg_version
-        _ver = _pkg_version("waystone")
-    except Exception:  # noqa: BLE001
-        try:
-            from . import __version__ as _ver
-        except Exception:  # noqa: BLE001
-            _ver = "unknown"
-
-    checks: list[dict] = []
+    # Fast offline checks (shared with the SessionStart hook and configure).
+    _, checks, _ver = run_quick(ctx.obj["config_path"])
 
     def _add(name, ok, detail="", fatal=True):
         checks.append({"name": name, "ok": bool(ok), "detail": detail, "fatal": fatal})
-
-    # Core: the package imports and reports a version (we're running, so import is OK).
-    _add("import waystone", True, _ver)
-
-    # Config loads without error.
-    try:
-        config = _load_cfg(ctx.obj["config_path"])
-        _add("config loads", True)
-    except Exception as e:  # noqa: BLE001
-        config = {}
-        _add("config loads", False, str(e)[:120])
-
-    # API key resolves (non-fatal: keyless local models are valid).
-    key, source = resolve_llm_api_key(config.get("llm", {}) or {})
-    _add("api key resolves", key is not None,
-         source if key else "none configured (ok for keyless local models)", fatal=False)
-
-    # sqlite-vec extension importable (semantic search; non-fatal — keyword fallback exists).
-    try:
-        import sqlite_vec  # noqa: F401
-        _add("sqlite-vec available", True, fatal=False)
-    except Exception as e:  # noqa: BLE001
-        _add("sqlite-vec available", False, f"{type(e).__name__}: keyword-only fallback", fatal=False)
 
     if deep:
         _selfcheck_deep(_add)
@@ -3682,10 +3651,26 @@ def configure_cmd(non_interactive):
         click.echo("  Skipped. When ready:")
         click.echo("    echo 'myproject' > /path/to/your/project/.waystone")
 
+    # ----- Self-check: confirm the install is actually runnable -------------
+    from ._selfcheck import run_quick
+    sc_ok, sc_checks, _ = run_quick()
+    click.echo()
+    click.echo("Self-check")
+    click.echo("-" * 35)
+    for c in sc_checks:
+        icon = "✓" if c["ok"] else ("✗" if c["fatal"] else "–")
+        line = f"  {icon}  {c['name']}"
+        if c["detail"]:
+            line += f"  ({c['detail']})"
+        click.echo(line)
+
     # ------------------------------------------------------------------ done
     click.echo()
     click.echo("=" * 50)
-    click.echo("Setup complete. Run 'waystone doctor' to verify everything is working.")
+    if sc_ok:
+        click.echo("Setup complete. Run 'waystone verify' to test extraction end-to-end.")
+    else:
+        click.echo("Setup finished with warnings (see self-check above). Run 'waystone selfcheck'.")
     click.echo()
 
 

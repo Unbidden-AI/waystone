@@ -531,3 +531,26 @@ class TestSelfcheckDeep:
         fatal_failures = [c["name"] for c in d["checks"] if c["fatal"] and not c["ok"]]
         assert not fatal_failures, fatal_failures
         assert r.exit_code == 0
+
+
+class TestSessionStartHook:
+    """SessionStart hook: silent on healthy, exits 0, warns only on breakage."""
+
+    def test_runs_silent_and_exits_zero(self, tmp_path):
+        import subprocess, sys, json
+        env = {**__import__("os").environ, "HOME": str(tmp_path), "USERPROFILE": str(tmp_path)}
+        p = subprocess.run(
+            [sys.executable, "-m", "waystone._hooks.sessionstart"],
+            input=json.dumps({"source": "startup", "cwd": str(tmp_path), "session_id": "s"}),
+            text=True, capture_output=True, env=env, timeout=30,
+        )
+        assert p.returncode == 0
+        # healthy env should not emit a failure warning
+        assert "selfcheck failed" not in p.stdout
+
+    def test_run_quick_shape(self):
+        from waystone._selfcheck import run_quick
+        ok, checks, ver = run_quick()
+        names = {c["name"] for c in checks}
+        assert {"import waystone", "config loads", "api key resolves", "sqlite-vec available"} <= names
+        assert isinstance(ok, bool) and isinstance(ver, str)
