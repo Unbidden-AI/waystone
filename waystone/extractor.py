@@ -1062,6 +1062,41 @@ def split_into_chunks(text: str, max_chars: int) -> list[str]:
     return chunks
 
 
+async def _extract_adaptive(chunk_text: str, config: dict, extract_kwargs: dict,
+                            depth: int = 0, max_depth: int = 3, min_chars: int = 4000) -> dict:
+    """Extract one chunk; on a *timeout* or *truncation*, re-split it smaller and retry.
+
+    `_call_llm` already retries transient failures at the *same* size — which
+    doesn't help when the chunk is simply too big/slow to finish within the
+    timeout (or too big to fit in max_tokens). This wrapper degrades gracefully:
+    on a timeout/truncation it halves the chunk and extracts the pieces, down to
+    a floor, so a large session yields partial facts instead of nothing.
+    """
+    import httpx
+    try:
+        return await extract(chunk_text, config, **extract_kwargs)
+    except Exception as exc:  # noqa: BLE001 — we re-raise unless it's re-splittable
+        msg = str(exc).lower()
+        is_timeout = isinstance(exc, (httpx.ReadTimeout, httpx.ConnectTimeout)) or "timeout" in msg
+        is_truncation = "truncated" in msg or "max_tokens" in msg
+        if not (is_timeout or is_truncation) or depth >= max_depth or len(chunk_text) <= min_chars:
+            raise
+        subs = split_into_chunks(chunk_text, max(len(chunk_text) // 2, min_chars))
+        if len(subs) < 2:
+            raise
+        log.warning(
+            "Chunk %s; re-splitting %d chars into %d smaller chunks (depth %d/%d)",
+            "timed out" if is_timeout else "was truncated", len(chunk_text), len(subs), depth + 1, max_depth,
+        )
+        nodes: list[dict] = []
+        edges: list[dict] = []
+        for sub in subs:
+            r = await _extract_adaptive(sub, config, extract_kwargs, depth + 1, max_depth, min_chars)
+            nodes.extend(r["nodes"])
+            edges.extend(r["edges"])
+        return {"nodes": nodes, "edges": edges}
+
+
 async def extract_chunked(
     text: str,
     config: dict,
@@ -1099,7 +1134,7 @@ async def extract_chunked(
         extract_kwargs["source_transcript"] = source_transcript
 
     if len(chunks) == 1:
-        result = await extract(chunks[0], config, **extract_kwargs)
+        result = await _extract_adaptive(chunks[0], config, extract_kwargs)
         if verify:
             vr = await verify_extraction(chunks[0], result["nodes"], config, **extract_kwargs)
             result = {
@@ -1111,7 +1146,7 @@ async def extract_chunked(
     log.info("extract_chunked: splitting %d chars into %d chunks of ≤%d", len(text), len(chunks), chunk_size)
 
     async def _one_chunk(chunk_text: str, chunk_idx: int) -> tuple[list, list]:
-        r = await extract(chunk_text, config, **extract_kwargs)
+        r = await _extract_adaptive(chunk_text, config, extract_kwargs)
         nodes, edges = r["nodes"], r["edges"]
         if verify:
             try:

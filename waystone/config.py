@@ -22,7 +22,10 @@ DEFAULTS = {
         "model": "qwen3.5-35b-a3b",
         "temperature": 0.1,
         "max_tokens": 4096,
-        "timeout": 30.0,
+        # Extraction LLM calls on a full chunk routinely take 30-120s+ (large
+        # structured-JSON output). 30s was far too low and timed out on any
+        # chunky transcript; 120s gives real extractions room to finish.
+        "timeout": 120.0,
         "use_native_sdk": False,
     },
     "defaults": {

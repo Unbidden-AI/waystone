@@ -15,6 +15,7 @@ from .config import get_db_path, get_project_dir, load_config
 from .monitoring import init_sentry
 from .extractor import (
     ExtractionBuffer,
+    _extract_adaptive,
     extract,
     extract_config_items,
     extract_targeted,
@@ -2798,6 +2799,9 @@ def onboard_cmd(ctx, project, limit, verify, chunk_size, timeout):
 
     total_nodes = 0
     total_edges = 0
+    imported = 0
+    skipped: list[tuple[str, str]] = []   # (session name, reason)
+    partial: list[str] = []               # sessions that lost some chunks
 
     for s in selected:
         path: Path = s["path"]
@@ -2807,10 +2811,12 @@ def onboard_cmd(ctx, project, limit, verify, chunk_size, timeout):
             text = _jsonl_to_markdown(path)
         except Exception as e:
             click.echo(f"SKIP (read error: {e})")
+            skipped.append((path.name, f"read error: {e}"))
             continue
 
         if not text.strip():
             click.echo("SKIP (empty after conversion)")
+            skipped.append((path.name, "empty after conversion"))
             continue
 
         chunks = split_into_chunks(text, chunk_size) if len(text) > chunk_size else [text]
@@ -2819,14 +2825,18 @@ def onboard_cmd(ctx, project, limit, verify, chunk_size, timeout):
 
         session_nodes: list[dict] = []
         session_edges: list[dict] = []
+        chunk_failures = 0
         source_name = f"claude_session:{path.stem}"
 
         for chunk_text in chunks:
             try:
-                result = asyncio.run(extract(chunk_text, config))
+                # Adaptive: a too-big/slow chunk re-splits itself on timeout
+                # instead of failing outright.
+                result = asyncio.run(_extract_adaptive(chunk_text, config, {}))
             except Exception as e:
                 msg = str(e) or repr(e)
                 click.echo(f"CHUNK FAILED ({type(e).__name__}): {msg}", err=True)
+                chunk_failures += 1
                 continue
 
             nodes = result["nodes"]
@@ -2854,9 +2864,25 @@ def onboard_cmd(ctx, project, limit, verify, chunk_size, timeout):
 
         total_nodes += len(session_nodes)
         total_edges += len(session_edges)
+        imported += 1
+        if chunk_failures:
+            partial.append(f"{path.name} ({chunk_failures}/{len(chunks)} chunks failed)")
         click.echo(f"{len(session_nodes)} nodes, {len(session_edges)} edges")
 
-    click.echo(f"\nDone. Imported {total_nodes} nodes and {total_edges} edges into '{project}'.\n")
+    # Summary tally — never let a skipped/failed session hide.
+    click.echo(
+        f"\nDone. Imported {total_nodes} nodes and {total_edges} edges from "
+        f"{imported}/{len(selected)} session(s) into '{project}'."
+    )
+    if skipped:
+        click.echo(f"  Skipped {len(skipped)} session(s):")
+        for name, reason in skipped:
+            click.echo(f"    - {name}: {reason}")
+    if partial:
+        click.echo(f"  ⚠ {len(partial)} session(s) had chunk failures (partial extraction):")
+        for p in partial:
+            click.echo(f"    - {p}")
+    click.echo()
 
     # Show value immediately — sample query
     store = GraphStore(db_path)

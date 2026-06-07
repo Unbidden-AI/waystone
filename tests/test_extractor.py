@@ -403,3 +403,41 @@ class TestExtractChunked:
         assert call_count == 2
         assert len(result["nodes"]) == 1
         assert result["nodes"][0]["tags"] == ["b"]
+
+
+class TestExtractAdaptive:
+    """_extract_adaptive re-splits a chunk on timeout/truncation, else propagates."""
+
+    def test_resplits_on_timeout(self):
+        import asyncio
+        from unittest.mock import patch
+        import httpx
+        import waystone.extractor as ex
+
+        big = "\n\n".join(f"Paragraph {i}: content about a decision." for i in range(200))
+
+        async def fake_extract(text, config, **kw):
+            if len(text) > 4000:
+                raise httpx.ReadTimeout("simulated")
+            return {"nodes": [{"fact": "ok"}], "edges": []}
+
+        with patch.object(ex, "extract", new=fake_extract):
+            res = asyncio.run(ex._extract_adaptive(big, {"llm": {"model": "x"}}, {}))
+        assert len(res["nodes"]) > 0  # re-split down to a size that succeeds
+
+    def test_propagates_non_timeout_error(self):
+        import asyncio
+        from unittest.mock import patch
+        import waystone.extractor as ex
+
+        big = "\n\n".join(f"Paragraph {i}." for i in range(200))
+
+        async def fake_extract(text, config, **kw):
+            raise ValueError("401 invalid api key")
+
+        with patch.object(ex, "extract", new=fake_extract):
+            try:
+                asyncio.run(ex._extract_adaptive(big, {"llm": {"model": "x"}}, {}))
+                assert False, "should have raised"
+            except ValueError:
+                pass  # auth error must NOT trigger pointless re-splitting

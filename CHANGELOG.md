@@ -6,6 +6,19 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.18] – 2026-06-06
+
+### Fixed
+
+- **Default LLM timeout raised 30s → 120s.** 30s was far too short for extracting a full chunk (large structured-JSON output routinely takes 30–120s+), so any chunky transcript timed out repeatedly — in `onboard` *and* normal Stop-hook extraction. 120s gives real extractions room to finish.
+
+### Added
+
+- **Adaptive chunking** — when an extraction chunk times out (or the response is truncated), it's automatically re-split into smaller pieces and retried (down to a floor), so a large/slow session yields partial facts instead of failing outright. Non-timeout errors (e.g. auth) still propagate immediately without pointless re-splitting.
+- **`onboard` end-of-run tally** — reports imported/skipped/partial sessions by name (read errors, empty conversions, and sessions that lost chunks to failures) so nothing hides in a long import.
+
+---
+
 ## [0.4.17] – 2026-06-06
 
 ### Added
