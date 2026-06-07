@@ -6,6 +6,14 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.22] – 2026-06-06
+
+### Changed
+
+- **`onboard` now auto-cleans meta-noise before the sample query.** After importing, onboard removes transient self-referential nodes ("database is empty", "0 nodes", "no facts captured") and reports the count, so the closing sample query showcases *real* extracted facts to a new user instead of junk. Uses the same narrow, validated filter as `prune --meta-noise`. (The extraction-prompt approach was benchmark-tested and dropped — it regressed recall 2–11 pts; meta-noise is a post-processing problem, not a prompt problem.)
+
+---
+
 ## [0.4.21] – 2026-06-06
 
 ### Fixed

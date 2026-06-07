@@ -2967,6 +2967,20 @@ def onboard_cmd(ctx, project, limit, verify, chunk_size, timeout):
             click.echo(f"    - {p}")
     click.echo()
 
+    # Auto-clean transient meta-noise before showing the sample query, so a new
+    # user sees real extracted facts — not self-referential junk like "database
+    # is empty" / "0 nodes". This is the validated post-extraction filter (the
+    # extraction-prompt approach regressed recall; patterns here are narrow and
+    # spare real negatively-phrased decisions). Same engine as `prune --meta-noise`.
+    if total_nodes:
+        store = GraphStore(db_path, vec_enabled=False)
+        noise_ids = [n["id"] for n in store.get_all_nodes() if _is_meta_noise(n.get("fact", ""))]
+        for nid in noise_ids:
+            store.delete_node(nid)
+        store.close()
+        if noise_ids:
+            click.echo(f"Cleaned {len(noise_ids)} transient meta-noise node(s).\n")
+
     # Show value immediately — sample query
     store = GraphStore(db_path)
     stats = store.get_stats()
