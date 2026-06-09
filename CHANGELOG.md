@@ -6,6 +6,14 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.24] – 2026-06-09
+
+### Added
+
+- **Captures Claude Code's native session recaps.** Claude Code persists rolling `away_summary` entries (goal/arc/state/next) in the session `.jsonl`; Waystone previously dropped them (it only read user/assistant turns). Now `onboard`/`import-claude-sessions` store the session's last (cumulative) recap as a high-altitude **`session_summary` node** — the session-level narrative that atomic fact extraction misses, captured for free (no LLM). `session_summary` is surfaced first in retrieval ordering. The onboard menu also prefers the native recap as each session's label (and only spends an LLM summary on sessions that lack one).
+
+---
+
 ## [0.4.23] – 2026-06-06
 
 ### Changed

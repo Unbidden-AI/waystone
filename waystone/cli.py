@@ -2797,6 +2797,43 @@ def _session_sample(path: Path, budget: int = 4500) -> str:
             + text[-third:])
 
 
+def _build_session_summary_node(path: Path, source_name: str, created_at: str) -> dict | None:
+    """Build a `session_summary` node from a session's last `away_summary`, or None.
+
+    Captures the host agent's native session recap (goal/arc/state/next) directly —
+    the session-level narrative that atomic fact extraction misses. No LLM call;
+    the recap is already a clean summary.
+    """
+    import uuid as _uuid
+
+    from .transcript import extract_away_summaries
+    try:
+        summaries = extract_away_summaries(path)
+    except Exception:
+        return None
+    if not summaries:
+        return None
+    text = summaries[-1]  # last = most complete/cumulative
+    tags = ["session", "summary", "recap"]
+    _stop = {"goal", "next", "were", "that", "this", "with", "from", "just",
+             "have", "been", "what", "your", "they", "them", "then", "into"}
+    for w in text.split():
+        wc = w.strip(".,;:!?\"'()").lower()
+        if len(wc) > 3 and wc not in _stop:
+            tags.append(wc[:30])
+    tags = list(dict.fromkeys(tags))[:12]
+    return {
+        "id": f"n_{_uuid.uuid4().hex[:8]}",
+        "fact": text,
+        "type": "session_summary",
+        "confidence": 1.0,
+        "source_transcript": source_name,
+        "created_at": created_at,
+        "tags": tags,
+        "supersedes": [],
+    }
+
+
 def _summarize_sessions(sessions: list, config: dict) -> dict:
     """Map session-path -> LLM one-line summary (parallel, best-effort).
 
@@ -2885,17 +2922,26 @@ def onboard_cmd(ctx, project, limit, verify, chunk_size, timeout):
 
     # Present menu
     from datetime import datetime as _dt
+    from .transcript import extract_away_summaries, extract_ai_title
+
     click.echo(f"\nFound {len(sessions)} recent Claude Code session(s):\n")
-    # Prefer a concise LLM summary of each session (sees the whole arc, so it
-    # doesn't misjudge a big session that opens with a throwaway prompt). Falls
-    # back to the first-user-prompt snippet, then the filename.
-    summaries = _summarize_sessions(sessions, config)
+    # Label preference: the host's own native recap (free, accurate) → a concise
+    # LLM summary (only for sessions lacking a recap, to save cost) → first-prompt
+    # snippet → ai-title → filename.
+    away_by_path = {str(s["path"]): extract_away_summaries(s["path"]) for s in sessions}
+    needs_llm = [s for s in sessions if not away_by_path[str(s["path"])]]
+    summaries = _summarize_sessions(needs_llm, config)
     for i, s in enumerate(sessions, 1):
         ts = _dt.fromtimestamp(s["mtime"]).strftime("%Y-%m-%d %H:%M")
         size_k = s["chars"] // 1024
-        label = (summaries.get(str(s["path"]))
+        away = away_by_path[str(s["path"])]
+        label = ((away[-1] if away else None)
+                 or summaries.get(str(s["path"]))
                  or _session_preview(s["path"])
+                 or extract_ai_title(s["path"])
                  or f"{s['project_dir']}/{s['path'].name}")
+        if len(label) > 80:
+            label = label[:79] + "…"
         click.echo(f"  [{i:2d}] {ts}  {size_k:>5}KB  {label}")
 
     click.echo()
@@ -2986,22 +3032,33 @@ def onboard_cmd(ctx, project, limit, verify, chunk_size, timeout):
             node["source_transcript"] = source_name
             node.setdefault("created_at", now)
 
+        # Capture the session's native recap (Claude Code away_summary) as a
+        # high-altitude session_summary node — the narrative atomic facts miss.
+        summary_node = _build_session_summary_node(path, source_name, now)
+        summary_added = 0
+
         # Isolate the merge: a bad node must not crash the whole onboard run.
         try:
             store = GraphStore(db_path)
             store.merge_extraction(session_nodes, session_edges)
+            if summary_node:
+                try:
+                    store.add_node(summary_node)
+                    summary_added = 1
+                except Exception:
+                    summary_added = 0
             store.close()
         except Exception as e:
             click.echo(f"MERGE FAILED ({type(e).__name__}): {str(e)[:100]}", err=True)
             skipped.append((path.name, f"merge failed: {type(e).__name__}"))
             continue
 
-        total_nodes += len(session_nodes)
+        total_nodes += len(session_nodes) + summary_added
         total_edges += len(session_edges)
         imported += 1
         if chunk_failures:
             partial.append(f"{path.name} ({chunk_failures}/{len(chunks)} chunks failed)")
-        click.echo(f"{len(session_nodes)} nodes, {len(session_edges)} edges")
+        click.echo(f"{len(session_nodes)} nodes{' + 1 summary' if summary_added else ''}, {len(session_edges)} edges")
 
     # Summary tally — never let a skipped/failed session hide.
     click.echo(
@@ -3149,13 +3206,21 @@ def import_sessions_cmd(ctx, project, session_files, verify, chunk_size, timeout
             node["source_transcript"] = source_name
             node.setdefault("created_at", now)
 
+        summary_node = _build_session_summary_node(path, source_name, now)
+        summary_added = 0
         store = GraphStore(db_path)
         store.merge_extraction(session_nodes, session_edges)
+        if summary_node:
+            try:
+                store.add_node(summary_node)
+                summary_added = 1
+            except Exception:
+                summary_added = 0
         store.close()
 
-        total_nodes += len(session_nodes)
+        total_nodes += len(session_nodes) + summary_added
         total_edges += len(session_edges)
-        click.echo(f"{len(session_nodes)} nodes, {len(session_edges)} edges")
+        click.echo(f"{len(session_nodes)} nodes{' + 1 summary' if summary_added else ''}, {len(session_edges)} edges")
 
     click.echo(f"\nImported {total_nodes} nodes and {total_edges} edges into '{project}'.")
 

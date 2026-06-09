@@ -73,6 +73,12 @@ SOFTWARE_DEV = DomainProfile(
             'cross-cloud egress costs too high)" — tags: ["s3", "gcs", "cold storage", '
             '"cloud storage", "egress", "gcp"].'
         ),
+        "session_summary": (
+            "a high-level narrative of a whole work session — its goal, the arc of what was "
+            "done, the current state, and next steps. Captured directly from a host agent's "
+            "session recap (e.g. Claude Code away_summary), NOT produced by the extractor. "
+            "Fills the session-level altitude that atomic facts miss."
+        ),
     },
     edge_relations={
         "depends_on": "target is required for source to work",

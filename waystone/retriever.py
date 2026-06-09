@@ -2143,8 +2143,8 @@ def assemble_markdown(
     for node in undated_nodes:
         by_type.setdefault(node["type"], []).append(node)
 
-    # Order: arc types first (process/episode — always-relevant), then decisions, constraints, implementations, resolved, lessons, preferences, others
-    type_order = ["process", "episode", "decision", "transition", "constraint", "implementation", "resolved", "lesson_learned", "preference", "question"]
+    # Order: session summaries first (high-level narrative), then arc types (process/episode), then decisions, constraints, implementations, resolved, lessons, preferences, others
+    type_order = ["session_summary", "process", "episode", "decision", "transition", "constraint", "implementation", "resolved", "lesson_learned", "preference", "question"]
     sorted_types = sorted(by_type.keys(), key=lambda t: type_order.index(t) if t in type_order else 99)
 
     for node_type in sorted_types:

@@ -658,3 +658,61 @@ class TestSessionSummaries:
         import asyncio
         from waystone.extractor import summarize_session
         assert asyncio.run(summarize_session("some text", {"llm": {}})) == ""
+
+
+class TestAwaySummary:
+    """Capture Claude Code's native session recaps (away_summary) as session_summary nodes."""
+
+    def _session(self, tmp_path, *, aways=(), title=None, user="hello"):
+        import json
+        f = tmp_path / "s.jsonl"
+        lines = [json.dumps({"type": "user", "message": {"role": "user", "content": user}})]
+        for a in aways:
+            lines.append(json.dumps({"type": "system", "subtype": "away_summary", "content": a}))
+        if title:
+            lines.append(json.dumps({"type": "ai-title", "aiTitle": title}))
+        f.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return f
+
+    def test_extract_away_summaries_chronological(self, tmp_path):
+        from waystone.transcript import extract_away_summaries
+        f = self._session(tmp_path, aways=["first recap", "second recap", "LAST recap"])
+        out = extract_away_summaries(f)
+        assert out == ["first recap", "second recap", "LAST recap"]
+        assert out[-1] == "LAST recap"
+
+    def test_extract_ai_title_variants(self, tmp_path):
+        import json
+        from waystone.transcript import extract_ai_title
+        f = tmp_path / "t.jsonl"
+        f.write_text(
+            json.dumps({"type": "ai-title", "aiTitle": "First Title"}) + "\n"
+            + json.dumps({"type": "ai-title", "ai_title": "Final Title"}) + "\n",
+            encoding="utf-8",
+        )
+        assert extract_ai_title(f) == "Final Title"  # last wins, alt key honored
+        assert extract_ai_title(tmp_path / "missing.jsonl") == ""
+
+    def test_build_node_uses_last_summary(self, tmp_path):
+        from waystone.cli import _build_session_summary_node
+        f = self._session(tmp_path, aways=["early", "Goal was X; shipped Y; Next Z"])
+        node = _build_session_summary_node(f, "claude_session:x", "2026-06-09T00:00:00Z")
+        assert node and node["type"] == "session_summary" and node["confidence"] == 1.0
+        assert node["fact"] == "Goal was X; shipped Y; Next Z"
+        assert "session" in node["tags"] and "summary" in node["tags"]
+
+    def test_build_node_none_without_summary(self, tmp_path):
+        from waystone.cli import _build_session_summary_node
+        f = self._session(tmp_path, aways=())  # no away_summary entries
+        assert _build_session_summary_node(f, "claude_session:x", "2026-06-09T00:00:00Z") is None
+
+    def test_session_summary_node_is_retrievable(self, tmp_path):
+        from waystone.store import GraphStore
+        db = tmp_path / "g.db"
+        s = GraphStore(db, vec_enabled=False)
+        s.add_node({"id": "n_s1", "fact": "We hardened onboarding and shipped fixes to PyPI.",
+                    "type": "session_summary", "confidence": 1.0,
+                    "tags": ["session", "summary", "onboarding", "pypi"]})
+        got = [n for n in s.get_all_nodes() if n["type"] == "session_summary"]
+        s.close()
+        assert len(got) == 1 and "onboarding" in got[0]["fact"].lower()

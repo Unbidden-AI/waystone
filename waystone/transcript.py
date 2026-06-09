@@ -155,3 +155,57 @@ def to_prompt_text(utterances: list[Utterance]) -> str:
         lines.append(f"{role_label}: {u.content}")
         lines.append("")
     return "\n".join(lines)
+
+
+def extract_away_summaries(path: Path) -> list[str]:
+    """Return all `away_summary` recap texts from a Claude Code .jsonl session.
+
+    Claude Code persists its native session recaps as
+    ``{"type":"system","subtype":"away_summary","content":"Goal… Next…"}``.
+    Returned in chronological order — the LAST is the most complete/cumulative.
+    UTF-8 with errors="replace" (Windows-safe). Empty list if none.
+    """
+    summaries: list[str] = []
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return summaries
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if obj.get("type") == "system" and obj.get("subtype") == "away_summary":
+            content = (obj.get("content") or "").strip()
+            if content:
+                summaries.append(content)
+    return summaries
+
+
+def extract_ai_title(path: Path) -> str:
+    """Return the most recent `ai-title` (conversation title) from a session, or "".
+
+    Claude Code emits ``{"type":"ai-title","aiTitle":"<short title>"}`` (key may
+    also be ``ai_title``). UTF-8 with errors="replace".
+    """
+    last_title = ""
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return last_title
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if obj.get("type") == "ai-title":
+            title = obj.get("aiTitle") or obj.get("ai_title")
+            if title:
+                last_title = str(title).strip()
+    return last_title
