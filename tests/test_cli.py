@@ -716,3 +716,67 @@ class TestAwaySummary:
         got = [n for n in s.get_all_nodes() if n["type"] == "session_summary"]
         s.close()
         assert len(got) == 1 and "onboarding" in got[0]["fact"].lower()
+
+
+class TestSummarizeSession:
+    """Periodic session summarization → timeline of superseding session_summary nodes."""
+
+    def _jsonl(self, tmp_path, n=9):
+        import json
+        f = tmp_path / "s.jsonl"
+        lines = []
+        for i in range(n):
+            role = "user" if i % 2 == 0 else "assistant"
+            lines.append(json.dumps({"type": role, "message": {"role": role, "content": f"turn {i} about feature X"}}))
+        f.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return f
+
+    def test_timeline_supersede_keeps_history(self, tmp_path, monkeypatch):
+        from unittest.mock import AsyncMock, patch
+        from waystone.config import get_db_path
+        from waystone.store import GraphStore
+        # skip embedding for speed/determinism
+        monkeypatch.setattr("waystone.embedder.is_available", lambda: False, raising=False)
+        env = {"HOME": str(tmp_path), "USERPROFILE": str(tmp_path)}
+        runner = CliRunner()
+        runner.invoke(cli, ["init", "proj"], env=env)
+        f = self._jsonl(tmp_path, n=9)
+
+        calls = {"n": 0}
+        async def fake(new_text, prior, config):
+            calls["n"] += 1
+            return f"Summary v{calls['n']}"
+
+        with patch("waystone.cli.generate_session_summary", new=fake):
+            r = runner.invoke(cli, ["summarize-session", "proj", str(f), "--every", "4"], env=env)
+        assert r.exit_code == 0, r.output
+
+        db = get_db_path({"projects_dir": str(tmp_path / ".waystone" / "projects")}, "proj")
+        s = GraphStore(db, vec_enabled=False)
+        total = s.conn.execute("SELECT COUNT(*) FROM nodes WHERE type='session_summary'").fetchone()[0]
+        active = s.conn.execute("SELECT COUNT(*) FROM nodes WHERE type='session_summary' AND is_active=1").fetchone()[0]
+        s.close()
+        assert total == 3, f"expected 3 timeline nodes, got {total}"
+        assert active == 1, f"expected exactly 1 active (latest), got {active}"
+
+    def test_dry_run_stores_nothing(self, tmp_path, monkeypatch):
+        from unittest.mock import patch
+        from waystone.config import get_db_path
+        from waystone.store import GraphStore
+        monkeypatch.setattr("waystone.embedder.is_available", lambda: False, raising=False)
+        env = {"HOME": str(tmp_path), "USERPROFILE": str(tmp_path)}
+        runner = CliRunner()
+        runner.invoke(cli, ["init", "proj"], env=env)
+        f = self._jsonl(tmp_path, n=9)
+
+        async def fake(new_text, prior, config):
+            return "Summary"
+
+        with patch("waystone.cli.generate_session_summary", new=fake):
+            r = runner.invoke(cli, ["summarize-session", "proj", str(f), "--every", "4", "--dry-run"], env=env)
+        assert r.exit_code == 0 and "dry-run" in r.output.lower()
+        db = get_db_path({"projects_dir": str(tmp_path / ".waystone" / "projects")}, "proj")
+        s = GraphStore(db, vec_enabled=False)
+        total = s.conn.execute("SELECT COUNT(*) FROM nodes WHERE type='session_summary'").fetchone()[0]
+        s.close()
+        assert total == 0

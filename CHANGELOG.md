@@ -6,6 +6,15 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.25] – 2026-06-09
+
+### Added
+
+- **`waystone summarize-session` — periodic session summarization (model-agnostic).** Walks a transcript every N turns, incrementally updating a rolling narrative (goal · arc · current state · next), and stores each as a `session_summary` node that **supersedes** the prior — so retrieval surfaces the latest while the full **timeline** is kept (bi-temporal). `--dry-run` to preview, `--every`/`--max-windows` to control cadence/cost. This captures the session-level altitude atomic fact extraction misses, for any host (not just Claude Code). The live during-session trigger (Stop hook) builds on this next.
+- `generate_session_summary()` in the extractor — an incremental rolling-summary LLM call (prior summary + only the new turns), cheap and bounded.
+
+---
+
 ## [0.4.24] – 2026-06-09
 
 ### Added

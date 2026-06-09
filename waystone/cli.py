@@ -23,6 +23,7 @@ from .extractor import (
     reconcile_group,
     score_extraction_quality,
     split_into_chunks,
+    generate_session_summary,
     summarize_session,
     split_transcript_into_turns,
     synthesize_extraction,
@@ -3223,6 +3224,88 @@ def import_sessions_cmd(ctx, project, session_files, verify, chunk_size, timeout
         click.echo(f"{len(session_nodes)} nodes{' + 1 summary' if summary_added else ''}, {len(session_edges)} edges")
 
     click.echo(f"\nImported {total_nodes} nodes and {total_edges} edges into '{project}'.")
+
+
+@cli.command("summarize-session")
+@click.argument("project")
+@click.argument("transcript", type=click.Path(exists=True))
+@click.option("--every", default=20, show_default=True, type=int,
+              help="Generate a rolling summary every N messages (turns)")
+@click.option("--max-windows", default=0, type=int,
+              help="Cap the number of summaries (0 = unlimited; useful for cheap test runs)")
+@click.option("--dry-run", is_flag=True, help="Print the timeline without storing nodes")
+@click.pass_context
+def summarize_session_cmd(ctx, project, transcript, every, max_windows, dry_run):
+    """Periodically summarize a session TRANSCRIPT into a timeline of session_summary nodes.
+
+    Walks the transcript every N messages, incrementally updating a rolling summary
+    (goal / arc / current state / next). Each summary is stored as a `session_summary`
+    node that SUPERSEDES the previous one — so retrieval surfaces the latest, while the
+    full timeline is kept in the graph (bi-temporal). Use this to test the periodic
+    summarizer on old transcripts.
+    """
+    import uuid as _uuid
+
+    from .transcript import from_claude_jsonl, from_plain_text, to_prompt_text
+
+    config = _load_cfg(ctx.obj["config_path"])
+    path = Path(transcript)
+    if path.suffix.lower() == ".jsonl":
+        utterances = from_claude_jsonl(path)
+    else:
+        utterances = from_plain_text(path.read_text(encoding="utf-8", errors="replace"))
+    if not utterances:
+        click.echo("No conversation turns found in transcript.")
+        return
+
+    # Window boundaries: every N messages, plus a final window for the tail.
+    bounds = list(range(every, len(utterances), every))
+    if not bounds or bounds[-1] != len(utterances):
+        bounds.append(len(utterances))
+    if max_windows and len(bounds) > max_windows:
+        bounds = bounds[:max_windows]
+
+    store = None if dry_run else GraphStore(get_db_path(config, project))
+    source_name = f"session_timeline:{path.stem}"
+    click.echo(f"Summarizing '{path.name}' ({len(utterances)} turns) every {every} → "
+               f"{len(bounds)} summary point(s){' [dry-run]' if dry_run else ''}...\n")
+
+    prior_summary = ""
+    prior_id = None
+    timeline: list = []
+    last = 0
+    for b in bounds:
+        new_text = to_prompt_text(utterances[last:b])
+        last = b
+        summary = asyncio.run(generate_session_summary(new_text, prior_summary, config))
+        if not summary:
+            click.echo(f"── after {b} turns ── (summary empty/failed — skipped)", err=True)
+            continue
+        ts = utterances[b - 1].ts or datetime.now(timezone.utc).isoformat()
+        node = {
+            "id": f"n_{_uuid.uuid4().hex[:8]}",
+            "fact": summary,
+            "type": "session_summary",
+            "confidence": 1.0,
+            "source_transcript": source_name,
+            "created_at": ts,
+            "occurred_at": ts,
+            "tags": ["session", "summary", "timeline"],
+            "supersedes": [prior_id] if prior_id else [],
+        }
+        if store:
+            store.add_node(node)
+        timeline.append((b, summary))
+        prior_summary, prior_id = summary, node["id"]
+        click.echo(f"── after {b} turns ──\n{summary}\n")
+
+    if store:
+        store.close()
+    click.echo(
+        f"{'(dry-run) ' if dry_run else ''}Generated {len(timeline)} session summary "
+        f"node(s)" + ("" if dry_run else " — each supersedes the prior; the latest is "
+                      "active in retrieval, the timeline is kept.")
+    )
 
 
 @cli.command("doctor")

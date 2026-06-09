@@ -1080,6 +1080,62 @@ async def summarize_session(sample_text: str, config: dict) -> str:
         return ""
 
 
+_SESSION_SUMMARY_SYSTEM = (
+    "You maintain a rolling summary of a coding/work session for a memory system. "
+    "Given the running summary so far and the NEW turns since it, produce an UPDATED "
+    "summary of the WHOLE session so far. Keep it tight (3-5 sentences) and cover: the "
+    "GOAL/intent, the ARC of what was done (key decisions/actions in order), the CURRENT "
+    "STATE, and the NEXT step / open threads. Write plain prose, no preamble, no markdown "
+    "headers. Preserve important specifics (names, versions, decisions) from the prior "
+    "summary unless they were superseded."
+)
+
+
+async def generate_session_summary(new_turns_text: str, prior_summary: str, config: dict) -> str:
+    """Incrementally update a rolling session summary from the prior summary + new turns.
+
+    Incremental (prior + only the new turns) → cheap and bounded, like a host
+    agent's rolling recap. Best-effort: returns "" on any failure (no key,
+    unreachable, timeout, bad response). One short LLM call, no retries.
+    """
+    import httpx
+
+    from .config import resolve_llm_api_key
+
+    llm_cfg = config.get("llm", {}) or {}
+    base_url = llm_cfg.get("base_url")
+    model = llm_cfg.get("model")
+    if not base_url or not model or not (new_turns_text or "").strip():
+        return ""
+
+    key, _ = resolve_llm_api_key(llm_cfg)
+    headers = {"Content-Type": "application/json"}
+    if key:
+        headers["Authorization"] = f"Bearer {key}"
+    user = (
+        f"RUNNING SUMMARY SO FAR:\n{prior_summary.strip() or '(none yet — this is the first summary)'}\n\n"
+        f"NEW TURNS SINCE THEN:\n{new_turns_text[:12000]}\n\n"
+        "Updated whole-session summary:"
+    )
+    body = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": _SESSION_SUMMARY_SYSTEM},
+            {"role": "user", "content": user},
+        ],
+        "temperature": 0.2,
+        "max_tokens": 256,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=float(llm_cfg.get("timeout", 120.0))) as client:
+            r = await client.post(base_url.rstrip("/") + "/chat/completions", headers=headers, json=body)
+            r.raise_for_status()
+            txt = r.json()["choices"][0]["message"]["content"]
+            return " ".join((txt or "").split()).strip()
+    except Exception:
+        return ""
+
+
 def split_into_chunks(text: str, max_chars: int) -> list[str]:
     """Split text into chunks at paragraph boundaries, each ≤ max_chars.
 
