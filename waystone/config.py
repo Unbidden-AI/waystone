@@ -92,6 +92,7 @@ from the graph; use it to answer questions about this project accurately.""",
         "enabled": True,
         "cadence_turns": 5,        # generate an updated summary every N turns
         "retries": 2,              # extra LLM attempts on a transient/empty response
+        "inject": True,            # lead per-prompt context with the latest summary
     },
     "posttool": {
         # PostToolUse capture: during long autonomous runs (plan/auto mode) the

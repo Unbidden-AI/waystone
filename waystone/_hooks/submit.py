@@ -210,6 +210,30 @@ def _read_active_session_state(session_state_path: Path) -> str:
     return "\n\n".join(active_blocks)
 
 
+def _latest_session_narrative(store, session_id: str = "") -> str:
+    """Return the freshest active session_summary fact (the project's 'where we are').
+
+    Rolling session summaries carry generic tags, so keyword-driven retrieval won't
+    surface them — this fetches them directly. Prefers the CURRENT session's live
+    summary (continuity within a session); otherwise falls back to the most recent
+    active session_summary across the project (cross-session orientation). Returns ""
+    if none exists. Best-effort: never raises.
+    """
+    try:
+        nodes = [n for n in store.get_nodes_by_type("session_summary")
+                 if n.get("is_active") == 1 and (n.get("fact") or "").strip()]
+        if not nodes:
+            return ""
+        nodes.sort(key=lambda n: n.get("created_at", ""), reverse=True)
+        if session_id:
+            for n in nodes:
+                if n.get("source_transcript") == f"live_session:{session_id}":
+                    return n["fact"].strip()
+        return nodes[0]["fact"].strip()
+    except Exception:
+        return ""
+
+
 def main():
     try:
         from waystone._io import force_utf8
@@ -334,6 +358,14 @@ def main():
             store, prompt,
             hops=_hops, top_k=_top_k, strategies=_strategies,
         )
+
+        # P4: lead the injected context with the latest rolling session summary —
+        # keyword retrieval won't surface it (generic tags), but it's the highest-
+        # altitude orientation ("where we are"). Captured before the store closes.
+        narrative = ""
+        if (config.get("session_summary", {}) or {}).get("inject", True):
+            narrative = _latest_session_narrative(store, session_id)
+
         store.close()
 
         elapsed_ms = int((time.time() - t0) * 1000)
@@ -354,7 +386,12 @@ def main():
         project_dir = get_db_path(config, project).parent
         last_context_path = project_dir / "last_context.md"
 
-        if retrieval.nodes_after_strategies == 0:
+        narrative_block = (
+            "## Where we are (session narrative)\n" + narrative + "\n\n"
+        ) if narrative else ""
+
+        # Inject if we have EITHER keyword hits or a session narrative.
+        if retrieval.nodes_after_strategies == 0 and not narrative_block:
             sys.exit(0)
 
         preamble = (
@@ -362,7 +399,7 @@ def main():
             f"graph nodes for project '{project}' (~{retrieval.tokens_estimated} tokens). "
             f"Full context: {last_context_path}]\n\n"
         )
-        additional_context = preamble + retrieval.markdown
+        additional_context = preamble + narrative_block + retrieval.markdown
 
         prior_turns_window = inc_cfg.get("prior_turns_window", 0)
         if prior_turns_window and transcript_path:

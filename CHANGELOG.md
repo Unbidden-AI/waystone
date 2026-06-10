@@ -6,6 +6,14 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.28] – 2026-06-10
+
+### Added
+
+- **Per-prompt session-narrative injection (P4a).** Every prompt's injected context now *leads* with a **"Where we are (session narrative)"** block — the latest active `session_summary`. Rolling summaries carry generic tags so keyword retrieval never surfaced them; this fetches the freshest one directly (preferring the current session's live summary for continuity, else the most recent across the project). It injects even when keyword retrieval returns nothing, so a fresh session opens already oriented to the project's arc. Toggle with `session_summary.inject` (default true). This is the lever that turns the rolling summary from a passive timeline into context the model actually reads each turn.
+
+---
+
 ## [0.4.27] – 2026-06-10
 
 ### Fixed
