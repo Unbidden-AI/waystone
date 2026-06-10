@@ -81,6 +81,17 @@ from the graph; use it to answer questions about this project accurately.""",
         "enabled": True,
         "alert_on_error": True,   # show a ⚠ alert when extraction errors occur
     },
+    "session_summary": {
+        # Passive rolling session summary: every N turns the Stop hook spawns a
+        # detached worker that folds the prior summary + new turns into an updated
+        # narrative (goal / arc / state / next), stored as a session_summary node
+        # that SUPERSEDES the prior one. Supersession keeps history (the prior is
+        # marked inactive, never deleted) so the full timeline replays as the
+        # project's story (`waystone story`). Passive & invisible: no user-facing
+        # output, fails silently on error.
+        "enabled": True,
+        "cadence_turns": 5,        # generate an updated summary every N turns
+    },
     "posttool": {
         # PostToolUse capture: during long autonomous runs (plan/auto mode) the
         # UserPromptSubmit and Stop hooks don't fire, so the graph stays empty

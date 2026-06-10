@@ -170,6 +170,9 @@ def main():
         store.close()
         _maybe_spawn_reconcile(project, stats["node_count"], db_path.parent, config)
 
+        # --- Passive rolling session summary (every N turns, background) ---
+        _maybe_spawn_session_summary(project, db_path, session_id, out_path, config)
+
     except Exception:
         pass  # Never block the session
 
@@ -359,6 +362,41 @@ def _maybe_spawn_reconcile(project: str, current_nodes: int, project_dir: Path, 
         )
     except Exception:
         pass
+
+
+# ---------------------------------------------------------------------------
+# Session summary trigger
+# ---------------------------------------------------------------------------
+
+def _maybe_spawn_session_summary(project: str, db_path: Path, session_id: str,
+                                 transcript_path: Path, config: dict) -> None:
+    """Count turns and, every N, spawn a detached rolling-summary worker.
+
+    Passive and fail-open: increments a per-session counter each turn and, once
+    the cadence is reached, optimistically resets the counter (so concurrent
+    Stop firings don't double-spawn) before launching the background worker.
+    """
+    try:
+        from waystone._hooks.summarize import (
+            _increment_summary_counter,
+            _reset_summary_counter,
+            _summary_state_path,
+            should_trigger_summary,
+            spawn_background_summary,
+        )
+
+        state_path = _summary_state_path(session_id)
+        _increment_summary_counter(state_path)
+
+        if not should_trigger_summary(state_path, config):
+            return
+
+        # Optimistic reset at spawn time avoids duplicate concurrent workers;
+        # the worker also resets on success, so this is idempotent.
+        _reset_summary_counter(state_path)
+        spawn_background_summary(project, str(db_path), session_id, str(transcript_path))
+    except Exception:
+        pass  # Never block the session
 
 
 # ---------------------------------------------------------------------------

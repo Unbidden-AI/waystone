@@ -6,6 +6,20 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.26] – 2026-06-10
+
+### Added
+
+- **Live passive session summarization (P3).** The Stop hook now counts turns per session and, every `session_summary.cadence_turns` (default **5** — sharp, to catch detail on decisions as they happen), spawns a detached background worker (`waystone-hook-summarize`) that folds the prior summary + recent turns into an updated narrative and stores it as a `session_summary` node **superseding** the prior one. Fully passive: no user-facing output, fails silently, respects the `~/.waystone/paused` flag. Builds on `summarize-session` (0.4.25) but runs automatically, model-agnostic, during any session.
+- **`waystone story <project>`** — replays the project's story: walks the **whole** `session_summary` timeline *including superseded (inactive) summaries*, oldest → newest, marking the current one. Supersession keeps history; this presents it. `--session <id>` to scope to one live session, `--limit N` for the most recent points.
+- `session_summary` config block (`enabled`, `cadence_turns`) and the `waystone-hook-summarize` console script.
+
+### Fixed
+
+- Session-summary worker now supplies a node `id` and timestamps to `add_node` — without them the insert raised a (silently swallowed) `KeyError`, so live summaries were never stored. Covered by an end-to-end `main()` regression test.
+
+---
+
 ## [0.4.25] – 2026-06-09
 
 ### Added

@@ -3308,6 +3308,56 @@ def summarize_session_cmd(ctx, project, transcript, every, max_windows, dry_run)
     )
 
 
+@cli.command("story")
+@click.argument("project")
+@click.option("--session", default=None, metavar="SESSION_ID",
+              help="Limit the story to one live session (matches live_session:<id>)")
+@click.option("--limit", default=0, type=int,
+              help="Show only the most recent N summary points (0 = all)")
+@click.pass_context
+def story_cmd(ctx, project, session, limit):
+    """Replay the project's story: the full timeline of session_summary nodes.
+
+    Each rolling summary SUPERSEDES the prior one, so normal retrieval surfaces only
+    the latest. This command does the opposite — it walks the WHOLE chain, including
+    superseded (inactive) summaries, in chronological order, so you can read the arc
+    of the project as it evolved. Supersession keeps history; this presents it.
+    """
+    config = _load_cfg(ctx.obj["config_path"])
+    store = GraphStore(get_db_path(config, project))
+    try:
+        summaries = [n for n in store.get_all_nodes()
+                     if n.get("type") == "session_summary"]
+    finally:
+        store.close()
+
+    if session:
+        summaries = [n for n in summaries
+                     if n.get("source_transcript") == f"live_session:{session}"]
+
+    if not summaries:
+        click.echo(f"No session summaries found for '{project}'"
+                   + (f" (session {session})" if session else "")
+                   + ". Summaries accrue as you work (every few turns) or via "
+                     "`waystone summarize-session`.")
+        return
+
+    def _when(n):
+        return n.get("occurred_at") or n.get("created_at") or ""
+    summaries.sort(key=_when)
+    if limit and len(summaries) > limit:
+        summaries = summaries[-limit:]
+
+    click.echo(f"Story of '{project}' — {len(summaries)} summary point(s), "
+               f"oldest → newest:\n")
+    for i, n in enumerate(summaries, 1):
+        when = _when(n)
+        stamp = when[:19].replace("T", " ") if when else "?"
+        marker = "▶ now" if n.get("is_active") == 1 else "  ·"
+        click.echo(f"── [{i}/{len(summaries)}] {stamp}  {marker} ──")
+        click.echo(f"{n.get('fact', '').strip()}\n")
+
+
 @cli.command("doctor")
 @click.option("--fix", "do_fix", is_flag=True, default=False,
               help="Attempt to automatically fix detected issues.")
