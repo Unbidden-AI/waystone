@@ -131,6 +131,12 @@ def main():
         if session_state_path.exists():
             session_state_path.unlink()
 
+        # --- Passive rolling session summary (every N turns, background) ---
+        # Runs on EVERY Stop (per turn), BEFORE the extraction early-exit below —
+        # the summary cadence must track turns, not extraction deltas, or it fires
+        # far too rarely (only when there's a new delta to extract).
+        _maybe_spawn_session_summary(project, db_path, session_id, out_path, config)
+
         # --- Incremental extraction: only new turns since last extraction ---
         state_path = out_dir / f"{short_id}.state"
         state = _load_state(state_path)
@@ -169,9 +175,6 @@ def main():
         stats = store.get_stats()
         store.close()
         _maybe_spawn_reconcile(project, stats["node_count"], db_path.parent, config)
-
-        # --- Passive rolling session summary (every N turns, background) ---
-        _maybe_spawn_session_summary(project, db_path, session_id, out_path, config)
 
     except Exception:
         pass  # Never block the session

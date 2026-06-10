@@ -6,6 +6,14 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.30] – 2026-06-10
+
+### Fixed
+
+- **Live session-summary cadence now actually tracks turns.** The Stop-hook summary trigger was placed *after* the incremental-extraction early-exit (`if last_idx >= len(turns): sys.exit(0)`), so the per-turn counter only advanced when there was a new extraction delta — making rolling summaries fire far more rarely than the configured `cadence_turns` (and not at all once extraction caught up). Moved the trigger ahead of that early-exit so it runs on every Stop invocation, as intended. Found while verifying the feature on a live session whose counter had been stuck for hours.
+
+---
+
 ## [0.4.29] – 2026-06-10
 
 ### Added
