@@ -364,3 +364,107 @@ class TestSessionSummaryCandidateExtractionTurns:
         text = summarize._turns_to_text(turns)
         assert text.index("What is P3?") < text.index("How does it work?")
         assert "rolling session summary" in text
+
+
+class _FakeResp:
+    def __init__(self, content):
+        self._content = content
+
+    def raise_for_status(self):
+        pass
+
+    def json(self):
+        return {"choices": [{"message": {"content": self._content}}]}
+
+
+def _fake_client_factory(post_impl):
+    """Build a fake httpx.AsyncClient class whose .post runs post_impl(calls)."""
+    class _FakeClient:
+        def __init__(self, *a, **k):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def post(self, *a, **k):
+            return post_impl()
+
+    return _FakeClient
+
+
+class TestSessionSummaryRetry:
+    """generate_session_summary retries transient/blank responses (empty-window fix)."""
+
+    _CFG = {
+        "llm": {"base_url": "http://x/v1", "model": "m"},
+        "session_summary": {"retries": 2},
+    }
+
+    def test_retries_blank_content_then_succeeds(self):
+        import asyncio
+        import httpx
+        from unittest.mock import AsyncMock, patch
+
+        from waystone.extractor import generate_session_summary
+
+        calls = {"n": 0}
+
+        def post():
+            calls["n"] += 1
+            # 1st attempt: null content (length truncation / filter); 2nd: real text.
+            return _FakeResp(None if calls["n"] == 1 else "Goal: built it. Next: ship.")
+
+        with patch.object(httpx, "AsyncClient", _fake_client_factory(post)), \
+                patch.object(asyncio, "sleep", new=AsyncMock()):
+            out = asyncio.run(
+                generate_session_summary("User: hi\nAssistant: yo", "", self._CFG)
+            )
+        assert out == "Goal: built it. Next: ship."
+        assert calls["n"] == 2  # retried exactly once
+
+    def test_retries_transient_exception_then_succeeds(self):
+        import asyncio
+        import httpx
+        from unittest.mock import AsyncMock, patch
+
+        from waystone.extractor import generate_session_summary
+
+        calls = {"n": 0}
+
+        def post():
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise httpx.ReadTimeout("simulated")
+            return _FakeResp("Recovered summary.")
+
+        with patch.object(httpx, "AsyncClient", _fake_client_factory(post)), \
+                patch.object(asyncio, "sleep", new=AsyncMock()):
+            out = asyncio.run(
+                generate_session_summary("User: hi\nAssistant: yo", "", self._CFG)
+            )
+        assert out == "Recovered summary."
+        assert calls["n"] == 2
+
+    def test_returns_empty_after_exhausting_retries(self):
+        import asyncio
+        import httpx
+        from unittest.mock import AsyncMock, patch
+
+        from waystone.extractor import generate_session_summary
+
+        calls = {"n": 0}
+
+        def post():
+            calls["n"] += 1
+            return _FakeResp(None)  # always blank
+
+        with patch.object(httpx, "AsyncClient", _fake_client_factory(post)), \
+                patch.object(asyncio, "sleep", new=AsyncMock()):
+            out = asyncio.run(
+                generate_session_summary("User: hi\nAssistant: yo", "", self._CFG)
+            )
+        assert out == ""
+        assert calls["n"] == 3  # retries=2 → 3 total attempts

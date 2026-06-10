@@ -91,6 +91,7 @@ from the graph; use it to answer questions about this project accurately.""",
         # output, fails silently on error.
         "enabled": True,
         "cadence_turns": 5,        # generate an updated summary every N turns
+        "retries": 2,              # extra LLM attempts on a transient/empty response
     },
     "posttool": {
         # PostToolUse capture: during long autonomous runs (plan/auto mode) the

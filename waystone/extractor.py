@@ -1095,9 +1095,16 @@ async def generate_session_summary(new_turns_text: str, prior_summary: str, conf
     """Incrementally update a rolling session summary from the prior summary + new turns.
 
     Incremental (prior + only the new turns) → cheap and bounded, like a host
-    agent's rolling recap. Best-effort: returns "" on any failure (no key,
-    unreachable, timeout, bad response). One short LLM call, no retries.
+    agent's rolling recap. Best-effort: returns "" only after exhausting retries
+    (no key, unreachable, repeated timeout/empty response).
+
+    Retries (bounded) cover two empty-window failure modes seen in practice:
+    transient API errors (5xx/429/timeout) and a *blank/null* ``content`` field
+    (some models return ``content: null`` on length-truncation or a content
+    filter — no exception, just an empty string). ``session_summary.retries``
+    (default 2 → 3 attempts total) controls the budget.
     """
+    import asyncio
     import httpx
 
     from .config import resolve_llm_api_key
@@ -1124,16 +1131,29 @@ async def generate_session_summary(new_turns_text: str, prior_summary: str, conf
             {"role": "user", "content": user},
         ],
         "temperature": 0.2,
-        "max_tokens": 256,
+        "max_tokens": 512,   # headroom: reduces null-content from length truncation
     }
-    try:
-        async with httpx.AsyncClient(timeout=float(llm_cfg.get("timeout", 120.0))) as client:
-            r = await client.post(base_url.rstrip("/") + "/chat/completions", headers=headers, json=body)
-            r.raise_for_status()
-            txt = r.json()["choices"][0]["message"]["content"]
-            return " ".join((txt or "").split()).strip()
-    except Exception:
-        return ""
+    timeout = float(llm_cfg.get("timeout", 120.0))
+    retries = int((config.get("session_summary", {}) or {}).get("retries", 2))
+    attempts = max(1, retries + 1)
+
+    for attempt in range(attempts):
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                r = await client.post(
+                    base_url.rstrip("/") + "/chat/completions", headers=headers, json=body
+                )
+                r.raise_for_status()
+                msg = (r.json().get("choices") or [{}])[0].get("message") or {}
+                cleaned = " ".join((msg.get("content") or "").split()).strip()
+                if cleaned:
+                    return cleaned
+                # Blank/null content (length truncation or content filter) — retry.
+        except Exception:
+            pass  # Transient API error — retry.
+        if attempt < attempts - 1:
+            await asyncio.sleep(0.5 * (attempt + 1))  # small linear backoff
+    return ""
 
 
 def split_into_chunks(text: str, max_chars: int) -> list[str]:

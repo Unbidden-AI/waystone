@@ -6,6 +6,14 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.27] – 2026-06-10
+
+### Fixed
+
+- **Session-summary windows no longer silently blank out.** `generate_session_summary` now retries (bounded, with backoff) on the two empty-window failure modes seen running the live summarizer over a real 531-turn session: transient API errors (5xx/429/timeout) and a **null `content`** field (some models return `content: null` on length-truncation or a content filter — no exception, just blank). `max_tokens` raised 256 → 512 for headroom. `session_summary.retries` (default 2 → 3 attempts total) controls the budget. Covered by retry/exhaustion tests.
+
+---
+
 ## [0.4.26] – 2026-06-10
 
 ### Added
