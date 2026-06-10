@@ -3439,6 +3439,45 @@ def doctor_cmd(ctx, do_fix):
     except ImportError:
         _check("mcp package installed", False, "pip install 'mcp>=1.0'")
 
+    # --- sqlite-vec / semantic capability ---
+    # The python.org macOS Framework build ships sqlite3 WITHOUT loadable-extension
+    # support (Apple's system SQLite strips the symbols), so sqlite-vec can't load —
+    # true for any version, not just 3.14. Homebrew/pyenv/uv builds work. Retrieval
+    # degrades gracefully to keyword (tag + BM25) when vec is absent, so this is only
+    # a hard failure if semantic features are actually enabled in config.
+    import sqlite3 as _sqlite3
+    _has_load_ext = hasattr(_sqlite3.connect(":memory:"), "enable_load_extension")
+    _vec_ok = False
+    if _has_load_ext:
+        try:
+            import sqlite_vec as _sv
+            _probe = _sqlite3.connect(":memory:")
+            _probe.enable_load_extension(True)
+            _sv.load(_probe)
+            _probe.execute("SELECT vec_version()")
+            _vec_ok = True
+        except Exception:
+            _vec_ok = False
+    _exe = sys.executable or ""
+    if "/Library/Frameworks/" in _exe:
+        _build = "python.org Framework build — lacks loadable sqlite extensions"
+    elif "/opt/homebrew" in _exe or "/Cellar/" in _exe or "/usr/local" in _exe:
+        _build = "Homebrew build"
+    else:
+        _build = "custom build"
+    _fix_hint = (f"{_build}; use a Homebrew/pyenv/uv Python (e.g. 'brew install "
+                 f"python@3.14') and reinstall Waystone there")
+    _semantic_on = bool(config.get("strategies", {}).get("semantic", False))
+    if _vec_ok:
+        _check("sqlite-vec loadable (semantic search / dedup available)", True)
+    elif _semantic_on:
+        # Semantic is requested but vec can't load — a real problem.
+        _check("sqlite-vec loadable", False, _fix_hint)
+    else:
+        # Vec unavailable but semantic is disabled in config → no impact on retrieval.
+        click.echo(f"  –  sqlite-vec unavailable, but semantic is off in config "
+                   f"(no impact on retrieval; 'dedup'/'reembed' need vec — {_fix_hint})")
+
     # --- Project marker in CWD tree ---
     marker_found = False
     marker_project = None

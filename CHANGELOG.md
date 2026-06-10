@@ -6,6 +6,14 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.29] – 2026-06-10
+
+### Added
+
+- **`waystone doctor` now diagnoses sqlite-vec capability.** It probes whether the running Python can actually load the sqlite-vec extension (`enable_load_extension` + a real `vec_version()` load) and, when it can't, names the cause and the fix. Root cause clarified: the **python.org macOS Framework build** ships sqlite3 *without* loadable-extension support (Apple's system SQLite strips the symbols) — this affects *every* version, not just 3.14; Homebrew/pyenv/uv builds work. Because retrieval degrades gracefully to keyword (tag + BM25/FTS5) and `semantic` is off by default in config, the check is informational (`–`) when semantic is disabled and only a failure (`✗`) when semantic is actually enabled. Fix hint: use a Homebrew/pyenv/uv Python (e.g. `brew install python@3.14`) and reinstall there — no downgrade needed.
+
+---
+
 ## [0.4.28] – 2026-06-10
 
 ### Added

@@ -219,6 +219,14 @@ class TestDoctor:
         result = r.invoke(cli, ["--config", config, "doctor"], catch_exceptions=False)
         assert ".waystone marker found" in result.output
 
+    def test_doctor_reports_sqlite_vec_capability(self, runner, tmp_path):
+        r, config, _ = runner
+        # The sqlite-vec capability line must appear regardless of build (✓, ✗, or –).
+        # Catches the NameError-class bug from testing extracted logic instead of the CLI.
+        result = r.invoke(cli, ["--config", config, "doctor"])
+        assert result.exit_code in (0, 1)
+        assert "sqlite-vec" in result.output
+
 
 class TestImportClaudeSessions:
     def _make_jsonl(self, path: "Path", messages: list[dict]) -> None:
