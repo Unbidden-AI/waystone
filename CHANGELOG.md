@@ -6,6 +6,14 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.33] – 2026-06-11
+
+### Added
+
+- **`session_summary.context_turns` config** (default 30) — the number of recent turns the live rolling summarizer feeds the LLM each fire. Previously hardcoded. Lowering it (e.g. to ~`cadence_turns`) cuts per-call input tokens for runs on expensive models, at some cost to cross-window coherence; the prior summary still carries older context forward either way. Per-call usage stays bounded (~3k input + ≤512 output on default settings, O(1) regardless of session length).
+
+---
+
 ## [0.4.32] – 2026-06-11
 
 ### Added

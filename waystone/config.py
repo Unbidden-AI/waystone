@@ -91,6 +91,7 @@ from the graph; use it to answer questions about this project accurately.""",
         # output, fails silently on error.
         "enabled": True,
         "cadence_turns": 5,        # generate an updated summary every N turns
+        "context_turns": 30,       # recent turns fed to the summarizer each fire
         "retries": 2,              # extra LLM attempts on a transient/empty response
         "inject": True,            # lead per-prompt context with the latest summary
     },

@@ -168,6 +168,45 @@ class TestSessionSummaryWorker:
         assert nodes[0]["id"].startswith("n_")
         assert nodes[0]["source_transcript"] == "live_session:sess_e2e"
 
+    def test_worker_respects_config_context_turns(self, db_fixture, tmp_path, monkeypatch):
+        """The worker feeds only `session_summary.context_turns` recent turns to the LLM."""
+        import waystone.config as CFG
+        import waystone.extractor as EX
+
+        transcript = tmp_path / "live.md"
+        transcript.write_text(
+            "**User**: turn one\n\n**Assistant**: reply one\n\n"
+            "**User**: turn two\n\n**Assistant**: reply two\n\n"
+            "**User**: turn three\n\n**Assistant**: reply three\n",
+            encoding="utf-8",
+        )
+
+        captured = {}
+
+        async def fake_summary(new_turns_text, prior, cfg):
+            captured["text"] = new_turns_text
+            return "summary"
+
+        def fake_load_config(*a, **k):
+            return {"llm": {"base_url": "http://x/v1", "model": "m"},
+                    "session_summary": {"enabled": True, "context_turns": 2}}
+
+        monkeypatch.setattr(EX, "generate_session_summary", fake_summary)
+        monkeypatch.setattr(CFG, "load_config", fake_load_config)
+        monkeypatch.setattr(summarize, "STATE_DIR", tmp_path)
+        monkeypatch.setattr(summarize, "PAUSE_FILE", tmp_path / "paused")
+        monkeypatch.setattr(
+            sys, "argv",
+            ["x", "--project", "demo", "--db-path", str(db_fixture),
+             "--session-id", "ctx", "--transcript-path", str(transcript)],
+        )
+
+        summarize.main()
+        # context_turns=2 → only the last two turns (reply three + turn three) reach the LLM
+        assert "reply three" in captured["text"]
+        assert "turn three" in captured["text"]
+        assert "turn one" not in captured["text"]
+
     def test_worker_stores_superseding_node(self, db_fixture, tmp_path):
         """Worker stores a new session_summary node that supersedes the prior one."""
         # Create first summary node

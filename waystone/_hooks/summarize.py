@@ -37,8 +37,9 @@ except Exception:
 STATE_DIR = Path.home() / ".waystone"
 PAUSE_FILE = STATE_DIR / "paused"
 
-# How many recent turns to feed the summarizer as the "new" window each pass.
-# The prior summary carries the older context forward, so this stays bounded.
+# Default recent-turns window fed to the summarizer each pass (overridable via
+# config `session_summary.context_turns`). The prior summary carries older context
+# forward, so this stays bounded regardless of session length.
 SUMMARY_CONTEXT_TURNS = 30
 
 
@@ -75,7 +76,9 @@ def main():
         if not turns:
             return
 
-        context_turns = _extract_last_n_turns(turns, SUMMARY_CONTEXT_TURNS)
+        n_context = (config.get("session_summary", {}) or {}).get(
+            "context_turns", SUMMARY_CONTEXT_TURNS)
+        context_turns = _extract_last_n_turns(turns, n_context)
         new_turns_text = _turns_to_text(context_turns)
         if not new_turns_text.strip():
             return
