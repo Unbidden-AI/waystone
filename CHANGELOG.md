@@ -6,6 +6,14 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.31] – 2026-06-10
+
+### Fixed
+
+- **The per-turn extractor no longer mints thin `session_summary` nodes.** `session_summary` was in the extractor's type palette (`domain_profiles`), so the LLM kept typing one-line process-narration ("X was committed", "Y was offered to Justin") as session summaries — polluting the `waystone story` timeline with fragments alongside the real rolling summaries. Removed it from the palette: it's now a system-generated type, created only by the live rolling-summary worker and host-recap (away_summary) ingestion via `store.add_node` (which has no profile gate). The store/retriever still treat it as first-class. Extraction now also drops any stray `session_summary` the model emits.
+
+---
+
 ## [0.4.30] – 2026-06-10
 
 ### Fixed
