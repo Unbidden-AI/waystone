@@ -701,6 +701,71 @@ class GraphStore:
             self.conn.commit()
         return ids
 
+    # Default per-type half-lives (days) used for proactive staleness detection.
+    # Mirrors the RoMem decay table in ARCHITECTURE.md. A node is a temporal-expiry
+    # candidate only past half_life × expiry_factor (conservative). Types absent here
+    # (e.g. session_summary) are never flagged by the temporal signal.
+    _INVALIDATION_HALF_LIVES = {
+        "transition": 14, "question": 30, "implementation": 60, "process": 90,
+        "preference": 90, "resolved": 90, "decision": 180,
+        "lesson_learned": 365, "constraint": 365,
+    }
+
+    def detect_stale_candidates(
+        self,
+        *,
+        never_retrieved_days: int = 90,
+        min_age_days: int = 30,
+        max_confidence: float = 0.95,
+        expiry_factor: float = 1.5,
+        half_lives: dict | None = None,
+    ) -> list[dict]:
+        """Proactively find facts likely gone stale WITHOUT an explicit contradiction.
+
+        Deterministic, no LLM. Two conservative signals over active, non-pinned nodes:
+          - ``temporal_half_life_expired``: age > (per-type half-life × expiry_factor)
+            and confidence < max_confidence.
+          - ``never_retrieved_aged``: hit_count = 0, age > never_retrieved_days,
+            confidence < 0.75.
+
+        Returns candidate dicts ``{id, type, fact, reason, detail, score}`` — does NOT
+        modify the graph (call ``deactivate_node`` to retire). Recall-preserving by
+        design: pinned + high-confidence + recent nodes are exempt.
+        """
+        hl_map = half_lives or self._INVALIDATION_HALF_LIVES
+        now = datetime.now(timezone.utc)
+        rows = self.conn.execute(
+            """SELECT id, type, fact, confidence, hit_count,
+                      COALESCE(occurred_at, created_at)
+               FROM nodes WHERE is_active = 1 AND pinned = 0"""
+        ).fetchall()
+
+        candidates: list[dict] = []
+        for nid, ntype, fact, conf, hits, ts in rows:
+            try:
+                age_days = (now - datetime.fromisoformat(ts)).days
+            except (ValueError, TypeError):
+                continue
+            if age_days < min_age_days:
+                continue
+            conf = conf if conf is not None else 0.5
+            hl = hl_map.get(ntype)
+            if hl and age_days > hl * expiry_factor and conf < max_confidence:
+                candidates.append({
+                    "id": nid, "type": ntype, "fact": fact,
+                    "reason": "temporal_half_life_expired",
+                    "detail": f"age={age_days}d > {hl}d×{expiry_factor:g}",
+                    "score": 0.7,
+                })
+            elif (hits or 0) == 0 and age_days > never_retrieved_days and conf < 0.75:
+                candidates.append({
+                    "id": nid, "type": ntype, "fact": fact,
+                    "reason": "never_retrieved_aged",
+                    "detail": f"hit_count=0, age={age_days}d, conf={conf:.2f}",
+                    "score": 0.6,
+                })
+        return candidates
+
     def vacuum_orphaned_edges(self, dry_run: bool = False) -> int:
         """Delete edges whose from_id or to_id no longer exists in the nodes table.
 

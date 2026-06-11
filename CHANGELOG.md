@@ -6,6 +6,14 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.34] – 2026-06-11
+
+### Added
+
+- **`waystone invalidate <project>` — proactive staleness detection (deterministic, no LLM).** Unlike supersession (which only retires a fact when a new contradicting one arrives), this hunts the existing graph for facts likely gone stale: nodes past their per-type half-life (`transition` 14d, `decision` 180d, `constraint` 365d, …, all × a 1.5 conservatism factor), and aged never-retrieved low-confidence nodes. Preview by default; `--execute` soft-retires them (`is_active=0`, `valid_to` set — history KEPT, never deleted, still reachable via `--at-time`). Pinned and high-confidence nodes are exempt; recall-preserving by design. `GraphStore.detect_stale_candidates()` powers it. (An optional LLM "is this still true?" pass and a benchmark are planned follow-ups.)
+
+---
+
 ## [0.4.33] – 2026-06-11
 
 ### Added

@@ -2113,6 +2113,66 @@ def prune_cmd(ctx, project, older_than_days, confidence_below, source_pattern, m
     store.close()
 
 
+@cli.command("invalidate")
+@click.argument("project")
+@click.option("--execute", is_flag=True,
+              help="Actually retire the candidates (default: preview only)")
+@click.option("--never-retrieved-days", default=90, show_default=True, type=int,
+              help="Flag never-retrieved nodes older than this")
+@click.option("--min-age-days", default=30, show_default=True, type=int,
+              help="Ignore nodes younger than this")
+@click.option("--max-confidence", default=0.95, show_default=True, type=float,
+              help="Don't flag nodes at or above this confidence")
+@click.pass_context
+def invalidate_cmd(ctx, project, execute, never_retrieved_days, min_age_days, max_confidence):
+    """Proactively detect — and optionally retire — STALE facts. Deterministic, no LLM.
+
+    Unlike supersession (which only retires a fact when a NEW contradicting one arrives),
+    this hunts the existing graph for facts likely gone stale: nodes past their per-type
+    half-life, and aged never-retrieved low-confidence nodes. Preview by default;
+    --execute soft-retires them (is_active=0, valid_to set — history is KEPT, never
+    deleted). Pinned and high-confidence nodes are exempt. Recall-preserving by design.
+    """
+    from collections import Counter
+
+    config = _load_cfg(ctx.obj["config_path"])
+    store = GraphStore(get_db_path(config, project))
+    try:
+        cands = store.detect_stale_candidates(
+            never_retrieved_days=never_retrieved_days,
+            min_age_days=min_age_days,
+            max_confidence=max_confidence,
+        )
+        if not cands:
+            click.echo(f"No stale candidates in '{project}' (graph looks fresh).")
+            return
+
+        by_reason = Counter(c["reason"] for c in cands)
+        click.echo(f"{len(cands)} stale candidate(s) in '{project}'"
+                   f"{'' if execute else ' [preview]'}:")
+        for reason, n in by_reason.items():
+            click.echo(f"  {n:4d}  {reason}")
+        click.echo("")
+        for c in cands[:25]:
+            fact = c["fact"][:80] + ("…" if len(c["fact"]) > 80 else "")
+            click.echo(f"  [{c['type']}] {fact}")
+            click.echo(f"         → {c['reason']} ({c['detail']})")
+        if len(cands) > 25:
+            click.echo(f"  … and {len(cands) - 25} more.")
+
+        if not execute:
+            click.echo(f"\nRun with --execute to retire {len(cands)} node(s) "
+                       f"(is_active=0; history kept, nothing deleted).")
+            return
+
+        for c in cands:
+            store.deactivate_node(c["id"])
+        click.echo(f"\nRetired {len(cands)} stale node(s) — is_active=0, history preserved "
+                   f"(use --at-time queries to see them).")
+    finally:
+        store.close()
+
+
 @cli.command("vacuum")
 @click.argument("project")
 @click.option(

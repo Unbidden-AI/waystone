@@ -257,6 +257,34 @@ class TestDoctor:
         # source tagged as history back-fill
         assert all(str(n.get("source_transcript", "")).startswith("history_summary:") for n in ss)
 
+    def test_invalidate_preview_then_execute(self, runner, tmp_path):
+        from datetime import datetime, timezone, timedelta
+        r, config, _ = runner
+        from waystone.config import get_db_path, load_config
+        cfg = load_config(config)
+        store = GraphStore(get_db_path(cfg, "proj"))
+        old = (datetime.now(timezone.utc) - timedelta(days=160)).isoformat()
+        store.add_node({"id": "n_stale", "fact": "an old low-confidence implementation detail",
+                        "type": "implementation", "confidence": 0.6, "tags": ["x"],
+                        "created_at": old, "supersedes": []})
+        store.close()
+
+        # preview: reports the candidate, does NOT retire it
+        prev = r.invoke(cli, ["--config", config, "invalidate", "proj"])
+        assert prev.exit_code == 0
+        assert "stale candidate" in prev.output and "--execute" in prev.output
+        store = GraphStore(get_db_path(cfg, "proj"))
+        assert store.get_node("n_stale")["is_active"] == 1  # untouched by preview
+        store.close()
+
+        # execute: retires it (is_active=0, kept)
+        ex = r.invoke(cli, ["--config", config, "invalidate", "proj", "--execute"])
+        assert ex.exit_code == 0 and "Retired 1 stale node" in ex.output
+        store = GraphStore(get_db_path(cfg, "proj"))
+        n = store.get_node("n_stale")
+        store.close()
+        assert n is not None and n["is_active"] == 0  # history kept
+
     def test_catchup_summarize_no_transcripts(self, runner, tmp_path):
         r, config, _ = runner
         result = r.invoke(cli, [

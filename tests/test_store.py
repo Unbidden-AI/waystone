@@ -633,3 +633,46 @@ def test_add_node_sanitizes_surrogates(tmp_path):
     # surrogate replaced, no crash
     assert not any(0xD800 <= ord(c) <= 0xDFFF for c in fact)
     assert "Decision text with a bad char" in fact
+
+
+class TestDetectStaleCandidates:
+    """Proactive staleness detection (waystone invalidate, Layer 0)."""
+
+    def _ts(self, days_ago):
+        from datetime import datetime, timezone, timedelta
+        return (datetime.now(timezone.utc) - timedelta(days=days_ago)).isoformat()
+
+    def test_signals_and_exemptions(self, store):
+        # past half-life, low confidence → temporal_half_life_expired (impl hl=60×1.5=90d)
+        store.add_node(_make_node(id="n_old", fact="old impl detail", type="implementation",
+                                  confidence=0.6, created_at=self._ts(160)))
+        # aged constraint (long half-life), never retrieved, low conf → never_retrieved_aged
+        store.add_node(_make_node(id="n_cons", fact="aged constraint", type="constraint",
+                                  confidence=0.6, created_at=self._ts(120)))
+        # exempt: high confidence
+        store.add_node(_make_node(id="n_hi", fact="strong fact", type="implementation",
+                                  confidence=0.98, created_at=self._ts(160)))
+        # exempt: too recent
+        store.add_node(_make_node(id="n_new", fact="recent fact", type="implementation",
+                                  confidence=0.6, created_at=self._ts(5)))
+        # exempt: pinned
+        store.add_node(_make_node(id="n_pin", fact="pinned fact", type="implementation",
+                                  confidence=0.6, created_at=self._ts(160)))
+        store.conn.execute("UPDATE nodes SET pinned = 1 WHERE id = 'n_pin'")
+        store.conn.commit()
+
+        reasons = {c["id"]: c["reason"] for c in store.detect_stale_candidates()}
+        assert reasons.get("n_old") == "temporal_half_life_expired"
+        assert reasons.get("n_cons") == "never_retrieved_aged"
+        assert "n_hi" not in reasons   # high confidence exempt
+        assert "n_new" not in reasons  # too recent
+        assert "n_pin" not in reasons  # pinned exempt
+
+    def test_deactivate_keeps_history_and_clears_candidate(self, store):
+        store.add_node(_make_node(id="n_x", type="implementation",
+                                  confidence=0.6, created_at=self._ts(160)))
+        assert any(c["id"] == "n_x" for c in store.detect_stale_candidates())
+        store.deactivate_node("n_x")
+        node = store.get_node("n_x")
+        assert node is not None and node["is_active"] == 0   # kept, not deleted
+        assert not any(c["id"] == "n_x" for c in store.detect_stale_candidates())
