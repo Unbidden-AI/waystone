@@ -170,6 +170,12 @@ waystone query myproject "describe the data pipeline" --stats
 # See exactly what was injected into the last prompt
 waystone last-context
 
+# Replay the project's story — a timeline of session summaries
+waystone story myproject
+
+# Back-fill that story from a project's existing saved transcripts (one-time)
+waystone catchup-summarize myproject
+
 # Export the full graph as markdown
 waystone export myproject
 

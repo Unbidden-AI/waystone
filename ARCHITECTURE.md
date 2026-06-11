@@ -8,6 +8,40 @@ subgraphs given a task description. See `CLAUDE.md` for the command reference an
 
 ---
 
+## Session Summarization
+
+Atomic extraction captures point-facts (decisions, constraints) but loses the session-level
+**narrative** — the goal, the arc of what was done, the current state, and what's next. The
+summarization layer fills that altitude. It is model-agnostic (keyed off captured turns, not
+any host's native recap) and stores its output as `session_summary` nodes.
+
+**Bi-temporal timeline.** Each new summary **supersedes** the prior one for that session:
+the latest is `is_active=1` (surfaces in retrieval), older ones become `is_active=0` but are
+**never deleted**. So "what's the current state" stays clean while the full project story is
+preserved and replayable.
+
+**Incremental + bounded.** `generate_session_summary()` (`extractor.py`) is the core call:
+`prior_summary + the recent turn-window → updated summary`. Because the prior summary carries
+older context forward, each call is **O(1)** in input (~3k tokens in / ≤512 out) regardless of
+session length — versus O(T²) for naively re-summarizing the whole transcript each time. It
+retries on empty/transient LLM responses.
+
+**Three entry points, one type:**
+- **Live (passive):** the Stop hook counts turns and every `cadence_turns` spawns a detached
+  worker (`_hooks/summarize.py`) that summarizes the last `context_turns`. Fail-open, respects
+  the pause flag.
+- **Injection:** the UserPromptSubmit hook leads each prompt's context with the latest active
+  summary ("Where we are"), fetched directly because its generic tags evade keyword BFS.
+- **Back-fill:** `catchup-summarize` / `summarize-session` reconstruct the rolling chain from
+  saved transcripts after the fact.
+
+`session_summary` is **system-generated only** — it is deliberately absent from the extractor's
+type palette (`domain_profiles.py`), so the per-turn fact extractor can't pollute the timeline
+with thin one-line "summaries"; only the worker, the back-fill commands, and host-recap
+ingestion create it. It sorts first in the retriever's `type_order`.
+
+---
+
 ## Temporal Decay Model
 
 ### Background

@@ -154,6 +154,46 @@ waystone pause     # turns extracted while paused are still buffered, not lost
 waystone resume
 ```
 
+(Pause also suppresses the background session-summary worker.)
+
+---
+
+## Session summarization (the project's story)
+
+Beyond atomic facts, Waystone keeps a rolling, high-altitude **narrative** of each work session — goal · arc · current state · next — as `session_summary` nodes. Each new summary supersedes the prior one for that session, so retrieval surfaces the latest while the **full timeline is kept** (never deleted). It's model-agnostic and runs passively in the background.
+
+```bash
+waystone story <project>              # replay the whole timeline, chapter by chapter (incl. superseded)
+waystone story <project> --session ID # scope to one live session
+waystone catchup-summarize <project>  # one-time: back-fill the story from a project's saved transcripts
+waystone summarize-session <project> <transcript>   # summarize a single transcript file
+```
+
+How it runs live: the Stop hook counts turns and, every `cadence_turns`, spawns a detached worker that folds the prior summary + the recent window into an updated narrative; the UserPromptSubmit hook then leads every prompt with a **"Where we are (session narrative)"** block so a fresh session opens already oriented. The per-call cost is bounded (~3k tokens in / ≤512 out, regardless of how long the session gets).
+
+Tune in `~/.waystone/config.yaml`:
+
+```yaml
+session_summary:
+  enabled: true         # master switch
+  cadence_turns: 5      # generate an updated summary every N turns
+  context_turns: 30     # recent turns fed to the summarizer each fire (lower = cheaper, less cross-window coherence)
+  retries: 2            # extra LLM attempts on an empty/transient response
+  inject: true          # lead per-prompt context with the latest summary
+```
+
+Note: `session_summary` is system-generated only (the worker, the catch-up/summarize commands, and host-recap ingestion) — the per-turn fact extractor never produces it, so the timeline stays free of thin one-line fragments.
+
+---
+
+## macOS: sqlite-vec and your Python build
+
+Semantic search, `dedup`, and `reembed` need the `sqlite-vec` extension, which requires a Python whose `sqlite3` was compiled with loadable-extension support. The **python.org macOS Framework installer does NOT include it** (Apple's system SQLite strips the symbols) — for *any* version, not just 3.14. **Homebrew, pyenv, and uv builds do.** If `waystone doctor` reports sqlite-vec unavailable on macOS, reinstall Waystone under a Homebrew/pyenv/uv Python (e.g. `brew install python@3.14`) rather than downgrading. Retrieval degrades gracefully to keyword (tag + BM25) without it, and `semantic` is off by default, so day-to-day injection is unaffected — but the semantic/maintenance commands need it. Check with:
+
+```bash
+python -c "import sqlite3; print(hasattr(sqlite3.connect(':memory:'), 'enable_load_extension'))"  # want: True
+```
+
 ---
 
 ## Verifying your LLM / API key

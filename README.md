@@ -75,6 +75,9 @@ waystone extract <project> <file>    # extract facts from a transcript
 waystone query <project> "<query>"   # retrieve relevant context
 waystone onboard <project>           # import existing session history
 waystone show <project>              # view project stats
+waystone story <project>             # replay the project's session-summary timeline
+waystone catchup-summarize <project> # back-fill the story from saved transcripts
+waystone doctor                      # health check (config, LLM, MCP, sqlite-vec)
 ```
 
 ## How it works
@@ -82,6 +85,8 @@ waystone show <project>              # view project stats
 **At session end** — `waystone extract` reads the conversation transcript and pulls structured facts: decisions, constraints, implementations, lessons learned, open questions. These are stored as nodes in a local SQLite knowledge graph (`~/.waystone/`). Superseded facts are retired automatically — if a decision changes, the graph reflects the current state.
 
 **At session start** — `waystone_query` (or a hook) runs BFS traversal from the most relevant entry points and surfaces the top 10–25 facts. Only what's relevant to the current context, not everything ever stored.
+
+**Session summaries (the project's story)** — alongside atomic facts, Waystone keeps a rolling, high-altitude narrative of each work session (goal · arc · current state · next) that point-facts miss. A passive background worker updates it every few turns; each summary supersedes the prior one, but the full timeline is kept. Every new prompt is led with a "Where we are" block so a fresh session opens already oriented, and `waystone story <project>` replays the whole history chapter by chapter. Use `waystone catchup-summarize <project>` once to back-fill the story from a project's existing transcripts. The rolling call is bounded (~3k tokens in / ≤512 out regardless of session length), so it stays cheap.
 
 ## Benchmarks
 

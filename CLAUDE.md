@@ -25,6 +25,17 @@ waystone extract <project> <transcript_file> [--verify] [--lessons] [--decisions
 waystone query <project> "<task description>" [--hops N] [--top-k N] [--stats] [--at-time ISO8601]
 waystone show <project>
 waystone export <project> [-o output.md]
+
+# Session summarization (high-altitude narrative — see "Session summarization" below)
+waystone story <project> [--session ID] [--limit N]              # replay the session_summary timeline (incl. superseded)
+waystone catchup-summarize <project> [--window N] [--sessions N]  # back-fill a project's story from saved transcripts
+                          [--replace/--append] [--dry-run]
+waystone summarize-session <project> <transcript> [--every N] [--max-windows N] [--dry-run]
+
+# Maintenance
+waystone doctor [--fix]              # preflight: config, LLM, marker, MCP, sqlite-vec capability
+waystone dedup <project> [--execute] # merge semantically duplicate nodes
+waystone prune <project> [--meta-noise] [--execute]
 ```
 
 ## Architecture
@@ -51,6 +62,7 @@ Waystone is a DAG-based context intelligence layer for LLM workflows. It extract
 - `defaults`: `hops`, `top_k`, `format`
 - `strategies`: toggles for each reduction strategy (all overridable per-query via `--enable`/`--disable`)
 - `projects_dir`: where project subdirectories are created (default: `./projects`)
+- `session_summary`: live rolling-summary controls — `enabled` (true), `cadence_turns` (5; summarize every N turns), `context_turns` (30; recent turns fed each fire), `retries` (2; on empty/transient LLM responses), `inject` (true; lead per-prompt context with the latest summary)
 
 Config is deep-merged with hardcoded defaults in `config.py`; missing keys fall back to defaults.
 
@@ -64,6 +76,17 @@ Config is deep-merged with hardcoded defaults in `config.py`; missing keys fall 
 
 **Benchmarks** (`benchmarks/`): synthetic transcripts for three projects (api_design, auth_system, data_pipeline) with ground-truth eval questions in `eval_questions.yaml` for measuring precision/recall across strategy configurations.
 
-**Node types**: `decision`, `transition`, `constraint`, `implementation`, `question`, `resolved`, `lesson_learned`, `preference`
+**Node types** (extractor palette): `decision`, `transition`, `constraint`, `implementation`, `question`, `resolved`, `lesson_learned`, `preference`
+
+**`session_summary`** is a SYSTEM-GENERATED type — NOT in the extractor's palette (removed in 0.4.31 to stop the per-turn extractor minting thin one-liners). It is created only by the live rolling-summary worker, `catchup-summarize`/`summarize-session`, and host-recap (away_summary) ingestion, all via `store.add_node` directly. It is first in the retriever's `type_order`.
 
 **Edge relations**: `depends_on`, `flows_to`, `relates_to`, `supersedes`
+
+## Session summarization
+
+A model-agnostic layer that captures session-level NARRATIVE (goal · arc · current state · next) — the altitude atomic fact-extraction misses. Stored as `session_summary` nodes; each new summary **supersedes** the prior for that session, so retrieval surfaces the latest while the full timeline is KEPT (bi-temporal: `is_active=0`, never deleted).
+
+- **Live (passive):** the Stop hook counts turns per session and every `cadence_turns` (default 5) spawns a detached worker (`waystone/_hooks/summarize.py`, console script `waystone-hook-summarize`) that folds the prior summary + the last `context_turns` (default 30) into an updated narrative. `generate_session_summary()` in `extractor.py` is the bounded incremental call (prior summary + new window → ~3k input / ≤512 output, O(1) regardless of session length; retries on empty/transient responses). Fail-open; respects `~/.waystone/paused`.
+- **Injection:** the UserPromptSubmit hook leads injected context with a "Where we are (session narrative)" block — the latest active `session_summary`, fetched directly since its generic tags won't surface via keyword BFS (`_latest_session_narrative` in `submit.py`; toggle `session_summary.inject`).
+- **Back-fill:** `waystone catchup-summarize <project>` walks a project's saved transcripts (`~/.waystone/transcripts/<project>/`) chronologically and builds the rolling chain after the fact (a chapter per session). `waystone summarize-session` does the same for one transcript file.
+- **Read:** `waystone story <project>` replays the WHOLE timeline including superseded chapters (supersession keeps history; `story` presents it).
