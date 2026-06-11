@@ -6,6 +6,14 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.32] – 2026-06-11
+
+### Added
+
+- **`waystone catchup-summarize <project>`** — back-fill a project's story from its already-saved session transcripts. Walks the distinct cumulative transcripts under `~/.waystone/transcripts/<project>/` in chronological order and builds one rolling `session_summary` chain — a chapter per session, each superseding the prior — so `waystone story <project>` replays the whole history. Each session is digested in `--window`-turn windows (default 40) so the full session is captured, not just its tail. `--sessions N` (most-recent N), `--replace/--append`, `--transcripts-dir`, `--dry-run`. Run once to catch a project up; the live Stop-hook summarizer handles new sessions. (Generalized from the one-off pass that reconstructed the NanoSwarm project history into 4 readable chapters across a month of work.)
+
+---
+
 ## [0.4.31] – 2026-06-10
 
 ### Fixed

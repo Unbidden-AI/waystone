@@ -3358,6 +3358,105 @@ def story_cmd(ctx, project, session, limit):
         click.echo(f"{n.get('fact', '').strip()}\n")
 
 
+@cli.command("catchup-summarize")
+@click.argument("project")
+@click.option("--window", default=40, show_default=True, type=int,
+              help="Turns per rolling window within each session")
+@click.option("--sessions", default=0, type=int,
+              help="Limit to the most recent N sessions (0 = all)")
+@click.option("--replace/--append", default=True, show_default=True,
+              help="Replace existing session_summary nodes with a clean chain, or append")
+@click.option("--transcripts-dir", default=None, type=click.Path(),
+              help="Override transcript location (default: ~/.waystone/transcripts/<project>)")
+@click.option("--dry-run", is_flag=True, help="Print the story without storing nodes")
+@click.pass_context
+def catchup_summarize_cmd(ctx, project, window, sessions, replace, transcripts_dir, dry_run):
+    """Back-fill a project's STORY from its saved session transcripts.
+
+    Walks the project's distinct session transcripts (the cumulative .md the Stop hook
+    saves under ~/.waystone/transcripts/<project>/) in chronological order and builds ONE
+    rolling narrative — a `session_summary` chapter per session, each SUPERSEDING the prior
+    — so `waystone story <project>` replays the project's history. Each session is digested
+    in --window-turn windows so the whole session is captured, not just its tail.
+
+    Use this once to catch a project up; the live Stop-hook summarizer handles new sessions.
+    """
+    import re
+    import uuid as _uuid
+
+    from ._hooks.summarize import _parse_markdown_turns, _turns_to_text
+
+    config = _load_cfg(ctx.obj["config_path"])
+    tdir = Path(transcripts_dir) if transcripts_dir else (
+        Path.home() / ".waystone" / "transcripts" / project)
+    if not tdir.exists():
+        click.echo(f"No transcripts found for '{project}' at {tdir}.")
+        return
+
+    # Latest cumulative transcript per session id, chronological.
+    by_sid: dict = {}
+    for f in tdir.glob("*.md"):
+        if "_delta" in f.name or f.name == "latest.md":
+            continue
+        m = re.match(r'(\d{8}_\d{6})_([0-9a-f]+)\.md$', f.name)
+        if not m:
+            continue
+        ts, sid = m.group(1), m.group(2)
+        if sid not in by_sid or ts > by_sid[sid][0]:
+            by_sid[sid] = (ts, f)
+    order = sorted([(ts, sid, f) for sid, (ts, f) in by_sid.items()])
+    if sessions and len(order) > sessions:
+        order = order[-sessions:]
+    if not order:
+        click.echo(f"No session transcripts to summarize for '{project}'.")
+        return
+
+    store = None if dry_run else GraphStore(get_db_path(config, project))
+    if store and replace:
+        existing = [n["id"] for n in store.get_all_nodes() if n.get("type") == "session_summary"]
+        for nid in existing:
+            store.delete_node(nid)
+        if existing:
+            click.echo(f"Cleared {len(existing)} existing session_summary node(s) for a clean timeline.")
+
+    click.echo(f"Summarizing {len(order)} session(s) for '{project}' "
+               f"(window={window}){' [dry-run]' if dry_run else ''}...\n")
+    prior_summary, prior_id, calls = "", None, 0
+    for ts, sid, path in order:
+        turns = _parse_markdown_turns(path.read_text(encoding="utf-8", errors="replace"))
+        if not turns:
+            continue
+        summary = prior_summary
+        for i in range(0, len(turns), window):
+            wtext = _turns_to_text(turns[i:i + window])
+            if not wtext.strip():
+                continue
+            new = asyncio.run(generate_session_summary(wtext, summary, config))
+            calls += 1
+            if new:
+                summary = new
+        if not summary or summary == prior_summary:
+            click.echo(f"── {ts[:8]} ({sid}) ── (no summary produced)")
+            continue
+        when = datetime.strptime(ts, "%Y%m%d_%H%M%S").replace(tzinfo=timezone.utc).isoformat()
+        node = {
+            "id": f"n_{_uuid.uuid4().hex[:8]}", "fact": summary, "type": "session_summary",
+            "source_transcript": f"history_summary:{sid}", "confidence": 1.0,
+            "tags": ["session", "history"], "created_at": when, "occurred_at": when,
+            "supersedes": [prior_id] if prior_id else [],
+        }
+        if store:
+            store.add_node(node)
+        prior_summary, prior_id = summary, node["id"]
+        click.echo(f"── {ts[:8]} ({sid}) ──\n{summary}\n")
+
+    if store:
+        store.close()
+    click.echo(f"{'(dry-run) ' if dry_run else ''}Done — {calls} LLM call(s) across "
+               f"{len(order)} session(s)." + ("" if dry_run else
+               f" Run 'waystone story {project}' to replay the timeline."))
+
+
 @cli.command("doctor")
 @click.option("--fix", "do_fix", is_flag=True, default=False,
               help="Attempt to automatically fix detected issues.")

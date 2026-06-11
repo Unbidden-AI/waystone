@@ -219,6 +219,53 @@ class TestDoctor:
         result = r.invoke(cli, ["--config", config, "doctor"], catch_exceptions=False)
         assert ".waystone marker found" in result.output
 
+    def test_catchup_summarize_builds_chain(self, runner, tmp_path, monkeypatch):
+        r, config, _ = runner
+        # Two fake session transcripts in a temp transcripts dir.
+        tdir = tmp_path / "transcripts"
+        tdir.mkdir()
+        (tdir / "20260101_100000_aaaa1111.md").write_text(
+            "**User**: start project\n\n**Assistant**: ok, session one\n", encoding="utf-8")
+        (tdir / "20260102_100000_bbbb2222.md").write_text(
+            "**User**: continue\n\n**Assistant**: session two\n", encoding="utf-8")
+
+        # Mock the LLM: return a distinct summary per call so chapters differ.
+        import waystone.cli as climod
+        calls = {"n": 0}
+
+        async def fake_summary(new_text, prior, cfg):
+            calls["n"] += 1
+            return f"chapter summary {calls['n']}"
+
+        monkeypatch.setattr(climod, "generate_session_summary", fake_summary)
+
+        result = r.invoke(climod.cli, [
+            "--config", config, "catchup-summarize", "proj",
+            "--transcripts-dir", str(tdir),
+        ], catch_exceptions=False)
+        assert result.exit_code == 0
+        assert "Summarizing 2 session(s)" in result.output
+
+        from waystone.config import get_db_path, load_config
+        cfg = load_config(config)
+        store = GraphStore(get_db_path(cfg, "proj"))
+        ss = [n for n in store.get_all_nodes() if n["type"] == "session_summary"]
+        store.close()
+        assert len(ss) == 2
+        # Newest chapter supersedes (one node carries a supersedes edge)
+        assert any(n.get("supersedes") for n in ss)
+        # source tagged as history back-fill
+        assert all(str(n.get("source_transcript", "")).startswith("history_summary:") for n in ss)
+
+    def test_catchup_summarize_no_transcripts(self, runner, tmp_path):
+        r, config, _ = runner
+        result = r.invoke(cli, [
+            "--config", config, "catchup-summarize", "proj",
+            "--transcripts-dir", str(tmp_path / "nope"),
+        ])
+        assert result.exit_code == 0
+        assert "No transcripts found" in result.output
+
     def test_doctor_reports_sqlite_vec_capability(self, runner, tmp_path):
         r, config, _ = runner
         # The sqlite-vec capability line must appear regardless of build (✓, ✗, or –).
