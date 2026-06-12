@@ -4938,6 +4938,114 @@ def auto_import_cmd(ctx, project, directory, verify, extensions, force, dry_run)
     click.echo(f"\nDone: {total_imported}/{len(to_import)} files imported in {elapsed:.0f}s.")
 
 
+@cli.group("team")
+def team():
+    """Manage Team Server seats (member API keys), gated by your license.
+
+    Run these on the server (or anywhere CB_ADMIN_DB points at the admin DB).
+    A seat = one member email; a license sets how many you may have active.
+    """
+
+
+def _resolve_seats():
+    """Return (license_or_None, seats). Exits with a clear error on a bad license."""
+    from .licensing import LicenseError, load_license, seats_for
+    try:
+        lic = load_license()
+    except LicenseError as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+    return lic, seats_for(lic)
+
+
+@team.command("license")
+@click.pass_context
+def team_license(ctx):
+    """Show the active license and seat usage."""
+    from .billing import count_active_members, open_admin_db
+    lic, seats = _resolve_seats()
+    conn = open_admin_db()
+    used = count_active_members(conn)
+    conn.close()
+    if lic is None:
+        click.echo("License:  (none) — running on the trial allowance")
+    else:
+        click.echo(f"License:  {lic.plan} for {lic.org or 'your org'}")
+        click.echo(f"Expires:  {lic.expires_at or 'never'}")
+    click.echo(f"Seats:    {used}/{seats} used ({max(0, seats - used)} free)")
+
+
+@team.command("issue")
+@click.argument("email")
+@click.option("--tier", default="team", show_default=True,
+              help="Tier for the member key (controls node/rate limits)")
+@click.pass_context
+def team_issue(ctx, email, tier):
+    """Issue a member API key for EMAIL (consumes a seat if they're new)."""
+    from .billing import count_active_members, create_key, open_admin_db
+    _lic, seats = _resolve_seats()
+    conn = open_admin_db()
+    # Serialize the check-then-create so two concurrent `team issue` calls can't both
+    # slip past the seat limit (BEGIN IMMEDIATE takes the write lock up front).
+    conn.execute("BEGIN IMMEDIATE")
+    already = conn.execute(
+        "SELECT 1 FROM api_keys WHERE email = ? AND is_revoked = 0 LIMIT 1", (email,)
+    ).fetchone()
+    used = count_active_members(conn)
+    if not already and used >= seats:
+        conn.rollback()
+        conn.close()
+        click.echo(
+            f"Error: seat limit reached ({used}/{seats}). Revoke a member with "
+            f"'waystone team revoke <email>' or raise your license seat count.",
+            err=True,
+        )
+        sys.exit(1)
+    raw = create_key(conn, email=email, tier=tier)  # commits, releasing the lock
+    conn.close()
+    click.echo(f"Issued a {tier} key for {email}:\n")
+    click.echo(f"  {raw}\n")
+    click.echo("Give it to them; they set it in ~/.waystone/config.yaml:")
+    click.echo("  backend: remote")
+    click.echo("  api_url: http://<server>:8000")
+    click.echo(f"  api_key: {raw}")
+
+
+@team.command("members")
+@click.pass_context
+def team_members(ctx):
+    """List active members (seats in use)."""
+    from .billing import count_active_members, list_active_members, open_admin_db
+    _lic, seats = _resolve_seats()
+    conn = open_admin_db()
+    members = list_active_members(conn)
+    used = count_active_members(conn)
+    conn.close()
+    if not members:
+        click.echo("No active members.")
+        return
+    click.echo(f"Active members ({used}/{seats} seats):")
+    for m in members:
+        created = (m.get("created_at") or "")[:10]
+        last = (m.get("last_used") or "never")[:10]
+        click.echo(f"  {m['email']:30}  {m.get('tier', ''):6}  added {created}  last used {last}")
+
+
+@team.command("revoke")
+@click.argument("email")
+@click.pass_context
+def team_revoke(ctx, email):
+    """Revoke EMAIL's key(s), freeing their seat."""
+    from .billing import open_admin_db, revoke_key_by_email
+    conn = open_admin_db()
+    n = revoke_key_by_email(conn, email)
+    conn.close()
+    if n:
+        click.echo(f"Revoked {n} key(s) for {email}; seat freed.")
+    else:
+        click.echo(f"No active keys found for {email}.")
+
+
 # Allow `python -m waystone.cli ...` to actually invoke the CLI. Several internal
 # subprocesses (auto-import, watch, doctor's onboard-fix) spawn the CLI this way;
 # without this guard the module just imports and exits 0, silently doing nothing.

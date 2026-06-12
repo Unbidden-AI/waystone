@@ -241,6 +241,22 @@ def revoke_key_by_email(conn: sqlite3.Connection, email: str) -> int:
     return cur.rowcount
 
 
+def count_active_members(conn: sqlite3.Connection) -> int:
+    """Distinct active (non-revoked) member emails — a 'seat' is one email."""
+    return conn.execute(
+        "SELECT COUNT(DISTINCT email) FROM api_keys WHERE is_revoked = 0"
+    ).fetchone()[0]
+
+
+def list_active_members(conn: sqlite3.Connection) -> list[dict]:
+    """Active members (one row per email, newest key's fields), for `team members`."""
+    rows = conn.execute(
+        "SELECT email, tier, MAX(created_at) AS created_at, MAX(last_used) AS last_used "
+        "FROM api_keys WHERE is_revoked = 0 GROUP BY email ORDER BY created_at"
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
 # ---------------------------------------------------------------------------
 # Tier enforcement
 # ---------------------------------------------------------------------------

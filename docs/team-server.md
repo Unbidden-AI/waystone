@@ -59,6 +59,28 @@ That's it. Now:
 Use `backend: local` to force a machine back to its private SQLite graph even if
 `api_url` is set.
 
+## Per-seat licensing (optional)
+
+The default above uses one shared key. To give each member their own key and cap
+the team to a licensed seat count, switch to **per-seat mode**:
+
+1. In `.env`, set `CB_USE_ADMIN_DB=1` (and optionally `WAYSTONE_LICENSE=<token>`).
+   `docker compose up -d`.
+2. Issue a member key per person:
+
+   ```bash
+   docker compose exec server waystone team issue alice@acme.com
+   docker compose exec server waystone team members      # who has a seat
+   docker compose exec server waystone team license      # seats used / total
+   docker compose exec server waystone team revoke bob@acme.com   # free a seat
+   ```
+
+Each member sets their own issued key as `api_key`. Seats are enforced offline
+against the signed license — **no phone-home**. Without a license you get
+`TRIAL_SEATS` (3) to evaluate; a license raises the cap. Licenses are
+Ed25519-signed tokens verified locally against a key bundled in the binary; the
+admin DB (member keys) persists in the `waystone-serverdata` volume.
+
 ## Notes & ops
 
 - **Data** lives in the `waystone-pgdata` Docker volume. Back it up with

@@ -35,9 +35,14 @@ services:
       # --- Team backend: the shared Postgres graph ---
       WAYSTONE_STORE_BACKEND: postgres
       DATABASE_URL: postgresql://${POSTGRES_USER:-waystone}:${POSTGRES_PASSWORD:-waystone}@db:5432/${POSTGRES_DB:-waystone}
-      # --- Auth: a single shared key for the team (per-seat licensing is a later tier) ---
+      # --- Auth ---
+      # Default: one shared key for the whole team (simplest).
       WAYSTONE_API_KEY: ${WAYSTONE_API_KEY:?set WAYSTONE_API_KEY in .env}
+      # For PER-SEAT mode instead: set CB_USE_ADMIN_DB=1, optionally WAYSTONE_LICENSE,
+      # then issue member keys with `docker compose exec server waystone team issue <email>`.
       CB_USE_ADMIN_DB: ${CB_USE_ADMIN_DB:-0}
+      CB_ADMIN_DB: /data/admin.db
+      WAYSTONE_LICENSE: ${WAYSTONE_LICENSE:-}
       # --- Extraction LLM (the server runs extraction server-side) ---
       LLM_BASE_URL: ${LLM_BASE_URL:-https://generativelanguage.googleapis.com/v1beta/openai}
       LLM_MODEL: ${LLM_MODEL:-gemini-2.5-flash}
@@ -45,6 +50,10 @@ services:
       PORT: 8000
     ports:
       - "${WAYSTONE_PORT:-8000}:8000"
+    volumes:
+      # Persists the admin DB (per-seat member keys) across restarts. The graph
+      # itself lives in Postgres, not here.
+      - waystone-serverdata:/data
     healthcheck:
       test: ["CMD", "python", "-c",
              "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/v1/health', timeout=4).status==200 else 1)"]
@@ -55,3 +64,4 @@ services:
 
 volumes:
   waystone-pgdata:
+  waystone-serverdata:
