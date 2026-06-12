@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
+import struct
 from datetime import datetime, timezone
 
 from .store import (
@@ -30,12 +31,21 @@ log = logging.getLogger("waystone.pg_store")
 
 try:
     import psycopg
+    from pgvector import Vector
+    from pgvector.psycopg import register_vector
     from psycopg.rows import dict_row
     _PSYCOPG_OK = True
 except Exception:  # pragma: no cover - import guard
     psycopg = None
     dict_row = None
+    register_vector = None
+    Vector = None
     _PSYCOPG_OK = False
+
+
+def _blob_to_vec(blob: bytes):
+    """float32 byte blob (embedder format) → pgvector Vector for binding."""
+    return Vector(list(struct.unpack(f"{len(blob) // 4}f", blob)))
 
 
 # Per-type half-lives for proactive staleness detection (mirror of GraphStore's).
@@ -67,6 +77,7 @@ class PostgresGraphStore:
         self._dim = int(embedding_dim)
         self.conn = psycopg.connect(dsn, row_factory=dict_row, autocommit=False)
         self._init_schema()
+        register_vector(self.conn)  # adapt pgvector <-> Python lists
 
     # ------------------------------------------------------------------ schema
     def _init_schema(self) -> None:
@@ -419,6 +430,27 @@ class PostgresGraphStore:
                             "reason": "never_retrieved_aged",
                             "detail": f"hit_count=0, age={age}d, conf={conf:.2f}", "score": 0.6})
         return out
+
+    # ------------------------------------------------------------------ vectors (pgvector)
+    def store_embeddings(self, pairs: list) -> None:
+        """Upsert (node_id, float32-blob) embeddings into the nodes.embedding column."""
+        if not pairs:
+            return
+        with self.conn.cursor() as cur:
+            cur.executemany(
+                "UPDATE nodes SET embedding = %s WHERE tenant_id = %s AND id = %s",
+                [(_blob_to_vec(blob), self.tenant_id, nid) for nid, blob in pairs])
+        self.conn.commit()
+
+    def search_by_embedding(self, query_blob: bytes, top_k: int = 10) -> list[str]:
+        """Return node ids nearest the query embedding by cosine distance (pgvector hnsw)."""
+        vec = _blob_to_vec(query_blob)
+        with self.conn.cursor() as cur:
+            cur.execute(
+                "SELECT id FROM nodes WHERE tenant_id = %s AND embedding IS NOT NULL "
+                "ORDER BY embedding <=> %s LIMIT %s",
+                (self.tenant_id, vec, int(top_k)))
+            return [r["id"] for r in cur.fetchall()]
 
     def close(self) -> None:
         try:

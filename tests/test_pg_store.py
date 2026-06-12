@@ -221,6 +221,28 @@ def test_merge_extraction_supersedes(store):
     assert "old" in new["supersedes"]                               # link recorded
 
 
+def test_embedding_store_and_search(store):
+    import struct
+
+    def blob(*first):  # build a 384-d float32 blob from leading components
+        vec = list(first) + [0.0] * (384 - len(first))
+        return struct.pack("384f", *vec)
+
+    store.add_node(_node(id="a", fact="about apples"))
+    store.add_node(_node(id="b", fact="about bikes"))
+    store.add_node(_node(id="c", fact="about cats"))
+    store.store_embeddings([("a", blob(1.0, 0.0, 0.0)),
+                            ("b", blob(0.0, 1.0, 0.0)),
+                            ("c", blob(0.0, 0.0, 1.0))])
+    # query nearest the "a" direction → a first
+    hits = store.search_by_embedding(blob(0.9, 0.1, 0.0), top_k=3)
+    assert hits[0] == "a"
+    assert set(hits) == {"a", "b", "c"}
+    # nodes without an embedding aren't returned
+    store.add_node(_node(id="d", fact="no embedding"))
+    assert "d" not in store.search_by_embedding(blob(0.0, 0.0, 1.0), top_k=10)
+
+
 def test_tenant_isolation(store):
     from waystone.pg_store import PostgresGraphStore
     store.add_node(_node(id="mine", fact="tenant A fact"))
