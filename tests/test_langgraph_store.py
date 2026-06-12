@@ -6,6 +6,8 @@ import tempfile
 
 import pytest
 
+pytest.importorskip("langgraph")  # optional dep — skip this module if not installed
+
 from waystone.langgraph_store import (
     WaystoneStore,
     make_waystone_store,
