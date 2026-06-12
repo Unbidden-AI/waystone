@@ -6,6 +6,18 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.35] – 2026-06-12
+
+### Added
+
+- **Self-hosted Team Server — one shared knowledge graph for a whole team.** A team flips `backend: remote` and points their client at a server backed by a multi-writer **PostgreSQL + pgvector** graph; each member's session injects the team's context every prompt and writes new facts back to the same graph, on their own infrastructure.
+  - **`backend: remote` switch** — `query` / `extract` / `show` / `export` / `init` and the Claude Code hooks route to the server over HTTP (the existing `RemoteContextBroker`). The UserPromptSubmit hook injects shared context (fail-open, ~8s cap so a slow server never blocks a prompt) and routes extraction to a detached `--remote` worker. `backend: local` forces a machine back to its private SQLite graph. The local-only path is byte-for-byte unchanged.
+  - **`docker compose up`** — Postgres (pgvector) + the API, ready in ~30s. The backend is env-configured (`WAYSTONE_STORE_BACKEND` / `DATABASE_URL`); schema auto-creates on first request. See `docs/team-server.md`.
+  - **Offline per-seat licensing** — Ed25519-signed license tokens (seats + expiry) verified **locally**, no phone-home. `waystone team` CLI (`license` / `issue` / `members` / `revoke`) manages member keys up to the licensed seat count (3 trial seats unlicensed). Fail-closed: a tampered/expired license never grants seats.
+  - **`PostgresGraphStore`** — a multi-writer, tenant-scoped, drop-in for the SQLite `GraphStore` (psycopg3 + pgvector, jsonb tags, generated-tsvector FTS, bi-temporal). Schema built once per process.
+
+---
+
 ## [0.4.34] – 2026-06-11
 
 ### Added

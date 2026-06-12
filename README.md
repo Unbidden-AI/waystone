@@ -101,9 +101,35 @@ Token usage vs. naive MEMORY.md on a mature project: typically 60–80% fewer co
 
 Full results: [BENCHMARK_RESULTS.md](./BENCHMARK_RESULTS.md)
 
+## Team Server (self-hosted)
+
+Run **one shared graph for your whole team — on your own infrastructure.** Each
+member's Claude Code session injects the team's context every prompt and writes new
+decisions back to the same graph, automatically. No data leaves your network.
+
+```bash
+cp .env.example .env        # set WAYSTONE_API_KEY + LLM_API_KEY
+docker compose up -d        # Postgres (pgvector) + the API, ready in ~30s
+```
+
+Point each member's client at it (`~/.waystone/config.yaml`):
+
+```yaml
+backend: remote
+api_url: http://<server-host>:8000
+api_key: <the shared key you set>
+```
+
+That's it — `query` / `extract` / `show` / `export` and the Claude Code hooks now all
+operate against the shared graph. Per-seat licensing is **offline and signed** (no
+phone-home — verified locally on your own metal), managed with `waystone team issue`.
+
+Full guide: **[docs/team-server.md](./docs/team-server.md)**.
+
 ## Hosted API
 
-The default store is local SQLite — no cloud dependency, no infra to manage. For cross-machine sync and team access, a hosted API is available:
+The default store is local SQLite — no cloud dependency, no infra to manage. For
+cross-machine sync without running your own server, a hosted API is also available:
 
 - **Pro** ($20/mo) — unlimited projects, hosted API, 1 user
 - **Team** ($80/mo) — unlimited projects, hosted API, up to 10 users
@@ -116,6 +142,7 @@ The default store is local SQLite — no cloud dependency, no infra to manage. F
 - [MCP Server setup](https://unbidden.ai/docs/mcp-server/)
 - [CLI Reference](https://unbidden.ai/docs/cli/)
 - [REST API](https://unbidden.ai/docs/rest-api/)
+- [Team Server (self-hosted)](./docs/team-server.md) — shared Postgres graph, `backend: remote`, Docker Compose, per-seat licensing
 - [Hermes Agent integration](https://unbidden.ai/docs/integrations/hermes/)
 - [Advanced Configuration](./ADVANCED.md) — API embeddings (no PyTorch), strategy tuning, attachment extraction
 
