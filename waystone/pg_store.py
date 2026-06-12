@@ -48,6 +48,25 @@ def _blob_to_vec(blob: bytes):
     return Vector(list(struct.unpack(f"{len(blob) // 4}f", blob)))
 
 
+def _writes(method):
+    """Decorator for write methods: roll back on error so a failed query never
+    leaves the (long-lived, server-shared) connection stuck in an aborted-transaction
+    state poisoning subsequent calls. Each method still commits on success."""
+    import functools
+
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        try:
+            return method(self, *args, **kwargs)
+        except Exception:
+            try:
+                self.conn.rollback()
+            except Exception:
+                pass
+            raise
+    return wrapper
+
+
 # Per-type half-lives for proactive staleness detection (mirror of GraphStore's).
 _INVALIDATION_HALF_LIVES = {
     "transition": 14, "question": 30, "implementation": 60, "process": 90,
@@ -164,6 +183,7 @@ class PostgresGraphStore:
              "valid_to, is_active, pinned, hit_count, entry_hit_count, last_used_at, world_id")
 
     # ------------------------------------------------------------------ writes
+    @_writes
     def add_node(self, node: dict) -> str:
         """Insert a node, deduplicating by normalized fact-text hash (exact).
 
@@ -227,12 +247,14 @@ class PostgresGraphStore:
         self.conn.commit()
         return node["id"]
 
+    @_writes
     def add_edge(self, from_id: str, to_id: str, relation: str) -> None:
         """Insert an edge (idempotent). Mirrors the supersedes→expiry side effect."""
         with self.conn.cursor() as cur:
             cur.execute(
                 """INSERT INTO edges (tenant_id, from_id, to_id, relation)
-                   VALUES (%s,%s,%s,%s) ON CONFLICT DO NOTHING""",
+                   VALUES (%s,%s,%s,%s)
+                   ON CONFLICT (tenant_id, from_id, to_id, relation) DO NOTHING""",
                 (self.tenant_id, from_id, to_id, relation),
             )
             if relation == "supersedes":
@@ -250,6 +272,7 @@ class PostgresGraphStore:
                 )
         self.conn.commit()
 
+    @_writes
     def deactivate_node(self, node_id: str) -> None:
         """Soft-retire: is_active=false, valid_to=now (kept for audit/time-travel)."""
         with self.conn.cursor() as cur:
@@ -260,6 +283,7 @@ class PostgresGraphStore:
             )
         self.conn.commit()
 
+    @_writes
     def delete_node(self, node_id: str) -> bool:
         with self.conn.cursor() as cur:
             cur.execute("SELECT 1 FROM nodes WHERE tenant_id = %s AND id = %s",
@@ -273,6 +297,7 @@ class PostgresGraphStore:
         self.conn.commit()
         return True
 
+    @_writes
     def record_hits(self, node_ids: list[str], entry_ids: set[str]) -> None:
         if not node_ids:
             return
@@ -290,6 +315,7 @@ class PostgresGraphStore:
                     [(self.tenant_id, nid) for nid in entries])
         self.conn.commit()
 
+    @_writes
     def merge_extraction(self, nodes: list[dict], edges: list[dict]) -> dict[str, str]:
         """Merge extracted nodes + edges; returns id_map (new_id → canonical_id).
 
@@ -366,11 +392,11 @@ class PostgresGraphStore:
         for i in range(0, len(keywords), 200):
             chunk = keywords[i:i + 200]
             conds = " OR ".join(["fact ILIKE %s"] * len(chunk))
-            params = (self.tenant_id, *[f"%{kw}%" for kw in chunk])
+            params = (self.tenant_id, *[f"%{kw}%" for kw in chunk], lim)
             with self.conn.cursor() as cur:
                 cur.execute(
                     f"SELECT {self._COLS} FROM nodes WHERE tenant_id = %s "
-                    f"AND is_active = true AND ({conds}) LIMIT {lim}", params)
+                    f"AND is_active = true AND ({conds}) LIMIT %s", params)
                 for r in cur.fetchall():
                     if r["id"] not in seen:
                         seen.add(r["id"])
@@ -468,6 +494,7 @@ class PostgresGraphStore:
             return [self._row_to_node(r) for r in cur.fetchall()]
 
     # ------------------------------------------------------------------ worlds (namespaces)
+    @_writes
     def create_world(self, name: str, tags: list[str] | None = None,
                      parent_world_id: str | None = None,
                      description: str | None = None) -> str:
@@ -500,6 +527,7 @@ class PostgresGraphStore:
                 r["created_at"] = r["created_at"].isoformat()
             return dict(r) if r else None
 
+    @_writes
     def add_node_to_world(self, node_id: str, world_id: str) -> None:
         with self.conn.cursor() as cur:
             cur.execute("SELECT 1 FROM worlds WHERE tenant_id = %s AND world_id = %s",
@@ -537,6 +565,7 @@ class PostgresGraphStore:
             return [dict(r) for r in cur.fetchall()]
 
     # ------------------------------------------------------------------ vectors (pgvector)
+    @_writes
     def store_embeddings(self, pairs: list) -> None:
         """Upsert (node_id, float32-blob) embeddings into the nodes.embedding column."""
         if not pairs:

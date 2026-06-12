@@ -279,6 +279,18 @@ def test_worlds(store):
     assert counts["Backend"] == 1 and counts["Auth"] == 1
 
 
+def test_failed_write_rolls_back_connection_stays_usable(store):
+    import struct
+    store.add_node(_node(id="ok1", fact="before the error"))
+    # a wrong-dimension vector triggers a DB error mid-write
+    with pytest.raises(Exception):
+        store.store_embeddings([("ok1", struct.pack("10f", *([0.1] * 10)))])  # 10 != 384
+    # the @_writes decorator must have rolled back → connection NOT poisoned
+    store.add_node(_node(id="ok2", fact="after the error"))   # would raise InFailedSqlTransaction if poisoned
+    assert store.get_node("ok2") is not None
+    assert store.get_stats()["node_count"] == 2
+
+
 def test_tenant_isolation(store):
     from waystone.pg_store import PostgresGraphStore
     store.add_node(_node(id="mine", fact="tenant A fact"))
