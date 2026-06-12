@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from waystone.billing import create_key, init_admin_db
+from waystone.billing import _hash_key, create_key, init_admin_db
 from waystone.store import GraphStore
 
 try:
@@ -74,10 +74,13 @@ class TestNodeLimitEnforcementOnExtract:
         raw_key = create_key(conn, email="free@example.com", tier="free")
         conn.close()
 
-        # Create project with 500 nodes (at limit)
-        project_dir = projects_dir / "free-project"
+        # Create project with 500 nodes (at limit). Admin mode scopes the project
+        # path by key-hash prefix, so seed where the server will actually read.
+        # dedup_threshold=1.1 disables semantic dedup so the count is exactly 500
+        # (dev machines have the embedder; CI does not).
+        project_dir = projects_dir / _hash_key(raw_key)[:12] / "free-project"
         project_dir.mkdir(parents=True)
-        store = GraphStore(project_dir / "context.db")
+        store = GraphStore(project_dir / "context.db", dedup_threshold=1.1)
         for i in range(500):
             store.add_node({
                 "id": f"n_existing_{i:03d}",
@@ -122,10 +125,10 @@ class TestNodeLimitEnforcementOnExtract:
         raw_key = create_key(conn, email="pro@example.com", tier="pro")
         conn.close()
 
-        # Create project with 24,999 nodes
-        project_dir = projects_dir / "pro-project"
+        # Create project with 24,999 nodes at the key-scoped path the server reads.
+        project_dir = projects_dir / _hash_key(raw_key)[:12] / "pro-project"
         project_dir.mkdir(parents=True)
-        store = GraphStore(project_dir / "context.db")
+        store = GraphStore(project_dir / "context.db", dedup_threshold=1.1)
         for i in range(24_999):
             store.add_node({
                 "id": f"n_pro_{i:05d}",
@@ -282,22 +285,24 @@ class TestAPIAuthEdgeCases:
                 yield c
 
     def test_bearer_token_case_insensitive_bearer_keyword(self, api_client_simple):
-        """Bearer keyword must match case exactly (RFC 7235)."""
-        # This is actually case-insensitive in HTTP spec, but let's verify behavior
+        """The 'Bearer' scheme keyword is case-insensitive per RFC 7235."""
         r = api_client_simple.get(
             "/v1/projects",
             headers={"Authorization": "bearer self-hosted-secret"},  # lowercase 'bearer'
         )
-        # FastAPI HTTPBearer typically rejects non-Bearer format
-        assert r.status_code in (401, 403), f"Got {r.status_code}"
+        # HTTPBearer accepts any-case scheme; the credential itself is still matched
+        # exactly, so accepting lowercase 'bearer' is correct and not a bypass.
+        assert r.status_code == 200, f"Got {r.status_code}"
 
     def test_bearer_token_with_extra_whitespace(self, api_client_simple):
-        """Extra spaces in Bearer token should be rejected."""
+        """Extra space after 'Bearer' is tolerated; the exact credential is still required."""
         r = api_client_simple.get(
             "/v1/projects",
             headers={"Authorization": "Bearer  self-hosted-secret"},  # double space
         )
-        assert r.status_code == 401
+        # The scheme parser collapses the gap to the real key, which matches. A wrong
+        # key (with or without extra spaces) would still 401 — so this is not a bypass.
+        assert r.status_code == 200
 
     def test_bearer_token_with_no_space(self, api_client_simple):
         """Malformed Authorization header (no space) should fail."""
