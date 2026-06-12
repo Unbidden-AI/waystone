@@ -1055,6 +1055,52 @@ class GraphStore:
         ).fetchall()
         return [self._row_to_node(r) for r in rows]
 
+    def get_typed_nodes_by_tags(
+        self, types: list[str], keywords: list[str], limit: int
+    ) -> list[dict]:
+        """Nodes of any given `type` whose tags contain any keyword (substring),
+        ordered by confidence desc, capped at `limit`.
+
+        Backs the retriever's process/episode direct-injection path. Lives on the
+        store (not inline SQL in the retriever) so the Postgres backend can provide
+        its own jsonb implementation.
+        """
+        if not types or not keywords:
+            return []
+        type_ph = ",".join("?" * len(types))
+        kw_cond = " OR ".join(["tags LIKE ?"] * len(keywords))
+        params = [*types, *(f"%{kw}%" for kw in keywords), int(limit)]
+        rows = self.conn.execute(
+            f"SELECT * FROM nodes WHERE type IN ({type_ph}) AND ({kw_cond})"
+            f" ORDER BY confidence DESC LIMIT ?",
+            params,
+        ).fetchall()
+        return [self._row_to_node(r) for r in rows]
+
+    def get_superseded_target_ids(self, candidate_ids: list[str]) -> set[str]:
+        """Of `candidate_ids`, return those that are the target of a 'supersedes'
+        edge (a newer node supersedes them).
+
+        Batched at 500 to stay under SQLite's expression-tree-depth limit. Backs
+        the retriever's superseded-pruning pass; the Postgres backend overrides
+        with a single ``= ANY`` query.
+        """
+        result: set[str] = set()
+        ids = list(candidate_ids)
+        chunk = 500
+        for i in range(0, len(ids), chunk):
+            batch = ids[i : i + chunk]
+            if not batch:
+                continue
+            placeholders = ",".join("?" * len(batch))
+            rows = self.conn.execute(
+                f"SELECT to_id FROM edges WHERE relation = 'supersedes'"
+                f" AND to_id IN ({placeholders})",
+                batch,
+            ).fetchall()
+            result.update(r[0] for r in rows)
+        return result
+
     def get_nodes_by_tags(self, tags: list[str]) -> list[dict]:
         """Find nodes whose tags overlap with the given list.
 

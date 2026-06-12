@@ -705,16 +705,12 @@ def retrieve_with_stats(
     if process_slots > 0 and keywords:
         _bfs_ids = {n["id"] for n in collected_nodes}
         _proc_limit = process_slots * 4
-        _kw_conditions = " OR ".join(["tags LIKE ?" for _ in keywords])
-        _kw_params = [f"%{kw}%" for kw in keywords]
-        _proc_rows = store.conn.execute(
-            f"SELECT * FROM nodes WHERE type IN ('process','episode') AND ({_kw_conditions})"
-            f" ORDER BY confidence DESC LIMIT {_proc_limit}",
-            _kw_params,
-        ).fetchall()
+        _proc_candidates = store.get_typed_nodes_by_tags(
+            ["process", "episode"], keywords, _proc_limit
+        )
         proc_nodes_to_inject = [
-            store._row_to_node(r) for r in _proc_rows
-            if r[0] not in _bfs_ids and r[0] not in pinned_ids
+            n for n in _proc_candidates
+            if n["id"] not in _bfs_ids and n["id"] not in pinned_ids
         ]
         if proc_nodes_to_inject:
             log.debug(
@@ -1250,19 +1246,11 @@ def prune_superseded(nodes: list[dict], store: GraphStore) -> list[dict]:
         for sid in node.get("supersedes", []):
             superseded_ids.add(sid)
 
-    # Batch edge check — one SQL query instead of N get_edges_to() calls.
+    # Batch edge check — one store call instead of N get_edges_to() calls.
     # Find all to_ids that have an incoming supersedes edge from within this node set.
     active_ids = list(node_ids - superseded_ids)
     if active_ids:
-        chunk = 500  # keep well under SQLite expression-tree-depth limit (1000)
-        for i in range(0, len(active_ids), chunk):
-            batch = active_ids[i : i + chunk]
-            placeholders = ",".join("?" * len(batch))
-            rows = store.conn.execute(
-                f"SELECT to_id FROM edges WHERE relation = 'supersedes' AND to_id IN ({placeholders})",
-                batch,
-            ).fetchall()
-            superseded_ids.update(r[0] for r in rows)
+        superseded_ids.update(store.get_superseded_target_ids(active_ids))
 
     return [n for n in nodes if n["id"] not in superseded_ids]
 
@@ -1290,15 +1278,7 @@ def apply_soft_supersede(nodes: list[dict], store: GraphStore) -> list[dict]:
             superseded_ids.add(sid)
     active_ids = list(node_ids - superseded_ids)
     if active_ids:
-        chunk = 500
-        for i in range(0, len(active_ids), chunk):
-            batch = active_ids[i : i + chunk]
-            placeholders = ",".join("?" * len(batch))
-            rows = store.conn.execute(
-                f"SELECT to_id FROM edges WHERE relation = 'supersedes' AND to_id IN ({placeholders})",
-                batch,
-            ).fetchall()
-            superseded_ids.update(r[0] for r in rows)
+        superseded_ids.update(store.get_superseded_target_ids(active_ids))
 
     for node in nodes:
         if node["id"] in superseded_ids:

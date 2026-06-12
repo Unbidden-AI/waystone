@@ -64,7 +64,7 @@ class TestRateLimiterUnit:
         key = "test_key_3"
         tier = "pro"
 
-        # Pro tier allows 60/min and 5000/day
+        # Pro tier allows 100/min and 5000/day
         # Test that day limit is tracked independently: make requests
         # spaced 61+ seconds apart to stay under minute limit, then
         # verify day window accumulates correctly
@@ -78,7 +78,7 @@ class TestRateLimiterUnit:
                 allowed, reason, remaining_min, remaining_day = limiter.check(key, tier)
                 assert allowed is True
                 # Each request consumes one from both windows
-                assert remaining_min == 59  # fresh minute each time
+                assert remaining_min == 99  # fresh minute each time (pro = 100/min)
                 assert remaining_day == 5000 - (i + 1)
 
             # Verify final day remaining count
@@ -157,12 +157,12 @@ class TestRateLimiterUnit:
         key_pro = "pro_key"
         tier = "pro"
 
-        # Pro allows 60/min
-        for i in range(60):
+        # Pro allows 100/min
+        for i in range(100):
             allowed, _, _, _ = limiter.check(key_pro, tier)
             assert allowed is True
 
-        # 61st should fail
+        # 101st should fail
         allowed, _, _, _ = limiter.check(key_pro, tier)
         assert allowed is False
 
@@ -172,12 +172,12 @@ class TestRateLimiterUnit:
         key_team = "team_key"
         tier = "team"
 
-        # Team allows 300/min
-        for i in range(300):
+        # Team allows 500/min
+        for i in range(500):
             allowed, _, _, _ = limiter.check(key_team, tier)
             assert allowed is True
 
-        # 301st should fail
+        # 501st should fail
         allowed, _, _, _ = limiter.check(key_team, tier)
         assert allowed is False
 
@@ -332,8 +332,8 @@ class TestRateLimitIntegration:
         )
         assert r.status_code == 429
 
-        # Pro key can make 60 requests/min
-        for i in range(60):
+        # Pro key can make 100 requests/min
+        for i in range(100):
             r = c.get(
                 "/v1/projects",
                 headers={"Authorization": f"Bearer {pro_key}"},
@@ -461,7 +461,7 @@ class TestRateLimitIntegration:
             )
             assert r.status_code == 200
             remaining = int(r.headers["X-RateLimit-Remaining-Minute"])
-            assert remaining == 60 - (i + 1)
+            assert remaining == 100 - (i + 1)  # pro = 100/min
 
     def test_day_limit_shown_in_headers(self, client_with_db):
         """Day limit info is included in response headers."""

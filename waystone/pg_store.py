@@ -67,6 +67,11 @@ def _writes(method):
     return wrapper
 
 
+# Schema is created/migrated once per (process, DSN) — NOT on every store open.
+# Running DDL (CREATE/ALTER) per request would serialize on table locks and is the
+# kind of thing that hangs a server when a stray connection holds a lock.
+_SCHEMA_READY: set = set()
+
 # Per-type half-lives for proactive staleness detection (mirror of GraphStore's).
 _INVALIDATION_HALF_LIVES = {
     "transition": 14, "question": 30, "implementation": 60, "process": 90,
@@ -95,8 +100,10 @@ class PostgresGraphStore:
             embedding_dim = embedder.get_embedding_dim()
         self._dim = int(embedding_dim)
         self.conn = psycopg.connect(dsn, row_factory=dict_row, autocommit=False)
-        self._init_schema()
-        register_vector(self.conn)  # adapt pgvector <-> Python lists
+        if dsn not in _SCHEMA_READY:
+            self._init_schema()        # once per process+DSN (idempotent DDL)
+            _SCHEMA_READY.add(dsn)
+        register_vector(self.conn)     # adapt pgvector <-> Python lists
 
     # ------------------------------------------------------------------ schema
     def _init_schema(self) -> None:
@@ -418,6 +425,35 @@ class PostgresGraphStore:
             return []
         clauses = " OR ".join(["tags @> %s"] * len(tags))
         return self._query_nodes(f"AND ({clauses})", tuple(json.dumps([t]) for t in tags))
+
+    def get_typed_nodes_by_tags(
+        self, types: list[str], keywords: list[str], limit: int
+    ) -> list[dict]:
+        """Mirror of GraphStore.get_typed_nodes_by_tags for the jsonb tags column.
+
+        Substring match is done against the jsonb text form (``tags::text ILIKE``)
+        to match SQLite's ``tags LIKE`` semantics rather than exact-element @>.
+        """
+        if not types or not keywords:
+            return []
+        kw_cond = " OR ".join(["tags::text ILIKE %s"] * len(keywords))
+        where = f"AND type = ANY(%s) AND ({kw_cond}) ORDER BY confidence DESC LIMIT %s"
+        params = (list(types), *(f"%{kw}%" for kw in keywords), int(limit))
+        return self._query_nodes(where, params)
+
+    def get_superseded_target_ids(self, candidate_ids: list[str]) -> set[str]:
+        """Mirror of GraphStore.get_superseded_target_ids — single ``= ANY`` query,
+        no chunking needed (Postgres binds the array natively)."""
+        ids = list(candidate_ids)
+        if not ids:
+            return set()
+        with self.conn.cursor() as cur:
+            cur.execute(
+                "SELECT to_id FROM edges WHERE tenant_id = %s AND relation = 'supersedes'"
+                " AND to_id = ANY(%s)",
+                (self.tenant_id, ids),
+            )
+            return {r["to_id"] for r in cur.fetchall()}
 
     def get_nodes_by_fact_text(self, keywords: list[str], limit: int = 150) -> list[dict]:
         """Active nodes whose fact text contains any keyword (substring, case-insensitive).

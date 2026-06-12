@@ -66,6 +66,11 @@ from the graph; use it to answer questions about this project accurately.""",
         },
     },
     "projects_dir": "~/.waystone/projects",
+    # Storage backend for the API/Team server. "sqlite" (default) = per-project local
+    # files; "postgres" = a shared multi-writer PostgresGraphStore (the Team backend),
+    # requiring `database_url`. Solo/local always uses sqlite regardless.
+    "store_backend": "sqlite",          # "sqlite" | "postgres"
+    "database_url": None,               # postgres DSN when store_backend == "postgres"
     "incremental": {
         "context_k": 30,       # max context nodes to include per turn
         "context_hops": 2,     # BFS hops when gathering context nodes

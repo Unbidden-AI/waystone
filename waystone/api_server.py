@@ -72,7 +72,7 @@ async def lifespan(app: FastAPI):
     init_sentry()
 
     # Startup: check for missing STRIPE_WEBHOOK_SECRET in production mode
-    if _USE_ADMIN_DB and not os.environ.get("STRIPE_WEBHOOK_SECRET", ""):
+    if _use_admin_db() and not os.environ.get("STRIPE_WEBHOOK_SECRET", ""):
         log.warning(
             "WARNING: STRIPE_WEBHOOK_SECRET is not set. Stripe webhooks will be rejected — "
             "customers who pay will not receive API keys."
@@ -96,7 +96,18 @@ _rate_limiter = RateLimiter()
 # Auth
 # ---------------------------------------------------------------------------
 
-_USE_ADMIN_DB = os.environ.get("CB_USE_ADMIN_DB", "").lower() in ("1", "true", "yes")
+def _use_admin_db() -> bool:
+    """Whether the server runs in multi-tenant admin-DB mode (per-key auth, rate
+    limits, billing).
+
+    Read at call time — NOT frozen at import. Freezing it meant the mode depended
+    on whether some other module imported api_server first: in the test suite a
+    non-admin test importing the module first silently disabled auth for every
+    admin test that ran later, and in an embedding host the same race could leave
+    auth off. A per-call env read costs nothing and removes the ordering hazard.
+    """
+    return os.environ.get("CB_USE_ADMIN_DB", "").lower() in ("1", "true", "yes")
+
 
 # ---------------------------------------------------------------------------
 # Clerk JWT validation (for /account/key)
@@ -195,7 +206,7 @@ def _check_auth(
 
     Rate limiting is enforced only when CB_USE_ADMIN_DB=1 and STRIPE_WEBHOOK_SECRET is set.
     """
-    if _USE_ADMIN_DB:
+    if _use_admin_db():
         if not creds:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing API key")
         conn = open_admin_db()
@@ -247,7 +258,7 @@ def _cfg() -> dict:
 def _get_project_dir(config: dict, key_info: dict, project: str) -> Path:
     """Return the project directory, scoped by API key in multi-tenant mode."""
     base = Path(config.get("projects_dir", "~/.waystone/projects")).expanduser()
-    if _USE_ADMIN_DB and key_info.get("key_hash"):
+    if _use_admin_db() and key_info.get("key_hash"):
         key_prefix = key_info["key_hash"][:12]
         return base / key_prefix / project
     return base / project
@@ -276,7 +287,18 @@ def _add_rate_limit_headers(key_info: dict, response: Response) -> None:
         )
 
 
-def _open_store(config: dict, key_info: dict, project: str, must_exist: bool = True) -> GraphStore:
+def _open_store(config: dict, key_info: dict, project: str, must_exist: bool = True):
+    """Open the graph store for (api-key, project). Postgres (shared, multi-writer)
+    when store_backend=postgres, else a per-project SQLite file."""
+    if config.get("store_backend") == "postgres":
+        from .pg_store import PostgresGraphStore
+        # Preserve per-key isolation: tenant = <key-prefix>:<project> in admin mode,
+        # else just the project name. The tenant's schema auto-creates, so there's no
+        # "project not found" — a fresh tenant simply has zero nodes.
+        prefix = (key_info.get("key_hash", "")[:12]
+                  if (_use_admin_db() and key_info.get("key_hash")) else "")
+        tenant = f"{prefix}:{project}" if prefix else project
+        return PostgresGraphStore(config["database_url"], tenant_id=tenant)
     db_path = _get_db_path(config, key_info, project)
     if must_exist and not db_path.exists():
         raise HTTPException(status_code=404, detail=f"Project '{project}' not found")
@@ -361,7 +383,7 @@ def get_account(key_info: AuthDep, response: Response) -> AccountResponse:
     config = _cfg()
     projects_base = Path(config.get("projects_dir", "~/.waystone/projects")).expanduser()
 
-    if _USE_ADMIN_DB and key_info.get("key_hash"):
+    if _use_admin_db() and key_info.get("key_hash"):
         key_prefix = key_info["key_hash"][:12]
         projects_dir = projects_base / key_prefix
     else:
@@ -404,7 +426,7 @@ def list_projects(key_info: AuthDep, response: Response) -> list[ProjectInfo]:
     config = _cfg()
     projects_base = Path(config.get("projects_dir", "~/.waystone/projects")).expanduser()
 
-    if _USE_ADMIN_DB and key_info.get("key_hash"):
+    if _use_admin_db() and key_info.get("key_hash"):
         key_prefix = key_info["key_hash"][:12]
         projects_dir = projects_base / key_prefix
     else:
@@ -437,7 +459,7 @@ def init_project(project: str, key_info: AuthDep, response: Response) -> dict:
         return {"project": project, "created": False}
 
     # Enforce project limit for admin-DB-managed keys
-    if _USE_ADMIN_DB and key_info.get("key_hash"):
+    if _use_admin_db() and key_info.get("key_hash"):
         key_prefix = key_info["key_hash"][:12]
         projects_base = Path(config.get("projects_dir", "~/.waystone/projects")).expanduser()
         user_projects_dir = projects_base / key_prefix
@@ -514,12 +536,16 @@ async def extract_project(project: str, req: ExtractRequest, key_info: AuthDep, 
         )
 
     config = _cfg()
-    db_path = _get_db_path(config, key_info, project)
-    if not db_path.parent.exists():
-        raise HTTPException(
-            status_code=404,
-            detail=f"Project '{project}' not found. Create it first: POST /v1/projects/{project}",
-        )
+    # SQLite scopes a project to an on-disk directory, so "not found" is a real
+    # state. Postgres tenants auto-create their schema — a fresh tenant just has
+    # zero nodes — so there's nothing to 404 on.
+    if config.get("store_backend") != "postgres":
+        db_path = _get_db_path(config, key_info, project)
+        if not db_path.parent.exists():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Project '{project}' not found. Create it first: POST /v1/projects/{project}",
+            )
 
     # Determine effective chunk size:
     #   - explicit chunk_size param overrides everything
@@ -558,7 +584,7 @@ async def extract_project(project: str, req: ExtractRequest, key_info: AuthDep, 
     try:
         with store.conn:  # SQLite context manager for transaction
             # Enforce node limit before writing
-            if _USE_ADMIN_DB and key_info.get("tier") not in (None, "local"):
+            if _use_admin_db() and key_info.get("tier") not in (None, "local"):
                 current_stats = store.get_stats()
                 try:
                     check_node_limit(key_info.get("tier", "free"), current_stats["node_count"])
@@ -851,7 +877,7 @@ async def admin_metrics(request: Request) -> dict:
     Protected by WAYSTONE_ADMIN_EMAIL (default: justin.walton@gmail.com).
     Returns key counts by tier, recent signups, usage activity, and server uptime.
     """
-    if not _USE_ADMIN_DB:
+    if not _use_admin_db():
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                             detail="Admin metrics only available on hosted service")
 
@@ -939,7 +965,7 @@ async def get_account_key(request: Request):
 
     Requires: CB_USE_ADMIN_DB=1, CLERK_SECRET_KEY env vars on the server.
     """
-    if not _USE_ADMIN_DB:
+    if not _use_admin_db():
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Account key endpoint is only available on the hosted service",

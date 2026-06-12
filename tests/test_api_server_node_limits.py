@@ -15,7 +15,7 @@ pytest.importorskip("fastapi", reason="fastapi not installed — skip API server
 
 from fastapi.testclient import TestClient  # noqa: E402 (after importorskip)
 
-from waystone.billing import create_key, open_admin_db  # noqa: E402
+from waystone.billing import _hash_key, create_key, open_admin_db  # noqa: E402
 from waystone.store import GraphStore  # noqa: E402
 
 # ---------------------------------------------------------------------------
@@ -110,11 +110,11 @@ class TestNodeLimitFreeTier:
 
         # Setup: project with 499 nodes
         projects_dir = tmp_path / "projects"
-        project_dir = projects_dir / "test-project"
+        project_dir = projects_dir / _hash_key(raw_key)[:12] / "test-project"
         project_dir.mkdir(parents=True)
         db_path = project_dir / "context.db"
 
-        store = GraphStore(db_path)
+        store = GraphStore(db_path, dedup_threshold=1.1)  # disable semantic dedup so the seeded count is exact (CI has no embedder; dev machines do)
         for i in range(499):
             store.add_node({
                 "id": f"n_existing_{i}",
@@ -159,11 +159,11 @@ class TestNodeLimitFreeTier:
 
         # Setup: project with exactly 500 nodes
         projects_dir = tmp_path / "projects"
-        project_dir = projects_dir / "test-project"
+        project_dir = projects_dir / _hash_key(raw_key)[:12] / "test-project"
         project_dir.mkdir(parents=True)
         db_path = project_dir / "context.db"
 
-        store = GraphStore(db_path)
+        store = GraphStore(db_path, dedup_threshold=1.1)  # disable semantic dedup so the seeded count is exact (CI has no embedder; dev machines do)
         for i in range(500):
             store.add_node({
                 "id": f"n_existing_{i}",
@@ -197,8 +197,8 @@ class TestNodeLimitFreeTier:
 
         assert r.status_code == 402  # Payment Required
         data = r.json()
-        assert "Node limit reached" in data["detail"]
-        assert "free" in data["detail"].lower()
+        assert "Node limit reached" in data["detail"]["message"]
+        assert "free" in data["detail"]["message"].lower()
 
     def test_free_tier_multiple_nodes_fails_at_limit(self, tmp_path, monkeypatch):
         """Extraction with multiple new nodes fails when it would exceed limit."""
@@ -208,14 +208,16 @@ class TestNodeLimitFreeTier:
         raw_key = create_key(admin_conn, email="user@test.com", tier="free")
         admin_conn.close()
 
-        # Setup: project with 450 nodes — trying to add 100 should fail
+        # Setup: project already at the 500-node limit — a multi-node extract is
+        # blocked the same as a single-node one (enforcement is on the current
+        # count, so any extract is rejected once you're at the limit).
         projects_dir = tmp_path / "projects"
-        project_dir = projects_dir / "test-project"
+        project_dir = projects_dir / _hash_key(raw_key)[:12] / "test-project"
         project_dir.mkdir(parents=True)
         db_path = project_dir / "context.db"
 
-        store = GraphStore(db_path)
-        for i in range(450):
+        store = GraphStore(db_path, dedup_threshold=1.1)  # disable semantic dedup so the seeded count is exact (CI has no embedder; dev machines do)
+        for i in range(500):
             store.add_node({
                 "id": f"n_existing_{i}",
                 "fact": f"Existing fact {i}",
@@ -264,11 +266,11 @@ class TestNodeLimitProTier:
         admin_conn.close()
 
         projects_dir = tmp_path / "projects"
-        project_dir = projects_dir / "test-project"
+        project_dir = projects_dir / _hash_key(raw_key)[:12] / "test-project"
         project_dir.mkdir(parents=True)
         db_path = project_dir / "context.db"
 
-        store = GraphStore(db_path)
+        store = GraphStore(db_path, dedup_threshold=1.1)  # disable semantic dedup so the seeded count is exact (CI has no embedder; dev machines do)
         for i in range(24999):
             store.add_node({
                 "id": f"n_existing_{i}",
@@ -311,11 +313,11 @@ class TestNodeLimitProTier:
         admin_conn.close()
 
         projects_dir = tmp_path / "projects"
-        project_dir = projects_dir / "test-project"
+        project_dir = projects_dir / _hash_key(raw_key)[:12] / "test-project"
         project_dir.mkdir(parents=True)
         db_path = project_dir / "context.db"
 
-        store = GraphStore(db_path)
+        store = GraphStore(db_path, dedup_threshold=1.1)  # disable semantic dedup so the seeded count is exact (CI has no embedder; dev machines do)
         for i in range(25000):
             store.add_node({
                 "id": f"n_existing_{i}",
@@ -349,8 +351,8 @@ class TestNodeLimitProTier:
 
         assert r.status_code == 402  # Payment Required
         data = r.json()
-        assert "Node limit reached" in data["detail"]
-        assert "pro" in data["detail"].lower()
+        assert "Node limit reached" in data["detail"]["message"]
+        assert "pro" in data["detail"]["message"].lower()
 
 
 # ---------------------------------------------------------------------------
@@ -428,11 +430,11 @@ class TestNodeLimitTransactionality:
         admin_conn.close()
 
         projects_dir = tmp_path / "projects"
-        project_dir = projects_dir / "test-project"
+        project_dir = projects_dir / _hash_key(raw_key)[:12] / "test-project"
         project_dir.mkdir(parents=True)
         db_path = project_dir / "context.db"
 
-        store = GraphStore(db_path)
+        store = GraphStore(db_path, dedup_threshold=1.1)  # disable semantic dedup so the seeded count is exact (CI has no embedder; dev machines do)
         for i in range(500):  # Exactly at limit
             store.add_node({
                 "id": f"n_existing_{i}",
