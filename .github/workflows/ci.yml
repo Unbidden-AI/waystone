@@ -7,6 +7,18 @@ on:
     branches: ["**"]
 
 jobs:
+  # Lint is an INDEPENDENT job so a pre-existing lint backlog never blocks the
+  # test signal. (The repo carries ~200 legacy ruff findings; tracked separately.)
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install ruff
+      - run: ruff check waystone/ tests/
+
   test:
     runs-on: ubuntu-latest
     strategy:
@@ -36,11 +48,6 @@ jobs:
 
       - name: Install dependencies
         run: pip install -e ".[dev,team]"
-
-      - name: Lint
-        run: |
-          pip install ruff
-          ruff check waystone/ tests/
 
       - name: Run tests
         env:
