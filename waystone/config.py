@@ -66,6 +66,13 @@ from the graph; use it to answer questions about this project accurately.""",
         },
     },
     "projects_dir": "~/.waystone/projects",
+    # CLIENT backend: where this machine's reads/writes go. "local" = the local
+    # SQLite GraphStore; "remote" = a shared Team Server over HTTP (requires `api_url`,
+    # and `api_key` or WAYSTONE_API_KEY). Default None = infer ("remote" iff api_url
+    # is set, else "local"). This is the team/multiplayer switch — distinct from
+    # `store_backend` below, which is what the SERVER stores into.
+    "backend": None,                    # None (infer) | "local" | "remote"
+    "api_url": None,                    # Team Server base URL when backend == "remote"
     # Storage backend for the API/Team server. "sqlite" (default) = per-project local
     # files; "postgres" = a shared multi-writer PostgresGraphStore (the Team backend),
     # requiring `database_url`. Solo/local always uses sqlite regardless.
@@ -178,7 +185,19 @@ def get_db_path(config: dict, project_name: str) -> Path:
 # ---------------------------------------------------------------------------
 
 def is_remote(config: dict) -> bool:
-    """Return True when config points to a hosted API instead of local SQLite."""
+    """Return True when reads/writes should go to a shared Team Server over HTTP
+    instead of the local SQLite GraphStore.
+
+    Resolution:
+      - explicit ``backend: remote`` → True   (requires ``api_url``)
+      - explicit ``backend: local``  → False  (ignore any ``api_url``)
+      - otherwise → True iff ``api_url`` is set (back-compat default)
+    """
+    backend = (config.get("backend") or "").strip().lower()
+    if backend == "remote":
+        return True
+    if backend == "local":
+        return False
     return bool(config.get("api_url"))
 
 

@@ -11,7 +11,13 @@ from pathlib import Path
 
 import click
 
-from .config import get_db_path, get_project_dir, load_config
+from .config import (
+    get_db_path,
+    get_project_dir,
+    is_remote,
+    load_config,
+    make_remote_client,
+)
 from .extractor import (
     ExtractionBuffer,
     _extract_adaptive,
@@ -89,6 +95,19 @@ def cli(ctx, config_path):
 def init(ctx, project):
     """Initialize a new project with an empty graph."""
     config = _load_cfg(ctx.obj["config_path"])
+
+    if is_remote(config):
+        client = make_remote_client(config)
+        try:
+            res = asyncio.run(client.init_project(project))
+        except Exception as e:
+            click.echo(f"Remote init failed: {e}", err=True)
+            sys.exit(1)
+        created = res.get("created", True)
+        click.echo(f"{'Initialized' if created else 'Project already exists:'} "
+                   f"'{project}' on remote server.")
+        return
+
     project_dir = get_project_dir(config, project)
 
     if project_dir.exists():
@@ -457,7 +476,7 @@ def extract_cmd(ctx, project, transcript_file, verify, lessons, decisions, quest
 
     db_path = get_db_path(config, project)
 
-    if not db_path.parent.exists():
+    if not is_remote(config) and not db_path.parent.exists():
         click.echo(f"Error: Project '{project}' not found. Run 'waystone init {project}' first.", err=True)
         sys.exit(1)
 
@@ -482,6 +501,31 @@ def extract_cmd(ctx, project, transcript_file, verify, lessons, decisions, quest
             err=True,
         )
         sys.exit(1)
+
+    if is_remote(config):
+        # Remote (Team Server): POST the raw text; the server extracts (+verify) and
+        # merges into the shared graph. Targeted/synthesis passes run server-side as
+        # the standard extract, so flag them as unsupported here.
+        unsupported = [f for f, on in [
+            ("--lessons", lessons), ("--decisions", decisions), ("--questions", questions),
+            ("--constraints", constraints), ("--numerics", numerics),
+            ("--preferences", preferences), ("--synthesize", synthesize)] if on]
+        if unsupported:
+            click.echo(f"Note: {', '.join(unsupported)} not supported in remote mode; "
+                       "running the standard server extract instead.", err=True)
+        client = make_remote_client(config)
+        click.echo(f"Extracting from {transcript_path.name} → remote server...")
+        try:
+            res = asyncio.run(client.extract(
+                project, transcript_text,
+                source_name=transcript_path.name, verify=verify, chunk_size=chunk_size,
+            ))
+        except Exception as e:
+            click.echo(f"Remote extract failed: {e}", err=True)
+            sys.exit(1)
+        click.echo(f"✓ Extracted {res.get('nodes_extracted', 0)} nodes, "
+                   f"{res.get('edges_extracted', 0)} edges into '{project}' (remote).")
+        return
 
     # Auto-chunk: use explicit --chunk-size if given, otherwise chunk anything
     # over 20000 chars at 20000 (safe default for Gemini 2.5 Flash and similar models).
@@ -1096,6 +1140,35 @@ def reflect_cmd(ctx, project, transcript, since_turn, domain, chunk_size):
 def query(ctx, project, task, hops, top_k, enable, disable, confidence, token_budget, source_prefix, show_stats, at_time):
     """Retrieve relevant context for a task description."""
     config = _load_cfg(ctx.obj["config_path"])
+
+    if is_remote(config):
+        # Remote (Team Server): the server runs retrieval against the shared graph
+        # with ITS configured strategies. Local-only flags (--at-time, --source-prefix,
+        # strategy overrides) don't apply over HTTP.
+        if (at_time or source_prefix or enable or disable
+                or confidence is not None or token_budget is not None):
+            click.echo("Note: --at-time/--source-prefix/strategy flags "
+                       "(--enable/--disable/--confidence/--token-budget) are ignored in "
+                       "remote mode (the server applies its own strategies).", err=True)
+        defaults = config.get("defaults", {})
+        client = make_remote_client(config)
+        try:
+            result = asyncio.run(client.query(
+                project, task,
+                hops=hops or defaults.get("hops", 3),
+                top_k=top_k or defaults.get("top_k", 10),
+            ))
+        except Exception as e:
+            click.echo(f"Remote query failed: {e}", err=True)
+            sys.exit(1)
+        click.echo(result.get("markdown", "") or f"(graph is empty for '{project}')")
+        if show_stats:
+            click.echo("\n--- Retrieval Stats (remote) ---")
+            click.echo(f"Nodes returned:   {result.get('nodes_returned')}")
+            click.echo(f"Total nodes:      {result.get('total_nodes')}")
+            click.echo(f"Estimated tokens: {result.get('tokens_estimated')}")
+        return
+
     db_path = get_db_path(config, project)
 
     if not db_path.parent.exists():
@@ -1534,6 +1607,27 @@ def reembed(ctx, project):
 def show(ctx, project, failures):
     """Display graph statistics and recent nodes, or extraction failures."""
     config = _load_cfg(ctx.obj["config_path"])
+
+    if is_remote(config):
+        if failures:
+            click.echo("Extraction failures are not exposed over the remote API "
+                       "(inspect them on the server).", err=True)
+            return
+        client = make_remote_client(config)
+        try:
+            stats = asyncio.run(client.get_stats(project))
+        except Exception as e:
+            click.echo(f"Remote stats failed: {e}", err=True)
+            sys.exit(1)
+        click.echo(f"Project: {project} (remote)")
+        click.echo(f"Nodes: {stats.get('node_count', 0)}")
+        click.echo(f"Edges: {stats.get('edge_count', 0)}")
+        if stats.get("type_counts"):
+            click.echo("\nBy type:")
+            for t, count in sorted(stats["type_counts"].items()):
+                click.echo(f"  {t}: {count}")
+        return
+
     db_path = get_db_path(config, project)
 
     if not db_path.parent.exists():
@@ -1817,6 +1911,34 @@ def pinned_cmd(ctx, project):
 def export(ctx, project, output, fmt, include_superseded, enable, disable, confidence, token_budget):
     """Export the full graph as markdown, with optional strategy filtering."""
     config = _load_cfg(ctx.obj["config_path"])
+
+    if is_remote(config):
+        # Remote: the server assembles the markdown with its default format; local
+        # format/strategy flags don't apply over HTTP.
+        if (fmt not in (None, "dump") or enable or disable
+                or confidence is not None or token_budget is not None):
+            click.echo("Note: --format and strategy flags "
+                       "(--enable/--disable/--confidence/--token-budget) are ignored in "
+                       "remote mode (server returns its default export).", err=True)
+        client = make_remote_client(config)
+        try:
+            res = asyncio.run(client.export(project))
+        except Exception as e:
+            click.echo(f"Remote export failed: {e}", err=True)
+            sys.exit(1)
+        markdown = res.get("markdown", "")
+        if not markdown:
+            click.echo("Graph is empty — nothing to export.")
+            return
+        if output:
+            out_path = Path(output)
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text(markdown, encoding="utf-8")
+            click.echo(f"Exported {res.get('node_count', 0)} nodes to {out_path} (remote).")
+        else:
+            click.echo(markdown)
+        return
+
     db_path = get_db_path(config, project)
 
     if not db_path.parent.exists():
