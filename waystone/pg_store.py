@@ -152,7 +152,47 @@ class PostgresGraphStore:
                     from_id   text NOT NULL,
                     to_id     text NOT NULL,
                     relation  text NOT NULL,
+                    weight    real NOT NULL DEFAULT 1.0,
+                    on_query_rewrite text,
                     PRIMARY KEY (tenant_id, from_id, to_id, relation)
+                )
+            """)
+            cur.execute("ALTER TABLE edges ADD COLUMN IF NOT EXISTS weight real NOT NULL DEFAULT 1.0")
+            cur.execute("ALTER TABLE edges ADD COLUMN IF NOT EXISTS on_query_rewrite text")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_edges_to ON edges (tenant_id, to_id)")
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS hyperedge_members (
+                    tenant_id    text NOT NULL,
+                    hyperedge_id text NOT NULL,
+                    node_id      text NOT NULL,
+                    PRIMARY KEY (tenant_id, hyperedge_id, node_id)
+                )
+            """)
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_he_node ON hyperedge_members (tenant_id, node_id)")
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS edge_query_rules (
+                    tenant_id text NOT NULL,
+                    rule_id   text NOT NULL,
+                    rule_type text NOT NULL,
+                    params    jsonb,
+                    PRIMARY KEY (tenant_id, rule_id)
+                )
+            """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS extraction_failures (
+                    tenant_id   text NOT NULL,
+                    id          bigserial PRIMARY KEY,
+                    created_at  timestamptz NOT NULL DEFAULT now(),
+                    source_transcript text, model text, error_type text,
+                    raw_response text, error_message text
+                )
+            """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS kv (
+                    tenant_id text NOT NULL,
+                    key       text NOT NULL,
+                    value     jsonb NOT NULL,
+                    PRIMARY KEY (tenant_id, key)
                 )
             """)
         self.conn.commit()
@@ -562,6 +602,216 @@ class PostgresGraphStore:
                 " AND n.world_id = w.world_id) AS node_count "
                 "FROM worlds w WHERE w.tenant_id = %s ORDER BY w.created_at",
                 (self.tenant_id,))
+            return [dict(r) for r in cur.fetchall()]
+
+    # ------------------------------------------------------------------ retrieval parity
+    def get_nodes_by_ids(self, node_ids: list[str]) -> list[dict]:
+        if not node_ids:
+            return []
+        return self._query_nodes("AND id = ANY(%s)", (list(node_ids),))
+
+    def get_pinned_nodes(self) -> list[dict]:
+        return self._query_nodes("AND pinned = true ORDER BY type, confidence DESC", ())
+
+    @_writes
+    def pin_node(self, node_id: str) -> bool:
+        with self.conn.cursor() as cur:
+            cur.execute("UPDATE nodes SET pinned = true WHERE tenant_id = %s AND id = %s",
+                        (self.tenant_id, node_id))
+            ok = cur.rowcount > 0
+        self.conn.commit()
+        return ok
+
+    @_writes
+    def unpin_node(self, node_id: str) -> bool:
+        with self.conn.cursor() as cur:
+            cur.execute("UPDATE nodes SET pinned = false WHERE tenant_id = %s AND id = %s",
+                        (self.tenant_id, node_id))
+            ok = cur.rowcount > 0
+        self.conn.commit()
+        return ok
+
+    def get_edges_for_nodes(self, node_ids: list[str]) -> list[dict]:
+        """All edges touching any of node_ids (either direction), deduped."""
+        if not node_ids:
+            return []
+        ids = list(node_ids)
+        with self.conn.cursor() as cur:
+            cur.execute(
+                "SELECT from_id, to_id, relation, weight FROM edges "
+                "WHERE tenant_id = %s AND (from_id = ANY(%s) OR to_id = ANY(%s))",
+                (self.tenant_id, ids, ids))
+            return [dict(r) for r in cur.fetchall()]
+
+    def search_by_fts(self, query: str, top_k: int = 50) -> list:
+        """Keyword relevance search via Postgres FTS (ts_rank). Returns (id, score)."""
+        if not query.strip():
+            return []
+        with self.conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, ts_rank_cd(fact_fts, plainto_tsquery('english', %s)) AS score "
+                "FROM nodes WHERE tenant_id = %s AND is_active = true "
+                "AND fact_fts @@ plainto_tsquery('english', %s) "
+                "ORDER BY score DESC LIMIT %s",
+                (query, self.tenant_id, query, int(top_k)))
+            return [(r["id"], float(r["score"])) for r in cur.fetchall()]
+
+    # raw-sentence / episodes tier not yet ported → graceful no-ops (fallback skips)
+    def has_raw_sentences(self) -> bool:
+        return False
+
+    def semantic_search_raw_sentences(self, *args, **kwargs) -> list:
+        return []
+
+    # ------------------------------------------------------------------ hyperedges (EHRAG)
+    @_writes
+    def add_hyperedge_member(self, hyperedge_id: str, node_id: str) -> None:
+        with self.conn.cursor() as cur:
+            cur.execute("INSERT INTO hyperedge_members (tenant_id, hyperedge_id, node_id) "
+                        "VALUES (%s,%s,%s) ON CONFLICT DO NOTHING",
+                        (self.tenant_id, hyperedge_id, node_id))
+        self.conn.commit()
+
+    def has_hyperedges(self) -> bool:
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM hyperedge_members WHERE tenant_id = %s LIMIT 1",
+                        (self.tenant_id,))
+            return cur.fetchone() is not None
+
+    def get_hyperedge_siblings(self, node_ids: list[str]) -> list[str]:
+        if not node_ids:
+            return []
+        ids = list(node_ids)
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT DISTINCT hyperedge_id FROM hyperedge_members "
+                        "WHERE tenant_id = %s AND node_id = ANY(%s)", (self.tenant_id, ids))
+            he_ids = [r["hyperedge_id"] for r in cur.fetchall()]
+            if not he_ids:
+                return []
+            cur.execute("SELECT DISTINCT node_id FROM hyperedge_members "
+                        "WHERE tenant_id = %s AND hyperedge_id = ANY(%s) AND NOT (node_id = ANY(%s))",
+                        (self.tenant_id, he_ids, ids))
+            return [r["node_id"] for r in cur.fetchall()]
+
+    # ------------------------------------------------------------------ edge query rules
+    @_writes
+    def set_edge_query_rule(self, from_id: str, to_id: str, rule_type: str,
+                            params: dict | None = None) -> None:
+        rule_id = f"{from_id}__{to_id}"
+        with self.conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO edge_query_rules (tenant_id, rule_id, rule_type, params) "
+                "VALUES (%s,%s,%s,%s) ON CONFLICT (tenant_id, rule_id) DO UPDATE SET "
+                "rule_type = EXCLUDED.rule_type, params = EXCLUDED.params",
+                (self.tenant_id, rule_id, rule_type,
+                 json.dumps(params) if params else None))
+            cur.execute("UPDATE edges SET on_query_rewrite = %s "
+                        "WHERE tenant_id = %s AND from_id = %s AND to_id = %s",
+                        (rule_id, self.tenant_id, from_id, to_id))
+        self.conn.commit()
+
+    def get_edge_query_rule(self, from_id: str, to_id: str) -> dict | None:
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT rule_id, rule_type, params FROM edge_query_rules "
+                        "WHERE tenant_id = %s AND rule_id = %s",
+                        (self.tenant_id, f"{from_id}__{to_id}"))
+            r = cur.fetchone()
+            return {"rule_id": r["rule_id"], "rule_type": r["rule_type"],
+                    "params": r["params"]} if r else None
+
+    # ------------------------------------------------------------------ extraction failures
+    @_writes
+    def log_extraction_failure(self, error_type: str, error_message: str,
+                               raw_response: str = "", source_transcript: str = "",
+                               model: str = "") -> None:
+        with self.conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO extraction_failures (tenant_id, source_transcript, model, "
+                "error_type, raw_response, error_message) VALUES (%s,%s,%s,%s,%s,%s)",
+                (self.tenant_id, source_transcript, model, error_type,
+                 raw_response[:2000], error_message))
+        self.conn.commit()
+
+    def get_extraction_failures(self, limit: int = 50) -> list[dict]:
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT id, created_at, source_transcript, model, error_type, "
+                        "raw_response, error_message FROM extraction_failures "
+                        "WHERE tenant_id = %s ORDER BY created_at DESC LIMIT %s",
+                        (self.tenant_id, int(limit)))
+            out = []
+            for r in cur.fetchall():
+                d = dict(r)
+                if isinstance(d.get("created_at"), datetime):
+                    d["created_at"] = d["created_at"].isoformat()
+                out.append(d)
+            return out
+
+    # ------------------------------------------------------------------ buffer / watermark (kv)
+    def _kv_get(self, key: str) -> dict:
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT value FROM kv WHERE tenant_id = %s AND key = %s",
+                        (self.tenant_id, key))
+            r = cur.fetchone()
+            return r["value"] if r else {}
+
+    @_writes
+    def _kv_set(self, key: str, value: dict) -> None:
+        with self.conn.cursor() as cur:
+            cur.execute("INSERT INTO kv (tenant_id, key, value) VALUES (%s,%s,%s) "
+                        "ON CONFLICT (tenant_id, key) DO UPDATE SET value = EXCLUDED.value",
+                        (self.tenant_id, key, json.dumps(value)))
+        self.conn.commit()
+
+    def load_buffer(self) -> list[str]:
+        return self._kv_get("buffer").get("turns", [])
+
+    def save_buffer(self, turns: list[str]) -> None:
+        d = self._kv_get("buffer")
+        d["turns"] = turns
+        self._kv_set("buffer", d)
+
+    def clear_buffer(self) -> None:
+        d = self._kv_get("buffer")
+        d["turns"] = []
+        self._kv_set("buffer", d)
+
+    def load_watermark(self, transcript_path: str) -> int:
+        d = self._kv_get("buffer")
+        return d.get("transcript_watermark", 0) if d.get("transcript_path") == transcript_path else 0
+
+    def save_watermark(self, transcript_path: str, line_count: int) -> None:
+        d = self._kv_get("buffer")
+        d["transcript_path"] = transcript_path
+        d["transcript_watermark"] = line_count
+        self._kv_set("buffer", d)
+
+    # ------------------------------------------------------------------ misc parity
+    @_writes
+    def boost_confidence(self, node_id: str, delta: float = 0.02) -> None:
+        with self.conn.cursor() as cur:
+            cur.execute("UPDATE nodes SET confidence = LEAST(1.0, COALESCE(confidence,0.5) + %s) "
+                        "WHERE tenant_id = %s AND id = %s", (delta, self.tenant_id, node_id))
+        self.conn.commit()
+
+    @_writes
+    def prune_superseded(self) -> int:
+        """Deactivate active nodes that appear in any node's supersedes[] list."""
+        with self.conn.cursor() as cur:
+            cur.execute(
+                "UPDATE nodes SET is_active = false, valid_to = COALESCE(valid_to, now()) "
+                "WHERE tenant_id = %s AND is_active = true AND id IN ("
+                "  SELECT jsonb_array_elements_text(supersedes) FROM nodes "
+                "  WHERE tenant_id = %s AND jsonb_typeof(supersedes) = 'array')",
+                (self.tenant_id, self.tenant_id))
+            n = cur.rowcount
+        self.conn.commit()
+        return n
+
+    def get_sources(self) -> list[dict]:
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT source_transcript AS source, count(*) AS node_count "
+                        "FROM nodes WHERE tenant_id = %s AND source_transcript IS NOT NULL "
+                        "GROUP BY source_transcript ORDER BY node_count DESC", (self.tenant_id,))
             return [dict(r) for r in cur.fetchall()]
 
     # ------------------------------------------------------------------ vectors (pgvector)

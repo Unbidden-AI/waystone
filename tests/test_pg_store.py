@@ -40,9 +40,9 @@ def store():
     yield s
     # clean up this tenant's rows
     with s.conn.cursor() as cur:
-        cur.execute("DELETE FROM edges WHERE tenant_id = %s", (s.tenant_id,))
-        cur.execute("DELETE FROM worlds WHERE tenant_id = %s", (s.tenant_id,))
-        cur.execute("DELETE FROM nodes WHERE tenant_id = %s", (s.tenant_id,))
+        for t in ("edges", "worlds", "hyperedge_members", "edge_query_rules",
+                  "extraction_failures", "kv", "nodes"):
+            cur.execute(f"DELETE FROM {t} WHERE tenant_id = %s", (s.tenant_id,))
     s.conn.commit()
     s.close()
 
@@ -289,6 +289,66 @@ def test_failed_write_rolls_back_connection_stays_usable(store):
     store.add_node(_node(id="ok2", fact="after the error"))   # would raise InFailedSqlTransaction if poisoned
     assert store.get_node("ok2") is not None
     assert store.get_stats()["node_count"] == 2
+
+
+def test_parity_retrieval_methods(store):
+    store.add_node(_node(id="a", fact="Postgres is the team backend", tags=["pg"]))
+    store.add_node(_node(id="b", fact="Redis caches sessions", tags=["redis"]))
+    store.add_edge("a", "b", "relates_to")
+    # get_nodes_by_ids
+    assert {n["id"] for n in store.get_nodes_by_ids(["a", "b", "zzz"])} == {"a", "b"}
+    # get_edges_for_nodes (either direction)
+    assert len(store.get_edges_for_nodes(["a"])) == 1
+    # pin / get_pinned
+    assert store.pin_node("a") is True
+    assert {n["id"] for n in store.get_pinned_nodes()} == {"a"}
+    assert store.unpin_node("a") is True and store.get_pinned_nodes() == []
+    # search_by_fts (keyword relevance)
+    hits = dict(store.search_by_fts("postgres backend"))
+    assert "a" in hits and hits["a"] > 0
+
+
+def test_parity_hyperedges_and_query_rules(store):
+    assert store.has_hyperedges() is False
+    store.add_node(_node(id="a"))
+    store.add_node(_node(id="b"))
+    store.add_node(_node(id="c"))
+    store.add_hyperedge_member("he1", "a")
+    store.add_hyperedge_member("he1", "b")
+    assert store.has_hyperedges() is True
+    assert set(store.get_hyperedge_siblings(["a"])) == {"b"}      # excludes input
+    assert store.get_hyperedge_siblings(["c"]) == []
+    # edge query rule
+    store.add_edge("a", "b", "supersedes")
+    store.set_edge_query_rule("a", "b", "expand", {"k": 3})
+    rule = store.get_edge_query_rule("a", "b")
+    assert rule["rule_type"] == "expand" and rule["params"] == {"k": 3}
+    assert store.get_edge_query_rule("a", "c") is None
+
+
+def test_parity_failures_buffer_misc(store):
+    # extraction failures
+    store.log_extraction_failure("json_parse", "bad json", raw_response="{", model="m")
+    fails = store.get_extraction_failures()
+    assert len(fails) == 1 and fails[0]["error_type"] == "json_parse"
+    # buffer + watermark (kv-backed)
+    store.save_buffer(["t1", "t2"])
+    assert store.load_buffer() == ["t1", "t2"]
+    store.save_watermark("/x.jsonl", 42)
+    assert store.load_watermark("/x.jsonl") == 42
+    assert store.load_watermark("/other.jsonl") == 0   # path mismatch → 0
+    store.clear_buffer()
+    assert store.load_buffer() == [] and store.load_watermark("/x.jsonl") == 42  # watermark kept
+    # boost_confidence + prune_superseded + get_sources
+    store.add_node(_node(id="n1", confidence=0.5, source_transcript="s1.md"))
+    store.boost_confidence("n1", 0.1)
+    assert abs(store.get_node("n1")["confidence"] - 0.6) < 1e-5
+    store.add_node(_node(id="old", source_transcript="s1.md"))
+    store.add_node(_node(id="new", fact="newer", supersedes=["old"]))
+    # 'old' already expired by add_node supersedes; prune_superseded is idempotent
+    store.prune_superseded()
+    assert store.get_node("old")["is_active"] == 0
+    assert any(s["source"] == "s1.md" for s in store.get_sources())
 
 
 def test_tenant_isolation(store):
