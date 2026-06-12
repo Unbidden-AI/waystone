@@ -1,10 +1,15 @@
 #!/usr/bin/env sh
-# Write a config.yaml from environment variables so the server picks up
-# the correct projects_dir and LLM settings without a mounted config file.
+# Render /app/config.yaml from environment variables so the server picks up
+# projects_dir + LLM settings without a mounted config file.
+#
+# Idempotent: if a config.yaml already exists (e.g. mounted in), it is respected
+# and left untouched. The Postgres backend is NOT written here — it is read from
+# WAYSTONE_STORE_BACKEND / DATABASE_URL env directly by config.load_config.
 set -e
 
 CONFIG=/app/config.yaml
 
+if [ ! -f "$CONFIG" ]; then
 cat > "$CONFIG" <<EOF
 projects_dir: "${CB_PROJECTS_DIR:-/data/projects}"
 
@@ -24,5 +29,6 @@ strategies:
   superseded_pruning: true
   relevance_scoring: true
 EOF
+fi
 
 exec "$@"

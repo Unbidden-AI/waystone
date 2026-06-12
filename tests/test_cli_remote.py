@@ -11,7 +11,7 @@ import yaml
 from click.testing import CliRunner
 
 from waystone.cli import cli
-from waystone.config import is_remote
+from waystone.config import is_remote, load_config
 
 
 def _remote_cfg(tmp_path):
@@ -33,6 +33,23 @@ def _fake_client(**methods):
 
 
 # --------------------------------------------------------------------------- switch
+
+def test_store_backend_env_override(tmp_path, monkeypatch):
+    """The Team Server Docker image configures Postgres purely via env."""
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text("projects_dir: /tmp/x\n")
+    monkeypatch.setenv("WAYSTONE_STORE_BACKEND", "postgres")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@db:5432/w")
+    c = load_config(cfg)
+    assert c["store_backend"] == "postgres"
+    assert c["database_url"] == "postgresql://u:p@db:5432/w"
+
+    monkeypatch.delenv("WAYSTONE_STORE_BACKEND")
+    monkeypatch.delenv("DATABASE_URL")
+    c2 = load_config(cfg)
+    assert c2["store_backend"] == "sqlite"
+    assert c2["database_url"] is None
+
 
 def test_is_remote_backend_switch():
     assert is_remote({"backend": "remote"}) is True

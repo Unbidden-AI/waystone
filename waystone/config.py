@@ -147,7 +147,7 @@ def load_config(path: str | Path | None = None) -> dict:
         if p.exists():
             with open(p) as f:
                 user_cfg = yaml.safe_load(f) or {}
-            return _merge(DEFAULTS, user_cfg)
+            return _apply_env_overrides(_merge(DEFAULTS, user_cfg))
         raise FileNotFoundError(f"Config file not found: {p}")
 
     result = dict(DEFAULTS)
@@ -156,7 +156,27 @@ def load_config(path: str | Path | None = None) -> dict:
             with open(candidate) as f:
                 file_cfg = yaml.safe_load(f) or {}
             result = _merge(result, file_cfg)
-    return result
+    return _apply_env_overrides(result)
+
+
+def _apply_env_overrides(config: dict) -> dict:
+    """Apply 12-factor env overrides (containers / cloud set these without a config
+    file). Only the server-backend knobs — the graph store the Team Server writes to.
+
+    - WAYSTONE_STORE_BACKEND → store_backend  ("sqlite" | "postgres")
+    - WAYSTONE_DATABASE_URL or DATABASE_URL → database_url (postgres DSN)
+
+    The DSN env is honored ONLY when the backend is postgres (from env or the config
+    file), so a stray DATABASE_URL in a dev shell can never change behavior on its own.
+    """
+    backend = os.environ.get("WAYSTONE_STORE_BACKEND")
+    if backend:
+        config["store_backend"] = backend
+    if config.get("store_backend") == "postgres":
+        dsn = os.environ.get("WAYSTONE_DATABASE_URL") or os.environ.get("DATABASE_URL")
+        if dsn:
+            config["database_url"] = dsn
+    return config
 
 
 def get_domain_profile(config: dict):

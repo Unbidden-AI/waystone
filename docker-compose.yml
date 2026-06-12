@@ -1,0 +1,57 @@
+# Self-hosted Waystone Team Server: Postgres (pgvector) + the API.
+#
+# Quickstart:
+#   cp .env.example .env      # then set WAYSTONE_API_KEY + LLM_API_KEY
+#   docker compose up -d
+#   curl localhost:8000/v1/health
+#
+# Point a teammate's client at it (in ~/.waystone/config.yaml):
+#   backend: remote
+#   api_url: http://<server-host>:8000
+#   api_key: <the WAYSTONE_API_KEY you set>
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-waystone}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-waystone}
+      POSTGRES_DB: ${POSTGRES_DB:-waystone}
+    volumes:
+      - waystone-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-waystone} -d ${POSTGRES_DB:-waystone}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  server:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # --- Team backend: the shared Postgres graph ---
+      WAYSTONE_STORE_BACKEND: postgres
+      DATABASE_URL: postgresql://${POSTGRES_USER:-waystone}:${POSTGRES_PASSWORD:-waystone}@db:5432/${POSTGRES_DB:-waystone}
+      # --- Auth: a single shared key for the team (per-seat licensing is a later tier) ---
+      WAYSTONE_API_KEY: ${WAYSTONE_API_KEY:?set WAYSTONE_API_KEY in .env}
+      CB_USE_ADMIN_DB: ${CB_USE_ADMIN_DB:-0}
+      # --- Extraction LLM (the server runs extraction server-side) ---
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://generativelanguage.googleapis.com/v1beta/openai}
+      LLM_MODEL: ${LLM_MODEL:-gemini-2.5-flash}
+      LLM_API_KEY: ${LLM_API_KEY:?set LLM_API_KEY in .env}
+      PORT: 8000
+    ports:
+      - "${WAYSTONE_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/v1/health', timeout=4).status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  waystone-pgdata:
