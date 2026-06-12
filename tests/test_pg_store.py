@@ -41,6 +41,7 @@ def store():
     # clean up this tenant's rows
     with s.conn.cursor() as cur:
         cur.execute("DELETE FROM edges WHERE tenant_id = %s", (s.tenant_id,))
+        cur.execute("DELETE FROM worlds WHERE tenant_id = %s", (s.tenant_id,))
         cur.execute("DELETE FROM nodes WHERE tenant_id = %s", (s.tenant_id,))
     s.conn.commit()
     s.close()
@@ -241,6 +242,41 @@ def test_embedding_store_and_search(store):
     # nodes without an embedding aren't returned
     store.add_node(_node(id="d", fact="no embedding"))
     assert "d" not in store.search_by_embedding(blob(0.0, 0.0, 1.0), top_k=10)
+
+
+def test_get_nodes_at_time(store):
+    # node valid 2026-02 .. 2026-04 (superseded then), and one current
+    store.add_node(_node(id="old", type="decision",
+                         occurred_at="2026-02-01T00:00:00+00:00"))
+    store.add_node(_node(id="new", type="decision", supersedes=["old"],
+                         occurred_at="2026-04-01T00:00:00+00:00"))
+    # at 2026-03-01 the "old" fact was still valid (not yet superseded)
+    ids = {n["id"] for n in store.get_nodes_at_time(valid_at="2026-03-01T00:00:00+00:00")}
+    assert "old" in ids
+    # at 2026-05-01 "old" is expired, "new" is valid
+    ids2 = {n["id"] for n in store.get_nodes_at_time(valid_at="2026-05-01T00:00:00+00:00")}
+    assert "new" in ids2 and "old" not in ids2
+
+
+def test_worlds(store):
+    parent = store.create_world("Backend")
+    child = store.create_world("Auth", parent_world_id=parent)
+    assert store.get_node(parent)["type"] == "world"
+    assert store.get_world(parent)["name"] == "Backend"
+    with pytest.raises(ValueError):
+        store.add_node_to_world("x", "nonexistent_world")
+
+    store.add_node(_node(id="n1", fact="JWT decision"))
+    store.add_node(_node(id="n2", fact="OAuth decision"))
+    store.add_node_to_world("n1", parent)
+    store.add_node_to_world("n2", child)
+    # non-recursive: only the parent's own nodes
+    assert {n["id"] for n in store.get_world_nodes(parent)} == {"n1"}
+    # recursive: parent + child (via 'contains' edge)
+    assert {n["id"] for n in store.get_world_nodes(parent, recursive=True)} == {"n1", "n2"}
+    # list_worlds counts
+    counts = {w["name"]: w["node_count"] for w in store.list_worlds()}
+    assert counts["Backend"] == 1 and counts["Auth"] == 1
 
 
 def test_tenant_isolation(store):

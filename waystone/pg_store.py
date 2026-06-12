@@ -104,16 +104,29 @@ class PostgresGraphStore:
                     hit_count   int NOT NULL DEFAULT 0,
                     entry_hit_count int NOT NULL DEFAULT 0,
                     last_used_at    timestamptz,
+                    world_id    text,
                     embedding   vector({self._dim}),
                     fact_fts    tsvector GENERATED ALWAYS AS (to_tsvector('english', fact)) STORED,
                     PRIMARY KEY (tenant_id, id)
                 )
             """)
+            # Migrations (idempotent) for schemas created by earlier versions.
+            cur.execute("ALTER TABLE nodes ADD COLUMN IF NOT EXISTS world_id text")
             cur.execute("CREATE INDEX IF NOT EXISTS idx_nodes_active ON nodes (tenant_id, is_active)")
             cur.execute("CREATE INDEX IF NOT EXISTS idx_nodes_type ON nodes (tenant_id, type)")
             cur.execute("CREATE INDEX IF NOT EXISTS idx_nodes_fhash ON nodes (tenant_id, fact_hash)")
             cur.execute("CREATE INDEX IF NOT EXISTS idx_nodes_tags ON nodes USING gin (tags jsonb_path_ops)")
             cur.execute("CREATE INDEX IF NOT EXISTS idx_nodes_fts ON nodes USING gin (fact_fts)")
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS worlds (
+                    tenant_id   text NOT NULL,
+                    world_id    text NOT NULL,
+                    name        text NOT NULL,
+                    description text,
+                    created_at  timestamptz NOT NULL DEFAULT now(),
+                    PRIMARY KEY (tenant_id, world_id)
+                )
+            """)
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS edges (
                     tenant_id text NOT NULL,
@@ -148,7 +161,7 @@ class PostgresGraphStore:
 
     _COLS = ("id, fact, type, confidence, tags, supersedes, source_transcript, "
              "source_message_index, domain, fact_hash, occurred_at, created_at, "
-             "valid_to, is_active, pinned, hit_count, entry_hit_count, last_used_at")
+             "valid_to, is_active, pinned, hit_count, entry_hit_count, last_used_at, world_id")
 
     # ------------------------------------------------------------------ writes
     def add_node(self, node: dict) -> str:
@@ -430,6 +443,98 @@ class PostgresGraphStore:
                             "reason": "never_retrieved_aged",
                             "detail": f"hit_count=0, age={age}d, conf={conf:.2f}", "score": 0.6})
         return out
+
+    # ------------------------------------------------------------------ time-travel
+    def get_nodes_at_time(self, valid_at: str | None = None,
+                          transaction_at: str | None = None) -> list[dict]:
+        """Bi-temporal point-in-time query (mirror of GraphStore.get_nodes_at_time).
+
+        valid_at: facts whose validity window covers the moment. transaction_at:
+        facts ingested on/before the moment. Filters stack; omit either to skip it.
+        """
+        clauses = ["tenant_id = %s"]
+        params: list = [self.tenant_id]
+        if valid_at:
+            clauses.append("(occurred_at IS NULL OR occurred_at <= %s::timestamptz) "
+                           "AND (valid_to IS NULL OR valid_to > %s::timestamptz)")
+            params += [valid_at, valid_at]
+        if transaction_at:
+            clauses.append("created_at <= %s::timestamptz")
+            params.append(transaction_at)
+        where = " AND ".join(clauses)
+        with self.conn.cursor() as cur:
+            cur.execute(f"SELECT {self._COLS} FROM nodes WHERE {where} "
+                        "ORDER BY occurred_at, created_at", params)
+            return [self._row_to_node(r) for r in cur.fetchall()]
+
+    # ------------------------------------------------------------------ worlds (namespaces)
+    def create_world(self, name: str, tags: list[str] | None = None,
+                     parent_world_id: str | None = None,
+                     description: str | None = None) -> str:
+        """Create a world container node (type='world') + worlds row; return its id."""
+        from uuid import uuid4
+        world_node_id = f"n_{uuid4().hex[:8]}"
+        world_tags = sorted(set(list(tags or []) + [t.lower() for t in name.split()]))
+        self.add_node({
+            "id": world_node_id, "fact": name, "type": "world",
+            "confidence": 1.0, "tags": world_tags,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        with self.conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO worlds (tenant_id, world_id, name, description, created_at) "
+                "VALUES (%s,%s,%s,%s,%s)",
+                (self.tenant_id, world_node_id, name, description,
+                 datetime.now(timezone.utc)))
+        self.conn.commit()
+        if parent_world_id is not None:
+            self.add_edge(parent_world_id, world_node_id, "contains")
+        return world_node_id
+
+    def get_world(self, world_id: str) -> dict | None:
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT world_id, name, description, created_at FROM worlds "
+                        "WHERE tenant_id = %s AND world_id = %s", (self.tenant_id, world_id))
+            r = cur.fetchone()
+            if r and isinstance(r.get("created_at"), datetime):
+                r["created_at"] = r["created_at"].isoformat()
+            return dict(r) if r else None
+
+    def add_node_to_world(self, node_id: str, world_id: str) -> None:
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM worlds WHERE tenant_id = %s AND world_id = %s",
+                        (self.tenant_id, world_id))
+            if not cur.fetchone():
+                raise ValueError(f"World {world_id} does not exist")
+            cur.execute("UPDATE nodes SET world_id = %s WHERE tenant_id = %s AND id = %s",
+                        (world_id, self.tenant_id, node_id))
+        self.conn.commit()
+
+    def get_world_nodes(self, world_id: str, recursive: bool = False) -> list[dict]:
+        """Nodes assigned to a world. recursive=True follows 'contains' edges to children."""
+        world_ids = [world_id]
+        if recursive:
+            visited = {world_id}
+            frontier = [world_id]
+            while frontier:
+                wid = frontier.pop()
+                for e in self.get_edges_from(wid):
+                    if e["relation"] == "contains" and e["to_id"] not in visited:
+                        visited.add(e["to_id"])
+                        frontier.append(e["to_id"])
+                        world_ids.append(e["to_id"])
+        placeholders = ",".join(["%s"] * len(world_ids))
+        return self._query_nodes(f"AND world_id IN ({placeholders})", tuple(world_ids))
+
+    def list_worlds(self) -> list[dict]:
+        with self.conn.cursor() as cur:
+            cur.execute(
+                "SELECT w.world_id, w.name, w.description, "
+                "(SELECT count(*) FROM nodes n WHERE n.tenant_id = w.tenant_id "
+                " AND n.world_id = w.world_id) AS node_count "
+                "FROM worlds w WHERE w.tenant_id = %s ORDER BY w.created_at",
+                (self.tenant_id,))
+            return [dict(r) for r in cur.fetchall()]
 
     # ------------------------------------------------------------------ vectors (pgvector)
     def store_embeddings(self, pairs: list) -> None:
