@@ -181,6 +181,46 @@ def test_detect_stale_candidates(store):
     assert not any(c["id"] == "stale" for c in store.detect_stale_candidates())
 
 
+def test_get_nodes_by_fact_text(store):
+    store.add_node(_node(id="n1", fact="We chose PostgreSQL for the team backend"))
+    store.add_node(_node(id="n2", fact="Redis is used for the cache"))
+    ids = {n["id"] for n in store.get_nodes_by_fact_text(["postgresql"])}
+    assert ids == {"n1"}
+    # case-insensitive, multi-keyword OR
+    ids2 = {n["id"] for n in store.get_nodes_by_fact_text(["REDIS", "postgres"])}
+    assert ids2 == {"n1", "n2"}
+    # inactive nodes excluded
+    store.deactivate_node("n1")
+    assert {n["id"] for n in store.get_nodes_by_fact_text(["postgresql"])} == set()
+
+
+def test_merge_extraction(store):
+    nodes = [
+        {"id": "a", "fact": "Auth uses JWT", "type": "decision", "tags": ["jwt"],
+         "confidence": 0.9, "supersedes": [], "created_at": "2026-03-01T00:00:00+00:00"},
+        {"id": "b", "fact": "Cache uses Redis", "type": "implementation", "tags": ["redis"],
+         "confidence": 0.9, "supersedes": [], "created_at": "2026-03-01T00:00:00+00:00"},
+    ]
+    edges = [{"from_id": "a", "to_id": "b", "relation": "relates_to"}]
+    id_map = store.merge_extraction(nodes, edges)
+    assert id_map == {}                      # no dedup remaps here
+    assert store.get_stats() == {"node_count": 2, "edge_count": 1}
+    assert store.get_edges_from("a")[0]["to_id"] == "b"
+
+
+def test_merge_extraction_supersedes(store):
+    store.add_node(_node(id="old", fact="Auth uses sessions", type="decision"))
+    nodes = [{"id": "new", "fact": "Auth uses JWT now", "type": "decision", "tags": ["jwt"],
+              "confidence": 0.9, "supersedes": [], "created_at": "2026-04-01T00:00:00+00:00",
+              "occurred_at": "2026-04-01T00:00:00+00:00"}]
+    edges = [{"from_id": "new", "to_id": "old", "relation": "supersedes"}]
+    store.merge_extraction(nodes, edges)
+    old = store.get_node("old")
+    new = store.get_node("new")
+    assert old["is_active"] == 0 and old["valid_to"] is not None   # superseded → expired
+    assert "old" in new["supersedes"]                               # link recorded
+
+
 def test_tenant_isolation(store):
     from waystone.pg_store import PostgresGraphStore
     store.add_node(_node(id="mine", fact="tenant A fact"))

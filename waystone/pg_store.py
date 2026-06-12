@@ -266,6 +266,38 @@ class PostgresGraphStore:
                     [(self.tenant_id, nid) for nid in entries])
         self.conn.commit()
 
+    def merge_extraction(self, nodes: list[dict], edges: list[dict]) -> dict[str, str]:
+        """Merge extracted nodes + edges; returns id_map (new_id → canonical_id).
+
+        Mirrors GraphStore.merge_extraction: add each node (dedup may remap its id),
+        rewrite edges through the id_map, and for supersedes edges record the link on
+        the superseding node's supersedes list (add_edge already expires the target).
+        """
+        id_map: dict[str, str] = {}
+        for node in nodes:
+            cid = self.add_node(node)
+            if cid != node["id"]:
+                id_map[node["id"]] = cid
+
+        def _resolve(nid: str) -> str:
+            return id_map.get(nid, nid)
+
+        for edge in edges:
+            f, t = _resolve(edge["from_id"]), _resolve(edge["to_id"])
+            self.add_edge(f, t, edge["relation"])
+            if edge["relation"] == "supersedes":
+                existing = self.get_node(f)
+                if existing:
+                    sl = list(existing.get("supersedes", []))
+                    if t not in sl:
+                        sl.append(t)
+                        with self.conn.cursor() as cur:
+                            cur.execute(
+                                "UPDATE nodes SET supersedes = %s WHERE tenant_id = %s AND id = %s",
+                                (json.dumps(sl), self.tenant_id, f))
+                        self.conn.commit()
+        return id_map
+
     # ------------------------------------------------------------------ reads
     def _query_nodes(self, where: str, params: tuple) -> list[dict]:
         with self.conn.cursor() as cur:
@@ -296,6 +328,30 @@ class PostgresGraphStore:
             return []
         clauses = " OR ".join(["tags @> %s"] * len(tags))
         return self._query_nodes(f"AND ({clauses})", tuple(json.dumps([t]) for t in tags))
+
+    def get_nodes_by_fact_text(self, keywords: list[str], limit: int = 150) -> list[dict]:
+        """Active nodes whose fact text contains any keyword (substring, case-insensitive).
+
+        Mirrors GraphStore.get_nodes_by_fact_text (the retriever's keyword path).
+        """
+        if not keywords:
+            return []
+        seen: set[str] = set()
+        out: list[dict] = []
+        lim = int(limit)
+        for i in range(0, len(keywords), 200):
+            chunk = keywords[i:i + 200]
+            conds = " OR ".join(["fact ILIKE %s"] * len(chunk))
+            params = (self.tenant_id, *[f"%{kw}%" for kw in chunk])
+            with self.conn.cursor() as cur:
+                cur.execute(
+                    f"SELECT {self._COLS} FROM nodes WHERE tenant_id = %s "
+                    f"AND is_active = true AND ({conds}) LIMIT {lim}", params)
+                for r in cur.fetchall():
+                    if r["id"] not in seen:
+                        seen.add(r["id"])
+                        out.append(self._row_to_node(r))
+        return out
 
     def get_recent_nodes(self, limit: int = 20) -> list[dict]:
         with self.conn.cursor() as cur:
