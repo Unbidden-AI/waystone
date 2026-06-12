@@ -37,6 +37,9 @@ api = ["fastapi>=0.100", "uvicorn[standard]>=0.22", "pyjwt[crypto]>=2.8"]
 semantic = ["sentence-transformers"]
 monitoring = ["sentry-sdk[fastapi]>=2.0"]
 openclaw = ["pyyaml>=6.0"]  # no extra deps beyond core; pyyaml already required
+# Team/Enterprise server backend (PostgresGraphStore — multi-writer + pgvector).
+# Solo/local stays on SQLite; this powers the self-hosted/cloud Team Server.
+team = ["psycopg[binary]>=3.1", "pgvector>=0.2"]
 
 [project.scripts]
 waystone = "waystone.cli:cli"

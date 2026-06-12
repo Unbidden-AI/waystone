@@ -13,6 +13,19 @@ jobs:
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
 
+    # Postgres + pgvector so the PostgresGraphStore (Team backend) tests actually run.
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_PASSWORD: waystone
+          POSTGRES_DB: waystone_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+
     steps:
       - uses: actions/checkout@v4
 
@@ -22,7 +35,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: pip install -e ".[dev]"
+        run: pip install -e ".[dev,team]"
 
       - name: Lint
         run: |
@@ -30,6 +43,8 @@ jobs:
           ruff check waystone/ tests/
 
       - name: Run tests
+        env:
+          WAYSTONE_TEST_PG_DSN: postgresql://postgres:waystone@localhost:5432/waystone_test
         run: pytest tests/ -v --tb=short
 
       - name: Smoke test CLI
