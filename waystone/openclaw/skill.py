@@ -25,13 +25,13 @@ from __future__ import annotations
 import asyncio
 import logging
 import threading
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from .config import get_db_path, get_memory_md_path, get_project, load_openclaw_config
-from .errors import ConfigError, DBInitError, EngramOpenClawError, LLMExtractionError
+from .errors import DBInitError, LLMExtractionError
 from .memory_sync import bootstrap, seed_from_memory_md, write_back
 
 log = logging.getLogger(__name__)
@@ -113,7 +113,7 @@ async def on_session_start(ctx: Any) -> None:
     state = _get_or_create_session(session_id)
 
     try:
-        has_store = state.open_store()
+        state.open_store()
     except DBInitError as e:
         log.warning("waystone: on_session_start — %s", e)
         state.record_error(str(e))

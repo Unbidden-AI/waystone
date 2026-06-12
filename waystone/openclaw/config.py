@@ -69,7 +69,7 @@ def load_openclaw_config() -> dict:
 
     Returns a flat dict with OpenClaw-specific keys plus ``_engram`` (dict).
     """
-    from waystone.config import load_config, _merge  # local import to avoid circular
+    from waystone.config import _merge, load_config  # local import to avoid circular
 
     cfg: dict = dict(OPENCLAW_DEFAULTS)
 

@@ -41,8 +41,8 @@ if TYPE_CHECKING:
 def _read_char() -> str:
     """Read a single keypress without requiring Enter. Falls back to line input."""
     try:
-        import tty
         import termios
+        import tty
         fd = sys.stdin.fileno()
         old = termios.tcgetattr(fd)
         try:
@@ -78,7 +78,7 @@ def review_loop(store: "GraphStore", limit: int = 50) -> dict:
 
     print(f"\n{'='*60}")
     print(f"  Waystone Feedback — {total} unrated node(s)")
-    print(f"  [u]p  [d]own  [s]kip  [q]uit")
+    print("  [u]p  [d]own  [s]kip  [q]uit")
     print(f"{'='*60}\n")
 
     for i, node in enumerate(nodes, 1):
@@ -294,7 +294,7 @@ def auto_label(
     if not unrated:
         return {"rated": 0, "skipped": 0, "thumbs_up": 0, "thumbs_down": 0}
 
-    total = len(unrated)
+    len(unrated)
     rated = 0
     skipped = 0
     thumbs_up = 0
@@ -362,7 +362,7 @@ Respond with ONLY a single integer: 1 or -1"""
                 else:
                     thumbs_down += 1
 
-        except Exception as e:
+        except Exception:
             # Per-node error: skip this node, continue to next
             skipped += 1
 

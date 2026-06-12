@@ -2371,6 +2371,7 @@ class GraphStore:
         dup_pairs: list[tuple[int, int]] = []
         try:
             import struct
+
             import numpy as np
             n = len(ids)
             dim = embedder.EMBEDDING_DIM

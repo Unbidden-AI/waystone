@@ -7,9 +7,7 @@ race conditions.
 
 from __future__ import annotations
 
-import sqlite3
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -17,9 +15,8 @@ pytest.importorskip("fastapi", reason="fastapi not installed — skip API server
 
 from fastapi.testclient import TestClient  # noqa: E402 (after importorskip)
 
+from waystone.billing import create_key, open_admin_db  # noqa: E402
 from waystone.store import GraphStore  # noqa: E402
-from waystone.billing import open_admin_db, init_admin_db, create_key  # noqa: E402
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

@@ -639,7 +639,7 @@ class TestDetectStaleCandidates:
     """Proactive staleness detection (waystone invalidate, Layer 0)."""
 
     def _ts(self, days_ago):
-        from datetime import datetime, timezone, timedelta
+        from datetime import datetime, timedelta, timezone
         return (datetime.now(timezone.utc) - timedelta(days=days_ago)).isoformat()
 
     def test_signals_and_exemptions(self, store):

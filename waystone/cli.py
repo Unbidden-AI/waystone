@@ -12,7 +12,6 @@ from pathlib import Path
 import click
 
 from .config import get_db_path, get_project_dir, load_config
-from .monitoring import init_sentry
 from .extractor import (
     ExtractionBuffer,
     _extract_adaptive,
@@ -20,16 +19,24 @@ from .extractor import (
     extract_config_items,
     extract_targeted,
     extract_turn,
+    generate_session_summary,
     reconcile_group,
     score_extraction_quality,
     split_into_chunks,
-    generate_session_summary,
-    summarize_session,
     split_transcript_into_turns,
+    summarize_session,
     synthesize_extraction,
     verify_extraction,
 )
-from .retriever import bfs_collect, cluster_by_tags, extract_keywords, find_conflicts, retrieve_with_stats, score_by_relevance
+from .monitoring import init_sentry
+from .retriever import (
+    bfs_collect,
+    cluster_by_tags,
+    extract_keywords,
+    find_conflicts,
+    retrieve_with_stats,
+    score_by_relevance,
+)
 from .store import GraphStore
 
 
@@ -244,7 +251,7 @@ def verify_cmd(ctx, as_json):
     llm_cfg = config.get("llm", {}) or {}
     key, source = resolve_llm_api_key(llm_cfg)
     model = llm_cfg.get("model", "?")
-    base_url = llm_cfg.get("base_url", "")
+    llm_cfg.get("base_url", "")
     try:
         from .llm import get_provider
         backend = "native (Gemini SDK)" if get_provider(config) is not None else "OpenAI-compatible HTTP"
@@ -899,10 +906,10 @@ def reflect_cmd(ctx, project, transcript, since_turn, domain, chunk_size):
     (Human:/Assistant: format). Long sessions are automatically chunked into
     windows of --chunk-size turns so LLM output stays within token limits.
     """
-    from .transcript import from_claude_jsonl, from_plain_text, slice_since, to_prompt_text
     from .extractor import reflect_extraction
     from .llm import get_provider
     from .prompts import build_reflect_prompt
+    from .transcript import from_claude_jsonl, from_plain_text, slice_since, to_prompt_text
 
     config = _load_cfg(ctx.obj["config_path"])
     db_path = get_db_path(config, project)
@@ -2983,7 +2990,8 @@ def onboard_cmd(ctx, project, limit, verify, chunk_size, timeout):
 
     # Present menu
     from datetime import datetime as _dt
-    from .transcript import extract_away_summaries, extract_ai_title
+
+    from .transcript import extract_ai_title, extract_away_summaries
 
     click.echo(f"\nFound {len(sessions)} recent Claude Code session(s):\n")
     # Label preference: the host's own native recap (free, accurate) → a concise
@@ -3532,7 +3540,6 @@ def doctor_cmd(ctx, do_fix):
         waystone doctor          # check only
         waystone doctor --fix    # check + fix
     """
-    import os as _os
 
     config_path = ctx.obj["config_path"]
     ok = True
@@ -3682,8 +3689,6 @@ def doctor_cmd(ctx, do_fix):
 
     # Read the integration mode saved by `waystone configure`
     _int_mode = config.get("integration_mode", None)   # mcp | hooks | both | skip | None
-    wants_mcp   = _int_mode in (None, "mcp", "both")
-    wants_hooks = _int_mode in (None, "hooks", "both")
 
     # Detect MCP registration (check both claude_desktop_config.json and settings.json)
     mcp_registered = False
@@ -3798,8 +3803,10 @@ def doctor_cmd(ctx, do_fix):
         install_claude_md,
         install_hooks,
         register_mcp_server,
-        test_llm_connection as _test_llm,
         write_llm_config,
+    )
+    from .setup import (
+        test_llm_connection as _test_llm,
     )
 
     # Fix: API key 403
@@ -3827,7 +3834,7 @@ def doctor_cmd(ctx, do_fix):
                 api_key_env=api_key_env,
                 api_key=new_key,
             )
-            click.echo(f"  ✓  API key saved to ~/.waystone/config.yaml")
+            click.echo("  ✓  API key saved to ~/.waystone/config.yaml")
             fixed_any = True
         else:
             click.echo(f"  –  Skipped. Set {api_key_env} in your shell or add api_key to ~/.waystone/config.yaml")
@@ -3892,7 +3899,6 @@ def configure_cmd(non_interactive):
 
     from .setup import (
         PROVIDERS,
-        WAYSTONE_CONFIG_PATH,
         install_antigravity_hooks,
         install_claude_md,
         install_codex_hooks,
@@ -3903,7 +3909,6 @@ def configure_cmd(non_interactive):
         register_antigravity_mcp,
         register_codex_mcp,
         register_mcp_server,
-        save_integration_mode,
         write_llm_config,
     )
 
@@ -3978,7 +3983,7 @@ def configure_cmd(non_interactive):
             click.echo(f"  {api_key_env} already set in environment — using it.")
             api_key = None  # will be read from env at runtime
         elif non_interactive:
-            click.echo(f"  (Skipping key prompt in non-interactive mode.)")
+            click.echo("  (Skipping key prompt in non-interactive mode.)")
         else:
             if prov.get("key_url"):
                 click.echo(f"  Get a key: {prov['key_url']}")
@@ -4328,7 +4333,7 @@ def feedback_cmd(ctx, project, node_id, rating, comment, export_path, only_up, o
     Show statistics:
         waystone feedback myproject --stats
     """
-    from .feedback import export_jsonl, rate_node, review_loop, auto_label
+    from .feedback import auto_label, export_jsonl, rate_node, review_loop
 
     config = _load_cfg(ctx.obj["config_path"])
     db_path = get_db_path(config, project)
@@ -4399,7 +4404,7 @@ def feedback_cmd(ctx, project, node_id, rating, comment, export_path, only_up, o
     store.close()
 
     if summary["rated"] > 0:
-        click.echo(f"\nTip: export your labels with:")
+        click.echo("\nTip: export your labels with:")
         click.echo(f"  waystone feedback {project} --export training.jsonl")
 
 

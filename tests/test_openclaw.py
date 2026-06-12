@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -12,7 +11,6 @@ import pytest
 
 from waystone.openclaw.config import (
     OPENCLAW_DEFAULTS,
-    get_db_path,
     get_memory_md_path,
     get_project,
     load_openclaw_config,
@@ -37,7 +35,6 @@ from waystone.openclaw.memory_sync import (
 )
 from waystone.store import GraphStore
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -53,7 +50,7 @@ def tmp_store(tmp_path):
 
 @pytest.fixture
 def tmp_cfg(tmp_path, tmp_store):
-    db_path = tmp_path / "context.db"
+    tmp_path / "context.db"
     memory_path = tmp_path / "MEMORY.md"
     return {
         "project": "test_project",
@@ -332,7 +329,7 @@ def mock_ctx():
 
 
 def test_cmd_remember_no_text(mock_ctx, tmp_cfg):
-    from waystone.openclaw.skill import cmd_remember, _sessions
+    from waystone.openclaw.skill import cmd_remember
 
     with patch("waystone.openclaw.skill.load_openclaw_config", return_value=tmp_cfg):
         result = asyncio.run(cmd_remember(mock_ctx, args=""))
@@ -340,7 +337,7 @@ def test_cmd_remember_no_text(mock_ctx, tmp_cfg):
 
 
 def test_cmd_recall_no_store_opens_gracefully(mock_ctx, tmp_path, tmp_cfg):
-    from waystone.openclaw.skill import cmd_recall, _sessions
+    from waystone.openclaw.skill import cmd_recall
 
     # DB doesn't exist yet — should return error message, not crash
     tmp_cfg["_waystone"]["projects_dir"] = str(tmp_path / "nonexistent")
@@ -360,7 +357,7 @@ def test_cmd_forget_no_topic(mock_ctx, tmp_cfg):
 
 
 def test_cmd_status_returns_string(mock_ctx, tmp_path, tmp_cfg):
-    from waystone.openclaw.skill import cmd_status, _sessions
+    from waystone.openclaw.skill import cmd_status
 
     db_path = tmp_path / "context.db"
     store = GraphStore(db_path)
@@ -534,7 +531,7 @@ def _project_db_path(tmp_path, tmp_cfg):
 
 
 def test_cmd_dream_returns_summary(mock_ctx, tmp_path, tmp_cfg):
-    from waystone.openclaw.skill import cmd_dream, _sessions
+    from waystone.openclaw.skill import cmd_dream
 
     # Seed the DB at the path that get_db_path resolves to
     db_path = _project_db_path(tmp_path, tmp_cfg)
@@ -556,7 +553,7 @@ def test_cmd_dream_returns_summary(mock_ctx, tmp_path, tmp_cfg):
 
 
 def test_cmd_export_default_path(mock_ctx, tmp_path, tmp_cfg):
-    from waystone.openclaw.skill import cmd_export, _sessions
+    from waystone.openclaw.skill import cmd_export
 
     # Pre-create the DB at the path get_db_path resolves to
     db_path = _project_db_path(tmp_path, tmp_cfg)
@@ -582,7 +579,7 @@ def test_cmd_export_default_path(mock_ctx, tmp_path, tmp_cfg):
 
 
 def test_cmd_export_empty_graph(mock_ctx, tmp_path, tmp_cfg):
-    from waystone.openclaw.skill import cmd_export, _sessions
+    from waystone.openclaw.skill import cmd_export
 
     # DB exists but empty — at the resolved path
     db_path = _project_db_path(tmp_path, tmp_cfg)

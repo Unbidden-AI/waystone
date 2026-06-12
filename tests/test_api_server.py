@@ -1,7 +1,7 @@
 """Tests for the Waystone REST API server."""
 
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -10,7 +10,6 @@ pytest.importorskip("fastapi", reason="fastapi not installed — skip API server
 from fastapi.testclient import TestClient  # noqa: E402 (after importorskip)
 
 from waystone.store import GraphStore  # noqa: E402
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

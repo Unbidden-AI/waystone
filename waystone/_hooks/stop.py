@@ -28,12 +28,8 @@ import json
 import re
 import subprocess
 import sys
-import tempfile
 from datetime import datetime
 from pathlib import Path
-
-
-
 
 TRANSCRIPTS_DIR = Path.home() / ".waystone" / "transcripts"
 

@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
-
 from pilot.router import _apply_rule, _match, route
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

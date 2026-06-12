@@ -30,30 +30,29 @@ from pydantic import BaseModel
 
 log = logging.getLogger(__name__)
 
+from contextlib import asynccontextmanager
+
+from . import __version__ as _WAYSTONE_VERSION
 from .billing import (
+    RateLimiter,
     check_node_limit,
     check_project_limit,
     create_key,
     get_or_create_key_by_email,
     open_admin_db,
-    retry_dead_letter_emails,
-    revoke_key_by_email,
     revoke_key_by_stripe_customer,
     send_key_email,
     tier_from_price,
     validate_key,
     verify_stripe_signature,
-    RateLimiter,
 )
 from .config import load_config
-from .extractor import extract as _extract, extract_chunked as _extract_chunked, score_extraction_quality, verify_extraction
+from .extractor import extract as _extract
+from .extractor import extract_chunked as _extract_chunked
+from .extractor import score_extraction_quality, verify_extraction
+from .monitoring import init_sentry
 from .retriever import retrieve_with_stats
 from .store import GraphStore
-
-from contextlib import asynccontextmanager
-
-from .monitoring import init_sentry
-from . import __version__ as _WAYSTONE_VERSION
 
 _SERVER_START_TIME = time.time()
 _ADMIN_EMAILS: frozenset[str] = frozenset(

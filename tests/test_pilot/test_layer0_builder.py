@@ -2,19 +2,17 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from pilot.layer0_builder import (
-    build_layer0,
-    _fetch_open_questions,
     _fetch_active_constraints,
+    _fetch_open_questions,
     _fetch_recent_decisions,
     _would_exceed_budget,
+    build_layer0,
 )
-
 
 # ===========================================================================
 # Fixtures

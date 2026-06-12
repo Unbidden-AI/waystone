@@ -8,7 +8,7 @@ import json
 import sqlite3
 import time
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -16,8 +16,7 @@ pytest.importorskip("fastapi", reason="fastapi not installed — skip webhook te
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from waystone.billing import _hash_key, init_admin_db, validate_key  # noqa: E402
-
+from waystone.billing import init_admin_db, validate_key  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Helpers

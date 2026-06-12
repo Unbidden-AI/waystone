@@ -411,7 +411,9 @@ class TestExtractAdaptive:
     def test_resplits_on_timeout(self):
         import asyncio
         from unittest.mock import patch
+
         import httpx
+
         import waystone.extractor as ex
 
         big = "\n\n".join(f"Paragraph {i}: content about a decision." for i in range(200))
@@ -428,6 +430,7 @@ class TestExtractAdaptive:
     def test_propagates_non_timeout_error(self):
         import asyncio
         from unittest.mock import patch
+
         import waystone.extractor as ex
 
         big = "\n\n".join(f"Paragraph {i}." for i in range(200))

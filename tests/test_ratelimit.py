@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import time
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -16,11 +15,9 @@ from fastapi.testclient import TestClient
 
 from waystone.billing import (
     RateLimiter,
-    _hash_key,
     create_key,
     init_admin_db,
 )
-
 
 # ---------------------------------------------------------------------------
 # Unit tests for RateLimiter

@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import asyncio
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from click.testing import CliRunner
 
-from pilot.cli import main, _setup_logging, _load_cfg, _repl, _headless
-
+from pilot.cli import _headless, _load_cfg, _repl, _setup_logging, main
 
 # ===========================================================================
 # Fixtures
@@ -372,14 +369,14 @@ def test_main_verbose_flag_enables_debug_logging(cli_runner, mock_db_path):
          patch("pilot.cli._setup_logging") as mock_setup_log, \
          patch("pilot.cli.GraphStore") as mock_store_cls, \
          patch("pilot.cli.Conversation"), \
-         patch("pilot.cli.asyncio.run") as mock_async_run:
+         patch("pilot.cli.asyncio.run"):
 
         mock_load_cfg.return_value = {}
         mock_get_db.return_value = mock_db_path
         mock_store_cls.return_value.__enter__ = MagicMock(return_value=MagicMock())
         mock_store_cls.return_value.__exit__ = MagicMock(return_value=None)
 
-        result = cli_runner.invoke(main, ["my_project", "-v"])
+        cli_runner.invoke(main, ["my_project", "-v"])
 
         mock_setup_log.assert_called_once_with(True)
 
@@ -391,14 +388,14 @@ def test_main_no_verbose_flag(cli_runner, mock_db_path):
          patch("pilot.cli._setup_logging") as mock_setup_log, \
          patch("pilot.cli.GraphStore") as mock_store_cls, \
          patch("pilot.cli.Conversation"), \
-         patch("pilot.cli.asyncio.run") as mock_async_run:
+         patch("pilot.cli.asyncio.run"):
 
         mock_load_cfg.return_value = {}
         mock_get_db.return_value = mock_db_path
         mock_store_cls.return_value.__enter__ = MagicMock(return_value=MagicMock())
         mock_store_cls.return_value.__exit__ = MagicMock(return_value=None)
 
-        result = cli_runner.invoke(main, ["my_project"])
+        cli_runner.invoke(main, ["my_project"])
 
         mock_setup_log.assert_called_once_with(False)
 
@@ -409,7 +406,7 @@ def test_main_stream_flag(cli_runner, mock_db_path):
          patch("pilot.cli.get_db_path") as mock_get_db, \
          patch("pilot.cli.GraphStore") as mock_store_cls, \
          patch("pilot.cli.Conversation"), \
-         patch("pilot.cli._repl") as mock_repl, \
+         patch("pilot.cli._repl"), \
          patch("pilot.cli.asyncio.run") as mock_async_run:
 
         mock_load_cfg.return_value = {}
@@ -418,7 +415,7 @@ def test_main_stream_flag(cli_runner, mock_db_path):
         mock_store_cls.return_value.__enter__ = MagicMock(return_value=mock_store)
         mock_store_cls.return_value.__exit__ = MagicMock(return_value=None)
 
-        result = cli_runner.invoke(main, ["my_project", "--stream"])
+        cli_runner.invoke(main, ["my_project", "--stream"])
 
         # asyncio.run should be called with _repl coroutine
         mock_async_run.assert_called_once()
@@ -430,7 +427,7 @@ def test_main_no_stream_flag(cli_runner, mock_db_path):
          patch("pilot.cli.get_db_path") as mock_get_db, \
          patch("pilot.cli.GraphStore") as mock_store_cls, \
          patch("pilot.cli.Conversation"), \
-         patch("pilot.cli._repl") as mock_repl, \
+         patch("pilot.cli._repl"), \
          patch("pilot.cli.asyncio.run") as mock_async_run:
 
         mock_load_cfg.return_value = {}
@@ -439,7 +436,7 @@ def test_main_no_stream_flag(cli_runner, mock_db_path):
         mock_store_cls.return_value.__enter__ = MagicMock(return_value=mock_store)
         mock_store_cls.return_value.__exit__ = MagicMock(return_value=None)
 
-        result = cli_runner.invoke(main, ["my_project", "--no-stream"])
+        cli_runner.invoke(main, ["my_project", "--no-stream"])
 
         mock_async_run.assert_called_once()
 
@@ -461,7 +458,7 @@ def test_main_config_path_option(cli_runner, mock_db_path, tmp_path):
         mock_store_cls.return_value.__enter__ = MagicMock(return_value=mock_store)
         mock_store_cls.return_value.__exit__ = MagicMock(return_value=None)
 
-        result = cli_runner.invoke(
+        cli_runner.invoke(
             main,
             ["my_project", "--config", str(config_file)]
         )
@@ -483,7 +480,7 @@ def test_main_creates_conversation(cli_runner, mock_db_path):
         mock_store_cls.return_value.__enter__ = MagicMock(return_value=mock_store)
         mock_store_cls.return_value.__exit__ = MagicMock(return_value=None)
 
-        result = cli_runner.invoke(main, ["my_project"])
+        cli_runner.invoke(main, ["my_project"])
 
         mock_conv_cls.assert_called_once()
         # Verify Conversation was called with project name
@@ -504,7 +501,7 @@ def test_main_uses_graph_store_context_manager(cli_runner, mock_db_path):
         mock_store = MagicMock()
         mock_store_cls.return_value = mock_store
 
-        result = cli_runner.invoke(main, ["my_project"])
+        cli_runner.invoke(main, ["my_project"])
 
         # Verify GraphStore was instantiated and close() was called
         mock_store_cls.assert_called_once_with(mock_db_path)
@@ -662,7 +659,7 @@ def test_main_print_flag_headless_mode(cli_runner, mock_db_path):
          patch("pilot.cli.GraphStore") as mock_store_cls, \
          patch("pilot.cli.Conversation") as mock_conv_cls, \
          patch("pilot.cli.asyncio.run") as mock_async_run, \
-         patch("pilot.cli._headless") as mock_headless, \
+         patch("pilot.cli._headless"), \
          patch("pilot.cli._repl") as mock_repl:
 
         mock_load_cfg.return_value = {}

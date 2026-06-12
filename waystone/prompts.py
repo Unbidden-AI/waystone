@@ -6,6 +6,11 @@ across different domains (software_dev, episodic_personal, etc.).
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .domain_profiles import DomainProfile
+
 _DEFAULT_LAYER1_RULES = """1. Extract FACTS, not filler (greetings, confirmations, thinking-out-loud).
 
 2. Each fact must be self-contained — readable without surrounding context.

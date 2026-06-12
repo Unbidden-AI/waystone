@@ -220,7 +220,7 @@ class TestMcpJsonRpcHandshake:
             raise AssertionError("MCP server did not respond within 10 seconds")
 
         # Parse the first line of output as JSON-RPC
-        lines = [l for l in stdout.decode().splitlines() if l.strip()]
+        lines = [ln for ln in stdout.decode().splitlines() if ln.strip()]
         assert lines, "MCP server produced no stdout output"
         response = json.loads(lines[0])
 

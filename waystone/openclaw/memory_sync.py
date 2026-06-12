@@ -105,7 +105,8 @@ def seed_from_memory_md(cfg: dict) -> int:
     Returns the number of nodes extracted (0 if nothing was done).
     """
     import asyncio
-    from .errors import LLMExtractionError, DBInitError
+
+    from .errors import DBInitError, LLMExtractionError
 
     memory_path = _get_memory_md_path(cfg)
     if not memory_path.exists():

@@ -2,13 +2,12 @@
 
 import json
 import logging
-import os
 import re
 import uuid
 
 from .prompts import (
-    build_extraction_json_schema,
     TARGETED_PASS_PROMPTS,
+    build_extraction_json_schema,
     build_extraction_prompt,
     build_implicit_prefs_prompt,
     build_incremental_prompt,
@@ -106,6 +105,7 @@ class ExtractionBuffer:
 async def _call_llm(prompt: str, config: dict, domain_profile=None) -> str:
     """Make an LLM API call and return the raw response content."""
     import asyncio  # lazy — costs ~20ms cold; only needed during extraction, not retrieval
+
     import httpx  # lazy — costs 97ms cold; only needed during extraction, not retrieval
     llm_cfg = config["llm"]
 
@@ -596,15 +596,15 @@ async def reflect_extraction(
     Returns:
         dict with "nodes" (list[dict]) and "edges" (list[dict]) for new nodes.
     """
-    from .prompts import build_reflect_prompt
     from .config import load_config
+    from .prompts import build_reflect_prompt
 
     if config is None:
         config = load_config()
 
     if store is None:
-        from .store import GraphStore
         from .config import get_db_path
+        from .store import GraphStore
         db_path = get_db_path(config, project)
         store = GraphStore(db_path)
 
@@ -1105,6 +1105,7 @@ async def generate_session_summary(new_turns_text: str, prior_summary: str, conf
     (default 2 → 3 attempts total) controls the budget.
     """
     import asyncio
+
     import httpx
 
     from .config import resolve_llm_api_key

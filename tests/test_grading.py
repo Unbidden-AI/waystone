@@ -4,12 +4,12 @@ Validates exact-match, keyword-overlap, hyphenated-compound, and
 singular/plural variant handling.
 """
 
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from benchmarks.run_benchmark import score_recall, _keyword_variants
-
+from benchmarks.run_benchmark import _keyword_variants, score_recall
 
 # ---------------------------------------------------------------------------
 # _keyword_variants
@@ -100,7 +100,7 @@ class TestScoreRecallExactMatch:
 # score_recall — keyword fallback
 # ---------------------------------------------------------------------------
 
-import pytest
+import pytest  # noqa: E402
 
 
 class TestScoreRecallKeywordFallback:

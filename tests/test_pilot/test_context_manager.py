@@ -1,15 +1,13 @@
 """Tests for pilot.context_manager — history management and compaction."""
 
-import asyncio
 import time
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from waystone.store import GraphStore
 from pilot.context_manager import ContextManager
 from pilot.types import CompactionResult, CompactionTrigger, Message
-
+from waystone.store import GraphStore
 
 # ==============================================================================
 # Fixtures
@@ -94,10 +92,10 @@ class TestAddMessage:
 
     def test_add_message_updates_last_activity(self, context_manager):
         """add_message updates the last-activity timestamp."""
-        before = time.monotonic()
+        time.monotonic()
         msg = Message(role="user", content="test", token_estimate=1)
         context_manager.add_message(msg)
-        after = time.monotonic()
+        time.monotonic()
         # Stats should reflect the activity (can't directly access _last_activity, check via time)
         # Just verify no exception and history is added
         assert len(context_manager.get_history()) == 1
@@ -434,7 +432,7 @@ class TestRetrieveContext:
                 nodes_after_strategies=5,
                 tokens_estimated=500,
             )
-            result = context_manager.retrieve_context("find the bug")
+            context_manager.retrieve_context("find the bug")
             assert mock_retrieve.called
             # retrieve_with_stats is called with (store, task_description) + kwargs
             call_args = mock_retrieve.call_args

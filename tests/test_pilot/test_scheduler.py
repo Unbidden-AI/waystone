@@ -9,13 +9,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from pilot.scheduler import (
-    OutputConfig,
     ErrorNotificationConfig,
+    OutputConfig,
     ScheduleConfig,
     Scheduler,
     _should_run,
 )
-
 
 # ===========================================================================
 # Fixtures
@@ -454,7 +453,7 @@ def test_should_run_multiple_times_per_minute():
 @pytest.mark.asyncio
 async def test_run_daemon_no_schedules(mock_store, mock_config):
     """Test run_daemon logs warning when no enabled schedules exist."""
-    with patch("pilot.scheduler.log") as mock_log:
+    with patch("pilot.scheduler.log"):
         import asyncio
 
         # Set a short timeout to prevent infinite loop

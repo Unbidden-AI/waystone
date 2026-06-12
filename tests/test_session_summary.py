@@ -1,12 +1,8 @@
 """Tests for session summary generation (P3 feature)."""
 
-import io
-import json
 import sys
-import tempfile
 import uuid
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -48,9 +44,6 @@ class TestSessionSummaryCadence:
 
     def test_counter_resets_after_summary(self, tmp_path):
         """Counter resets to 0 after a summary is generated."""
-        config = {
-            "session_summary": {"enabled": True, "cadence_turns": 10},
-        }
         state_path = tmp_path / "summary_state.json"
 
         # Build up to trigger point
@@ -444,8 +437,8 @@ class TestSessionSummaryRetry:
 
     def test_retries_blank_content_then_succeeds(self):
         import asyncio
+
         import httpx
-        from unittest.mock import AsyncMock, patch
 
         from waystone.extractor import generate_session_summary
 
@@ -466,8 +459,8 @@ class TestSessionSummaryRetry:
 
     def test_retries_transient_exception_then_succeeds(self):
         import asyncio
+
         import httpx
-        from unittest.mock import AsyncMock, patch
 
         from waystone.extractor import generate_session_summary
 
@@ -489,8 +482,8 @@ class TestSessionSummaryRetry:
 
     def test_returns_empty_after_exhausting_retries(self):
         import asyncio
+
         import httpx
-        from unittest.mock import AsyncMock, patch
 
         from waystone.extractor import generate_session_summary
 

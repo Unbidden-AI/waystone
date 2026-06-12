@@ -12,13 +12,12 @@ import hmac
 import json
 import os
 import sqlite3
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from waystone.billing import create_key, init_admin_db
 from waystone.store import GraphStore
-from waystone.billing import open_admin_db, create_key, init_admin_db
 
 try:
     from fastapi.testclient import TestClient
@@ -327,8 +326,9 @@ class TestCLIErrorHandling:
     def test_extract_nonexistent_project_shows_helpful_error(self, tmp_path, monkeypatch):
         """Extracting from nonexistent project should show helpful error."""
         monkeypatch.chdir(tmp_path)
-        from waystone.cli import cli
         from click.testing import CliRunner
+
+        from waystone.cli import cli
 
         runner = CliRunner()
         result = runner.invoke(cli, ["extract", "nonexistent", "transcript.md"])
@@ -338,8 +338,9 @@ class TestCLIErrorHandling:
     def test_query_nonexistent_project_shows_helpful_error(self, tmp_path, monkeypatch):
         """Querying from nonexistent project should show helpful error."""
         monkeypatch.chdir(tmp_path)
-        from waystone.cli import cli
         from click.testing import CliRunner
+
+        from waystone.cli import cli
 
         runner = CliRunner()
         result = runner.invoke(cli, ["query", "nonexistent", "task"])
@@ -497,7 +498,7 @@ class TestMCPServerStartup:
         from waystone.mcp_server import mcp
         # FastMCP has tools attribute
         # waystone_query, waystone_extract, waystone_stats, engram_list_projects
-        tools_dict = getattr(mcp, '_request_handlers', {}) or {}
+        getattr(mcp, '_request_handlers', {}) or {}
         # Just verify mcp object exists and is usable
         assert mcp is not None
 

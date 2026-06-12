@@ -31,7 +31,6 @@ from dataclasses import dataclass
 
 from .domain_profiles import DomainProfile
 
-
 # ---------------------------------------------------------------------------
 # Discovery prompt (one per sample document)
 # ---------------------------------------------------------------------------
@@ -381,7 +380,7 @@ def profile_to_python(profile: DomainProfile, var_name: str | None = None) -> st
     lines.append('    },')
     note = profile.node_types_note.replace('"', '\\"')
     if note:
-        lines.append(f'    node_types_note=(')
+        lines.append('    node_types_note=(')
         for chunk in _wrap_text(note, width=72):
             lines.append(f'        "{chunk}"')
         lines.append('    ),')
@@ -393,7 +392,7 @@ def profile_to_python(profile: DomainProfile, var_name: str | None = None) -> st
 
 def profile_to_yaml(profile: DomainProfile) -> str:
     """Render a DomainProfile as a YAML config snippet."""
-    lines = [f"domain:"]
+    lines = ["domain:"]
     lines.append(f"  name: {profile.name}")
     lines.append(f"  # Node types: {', '.join(profile.node_types)}")
     lines.append(f"  # Edge relations: {', '.join(profile.edge_relations)}")

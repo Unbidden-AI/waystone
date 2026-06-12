@@ -27,7 +27,6 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-
 WORKER = Path(__file__).resolve().parent / "worker.py"
 
 
@@ -749,7 +748,7 @@ def _spawn_reflect(project: str, transcript_path: str, since_turn: int) -> None:
         ]
 
         with open(log_file, "w") as log_f:
-            proc = subprocess.Popen(
+            subprocess.Popen(
                 cmd,
                 stdout=log_f,
                 stderr=subprocess.STDOUT,

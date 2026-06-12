@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator
 
 
 @dataclass
@@ -89,7 +88,6 @@ def from_plain_text(text: str) -> list[Utterance]:
     For non-Human/Assistant formats, speakers alternate: the first speaker seen
     maps to "user", the second to "assistant", and so on (alternating).
     """
-    import re
     speaker_re = _get_speaker_re()
 
     # First pass: detect all unique speakers in order of first appearance
@@ -117,7 +115,6 @@ def from_plain_text(text: str) -> list[Utterance]:
 
     utterances = []
     current_role = None
-    current_speaker = None
     current_lines: list[str] = []
 
     for line in text.splitlines():
@@ -128,7 +125,6 @@ def from_plain_text(text: str) -> list[Utterance]:
             if name in role_map:
                 if current_role and current_lines:
                     utterances.append(Utterance(role=current_role, content="\n".join(current_lines).strip()))
-                current_speaker = name
                 current_role = role_map[name]
                 current_lines = [rest] if rest else []
                 continue

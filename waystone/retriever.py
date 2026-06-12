@@ -73,7 +73,6 @@ LOCOMO_VERB_SYNONYMS: dict[str, list[str]] = {
     "quit":         ["quitting", "fired", "job", "resign", "resigned", "left"],
     "break":        ["broke", "broken", "breakup", "separated", "split"],
     "broke":        ["break", "breakup", "separated"],
-    "adopt":        ["adopted", "adoption", "child"],
     # Speaker-role synonyms — for episodic memory where the main speaker is labeled
     # "User" in the transcript. Ensures "user" queries also match "speaker"-tagged nodes
     # and vice versa when query_expansion is enabled.
@@ -1391,7 +1390,7 @@ def apply_graph_relational_scoring(
     nodes: list[dict],
     store: "GraphStore",
     query_blob: bytes,
-    embedder: "Embedder",
+    embedder,
     alpha: float = 0.3,
 ) -> list[dict]:
     """SmartVector graph-relational signal: boost scores by neighborhood query-relevance.
@@ -1458,7 +1457,7 @@ def apply_graph_relational_scoring(
 def detect_potential_contradictions(
     nodes: list[dict],
     store: "GraphStore",
-    embedder: "Embedder",
+    embedder,
     threshold: float = 0.87,
     max_pairs: int = 200,
 ) -> int:
@@ -2008,7 +2007,7 @@ def _resolve_relative_dates(fact: str, occurred_at: str | None) -> str:
         return fact
     try:
         import re as _re
-        from datetime import datetime as _datetime, timezone as _timezone
+        from datetime import datetime as _datetime
         dt = _datetime.fromisoformat(occurred_at)
         date_label = dt.strftime("%B %-d, %Y")
         substitutions = [
@@ -2271,7 +2270,7 @@ def assemble_briefing(
         dated_nodes = [n for n in nodes if n.get("occurred_at")]
         if dated_nodes:
             oldest = min(dated_nodes, key=lambda n: n["occurred_at"])
-            newest = max(dated_nodes, key=lambda n: n["occurred_at"])
+            max(dated_nodes, key=lambda n: n["occurred_at"])
             date_range = f" | Active since: {format_date(oldest['occurred_at'])}"
 
     export_ts = datetime.now(timezone.utc).strftime("%Y-%m-%d")

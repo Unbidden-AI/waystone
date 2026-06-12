@@ -4,12 +4,11 @@ import pytest
 
 from pilot.llm_adapter import estimate_tokens
 from pilot.system_prompt_builder import (
-    SystemPromptBuilder,
     _CONTEXT_FOOTER,
     _CONTEXT_HEADER,
     _NO_CONTEXT_MSG,
+    SystemPromptBuilder,
 )
-
 
 # ==============================================================================
 # Fixtures

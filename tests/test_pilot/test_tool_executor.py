@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import asyncio
 import pytest
-from pathlib import Path
 
 from pilot.tool_executor import (
     _resolve_and_check,
@@ -12,7 +10,6 @@ from pilot.tool_executor import (
     execute_tools,
 )
 from pilot.types import ToolCall, ToolResult
-
 
 # =============================================================================
 # Tests for _resolve_and_check
@@ -211,7 +208,8 @@ class TestBash:
         tool_call = ToolCall(
             id="tc1",
             name="bash",
-            args={"command": "printf '%0.s#' {1..200}"},  # 200 '#' chars
+            # python3, not bash brace-expansion ({1..200} doesn't expand in sh/dash → CI)
+            args={"command": "python3 -c \"print('#' * 200, end='')\""},  # 200 '#' chars
         )
 
         result = await execute_tool(tool_call, cfg)

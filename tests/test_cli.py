@@ -258,7 +258,7 @@ class TestDoctor:
         assert all(str(n.get("source_transcript", "")).startswith("history_summary:") for n in ss)
 
     def test_invalidate_preview_then_execute(self, runner, tmp_path):
-        from datetime import datetime, timezone, timedelta
+        from datetime import datetime, timedelta, timezone
         r, config, _ = runner
         from waystone.config import get_db_path, load_config
         cfg = load_config(config)
@@ -456,7 +456,8 @@ class TestReset:
 
     def test_reset_clears_graph_keeps_transcripts(self, tmp_path):
         runner = CliRunner()
-        home = tmp_path / "home"; home.mkdir()
+        home = tmp_path / "home"
+        home.mkdir()
         env = {"HOME": str(home), "USERPROFILE": str(home)}
         db = self._seed(env, runner)
         # A saved transcript that must survive the default reset.
@@ -475,7 +476,8 @@ class TestReset:
 
     def test_reset_purge_removes_transcripts(self, tmp_path):
         runner = CliRunner()
-        home = tmp_path / "home"; home.mkdir()
+        home = tmp_path / "home"
+        home.mkdir()
         env = {"HOME": str(home), "USERPROFILE": str(home)}
         db = self._seed(env, runner)
         transcript = db.parent / "transcripts" / "old_session.md"
@@ -489,7 +491,8 @@ class TestReset:
 
     def test_reset_abort_keeps_graph(self, tmp_path):
         runner = CliRunner()
-        home = tmp_path / "home"; home.mkdir()
+        home = tmp_path / "home"
+        home.mkdir()
         env = {"HOME": str(home), "USERPROFILE": str(home)}
         db = self._seed(env, runner)
 
@@ -500,7 +503,8 @@ class TestReset:
 
     def test_reset_missing_project(self, tmp_path):
         runner = CliRunner()
-        home = tmp_path / "home"; home.mkdir()
+        home = tmp_path / "home"
+        home.mkdir()
         env = {"HOME": str(home), "USERPROFILE": str(home)}
         r = runner.invoke(cli, ["reset", "ghost", "--yes"], env=env)
         assert r.exit_code == 0
@@ -620,7 +624,9 @@ class TestSessionStartHook:
     """SessionStart hook: silent on healthy, exits 0, warns only on breakage."""
 
     def test_runs_silent_and_exits_zero(self, tmp_path):
-        import subprocess, sys, json
+        import json
+        import subprocess
+        import sys
         env = {**__import__("os").environ, "HOME": str(tmp_path), "USERPROFILE": str(tmp_path)}
         p = subprocess.run(
             [sys.executable, "-m", "waystone._hooks.sessionstart"],
@@ -642,6 +648,7 @@ class TestSessionStartHook:
 class TestSessionPreview:
     def test_preview_returns_first_user_prompt(self, tmp_path):
         import json
+
         from waystone.cli import _session_preview
         f = tmp_path / "s.jsonl"
         f.write_text(
@@ -654,6 +661,7 @@ class TestSessionPreview:
 
     def test_preview_truncates_long_prompts(self, tmp_path):
         import json
+
         from waystone.cli import _session_preview
         f = tmp_path / "s.jsonl"
         long = "x" * 200
@@ -664,6 +672,7 @@ class TestSessionPreview:
 
     def test_preview_empty_when_no_user_turn(self, tmp_path):
         import json
+
         from waystone.cli import _session_preview
         f = tmp_path / "s.jsonl"
         f.write_text(json.dumps({"type": "assistant", "message": {"role": "assistant", "content": "hi"}}) + "\n",
@@ -739,6 +748,7 @@ class TestSessionSummaries:
 
     def test_summarize_session_no_baseurl_returns_empty(self):
         import asyncio
+
         from waystone.extractor import summarize_session
         assert asyncio.run(summarize_session("some text", {"llm": {}})) == ""
 
@@ -766,6 +776,7 @@ class TestAwaySummary:
 
     def test_extract_ai_title_variants(self, tmp_path):
         import json
+
         from waystone.transcript import extract_ai_title
         f = tmp_path / "t.jsonl"
         f.write_text(
@@ -815,7 +826,8 @@ class TestSummarizeSession:
         return f
 
     def test_timeline_supersede_keeps_history(self, tmp_path, monkeypatch):
-        from unittest.mock import AsyncMock, patch
+        from unittest.mock import patch
+
         from waystone.config import get_db_path
         from waystone.store import GraphStore
         # skip embedding for speed/determinism
@@ -844,6 +856,7 @@ class TestSummarizeSession:
 
     def test_dry_run_stores_nothing(self, tmp_path, monkeypatch):
         from unittest.mock import patch
+
         from waystone.config import get_db_path
         from waystone.store import GraphStore
         monkeypatch.setattr("waystone.embedder.is_available", lambda: False, raising=False)

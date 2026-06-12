@@ -4,14 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-import os
 import sqlite3
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from waystone.billing import (
-    TIERS,
     KEY_PREFIX,
     _hash_key,
     check_node_limit,
@@ -20,7 +18,6 @@ from waystone.billing import (
     generate_api_key,
     init_admin_db,
     log_usage,
-    open_admin_db,
     revoke_key,
     revoke_key_by_email,
     revoke_key_by_stripe_customer,
@@ -29,7 +26,6 @@ from waystone.billing import (
     validate_key,
     verify_stripe_signature,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

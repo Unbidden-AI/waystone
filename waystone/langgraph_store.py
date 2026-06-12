@@ -63,7 +63,7 @@ def _get_base_store():
 
 
 def _get_op_types():
-    from langgraph.store.base import GetOp, PutOp, SearchOp, ListNamespacesOp
+    from langgraph.store.base import GetOp, ListNamespacesOp, PutOp, SearchOp
     return GetOp, PutOp, SearchOp, ListNamespacesOp
 
 
@@ -422,7 +422,6 @@ class WaystoneStore(_get_base_store()):
 
         # Apply match_conditions
         if match_conditions:
-            from langgraph.store.base import MatchCondition
             filtered = []
             for ns in namespaces:
                 if _namespace_matches(ns, match_conditions):
@@ -549,9 +548,10 @@ def make_waystone_store(
         store = make_waystone_store(project="my-agent")
         graph = builder.compile(store=store)
     """
+    from pathlib import Path
+
     from waystone.config import get_db_path, load_config
     from waystone.store import GraphStore
-    from pathlib import Path
 
     if db_path:
         path = Path(db_path).expanduser()

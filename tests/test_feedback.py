@@ -3,16 +3,14 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 from click.testing import CliRunner
 
-from waystone.store import GraphStore
 from waystone.cli import cli
-
+from waystone.store import GraphStore
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -177,7 +175,7 @@ class TestGetFeedbackStats:
         store = _make_store(tmp_path)
         nid1 = _add_node(store, fact="a")
         nid2 = _add_node(store, fact="b")
-        nid3 = _add_node(store, fact="c")
+        _add_node(store, fact="c")
         store.add_feedback(nid1, rating=1)
         store.add_feedback(nid2, rating=-1)
         stats = store.get_feedback_stats()
@@ -284,8 +282,8 @@ def project_with_nodes(tmp_path):
     project_dir.mkdir()
 
     store = GraphStore(project_dir / "context.db")
-    nid1 = _add_node(store, fact="We chose PostgreSQL for ACID guarantees")
-    nid2 = _add_node(store, fact="Redis is used for caching")
+    _add_node(store, fact="We chose PostgreSQL for ACID guarantees")
+    _add_node(store, fact="Redis is used for caching")
     store.close()
 
     # Write a minimal config.yaml
@@ -377,7 +375,7 @@ class TestFeedbackCLI:
         result = runner.invoke(cli, ["--config", cfg, "feedback", project,
                                      "--export", str(out_file), "--only-up"])
         assert result.exit_code == 0
-        lines = [l for l in out_file.read_text().splitlines() if l.strip()]
+        lines = [ln for ln in out_file.read_text().splitlines() if ln.strip()]
         assert len(lines) == 1
         assert json.loads(lines[0])["label"] == 1
 
@@ -454,8 +452,8 @@ class TestAutoLabel:
         from waystone.feedback import auto_label
 
         store = _make_store(tmp_path)
-        nid1 = _add_node(store, fact="Fact 1")
-        nid2 = _add_node(store, fact="Fact 2")
+        _add_node(store, fact="Fact 1")
+        _add_node(store, fact="Fact 2")
 
         transcripts_dir = tmp_path / "transcripts"
         transcripts_dir.mkdir()
@@ -488,7 +486,7 @@ class TestAutoLabel:
         from waystone.feedback import auto_label
 
         store = _make_store(tmp_path)
-        nid = _add_node(store, fact="Test fact")
+        _add_node(store, fact="Test fact")
 
         transcripts_dir = tmp_path / "transcripts"
         transcripts_dir.mkdir()

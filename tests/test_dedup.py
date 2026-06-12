@@ -18,8 +18,7 @@ from __future__ import annotations
 
 import pytest
 
-from waystone.embedder import is_available, embed_text, cosine_similarity
-
+from waystone.embedder import cosine_similarity, embed_text, is_available
 
 pytestmark = pytest.mark.skipif(
     not is_available(),

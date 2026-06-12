@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import os
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -215,7 +214,6 @@ class GeminiNativeProvider(LLMProvider):
         """
         import re as _re
         try:
-            from google.api_core import exceptions as _gexc
             if hasattr(e, "trailing_metadata") and e.trailing_metadata:
                 for key, value in e.trailing_metadata:
                     if key.lower() == "retry-after":
@@ -327,8 +325,6 @@ class GeminiNativeProvider(LLMProvider):
 
         Batch results come back within 24 hours at 50% of normal cost.
         """
-        import json
-        import tempfile
 
         # Build JSONL inline requests
         inline_requests = []

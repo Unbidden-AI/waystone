@@ -8,15 +8,13 @@ are mocked to avoid real API calls.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from waystone.store import GraphStore
 from pilot.conversation import Conversation
-from pilot.types import Message, ToolCall
-
+from pilot.types import Message
+from waystone.store import GraphStore
 
 # ==============================================================================
 # Fixtures
@@ -150,7 +148,7 @@ async def test_context_retrieved_from_graph(conversation, real_store, minimal_cf
         mock_acompletion.return_value = response
 
         # Capture the messages kwarg
-        reply = await conversation.chat("What is the API rate limit?")
+        await conversation.chat("What is the API rate limit?")
 
         # Check that the system message contains graph context
         assert mock_acompletion.called

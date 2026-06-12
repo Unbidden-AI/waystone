@@ -27,7 +27,6 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-
 try:
     from waystone._io import force_utf8
     force_utf8()

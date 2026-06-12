@@ -1,10 +1,7 @@
 """Tests for pilot.llm_adapter — LLM call handling and tool schemas."""
 
-import asyncio
-import json
 import os
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -15,7 +12,7 @@ from pilot.llm_adapter import (
     build_tool_schemas,
     estimate_tokens,
 )
-from pilot.types import Message, ToolCall
+from pilot.types import Message
 
 # Prevent errors from missing tiktoken during tests
 _TIKTOKEN_UNAVAILABLE = True

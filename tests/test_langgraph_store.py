@@ -1,8 +1,6 @@
 """Tests for the LangGraph BaseStore adapter."""
 
 import asyncio
-import os
-import tempfile
 
 import pytest
 
@@ -10,9 +8,9 @@ pytest.importorskip("langgraph")  # optional dep — skip this module if not ins
 
 from waystone.langgraph_store import (
     WaystoneStore,
-    make_waystone_store,
     _decode_source,
     _encode_source,
+    make_waystone_store,
 )
 from waystone.store import GraphStore
 

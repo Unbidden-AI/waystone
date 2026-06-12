@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from pilot.conversation import (
     Conversation,
@@ -17,7 +18,6 @@ from pilot.types import (
     ToolCall,
     ToolResult,
 )
-
 
 # ===========================================================================
 # Fixtures
@@ -411,7 +411,7 @@ async def test_llm_loop_max_tool_rounds(conversation):
         ]
         conversation._context_mgr.touch = MagicMock()
 
-        reply = await conversation._llm_loop("System prompt", {})
+        await conversation._llm_loop("System prompt", {})
 
         # Should have made max_rounds + 1 call
         assert mock_llm.call_count == 5
