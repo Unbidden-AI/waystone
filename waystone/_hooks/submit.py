@@ -262,6 +262,13 @@ def main():
 
         config = load_config()
         project = _detect_project(cwd)
+
+        # Remote (Team Server) mode is a fully separate path — local users unaffected.
+        from waystone.config import is_remote
+        if is_remote(config):
+            _run_remote(config, project, prompt, transcript_path, session_id)
+            return
+
         db_path = get_db_path(config, project)
         paused = PAUSE_FILE.exists()
 
@@ -483,14 +490,20 @@ def _extract_new_inbox_attachments(
 
 def _spawn_extraction(
     text: str, project: str, db_path: Path, source: str, hints_path: Path | None = None,
-    session_id: str = "",
+    session_id: str = "", remote: bool = False,
 ) -> None:
-    """Fire-and-forget: spawn the extraction worker as a detached subprocess."""
+    """Fire-and-forget: spawn the extraction worker as a detached subprocess.
+
+    remote=True makes the worker POST to the Team Server instead of extracting
+    and merging into a local graph.
+    """
     try:
         cmd = [sys.executable, str(WORKER),
                "--project", project,
                "--db-path", str(db_path),
                "--source", source]
+        if remote:
+            cmd += ["--remote"]
         if hints_path is not None and hints_path.exists():
             cmd += ["--hints-path", str(hints_path)]
         if session_id:
@@ -551,6 +564,123 @@ def _read_recent_turns(transcript_path: str, n: int) -> str:
 
     tail = turns[-n:] if n < len(turns) else turns
     return "\n".join(tail)
+
+
+def _remote_state_path(project: str) -> Path:
+    """Client-side buffer/watermark for remote mode (no local graph DB)."""
+    safe = re.sub(r"[^A-Za-z0-9_.-]", "_", project) or "project"
+    return STATE_DIR / "remote" / f"{safe}.json"
+
+
+def _load_remote_state(project: str) -> dict:
+    try:
+        p = _remote_state_path(project)
+        if p.exists():
+            return json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return {}
+
+
+def _save_remote_state(project: str, state: dict) -> None:
+    try:
+        p = _remote_state_path(project)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(state), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _run_remote(config: dict, project: str, prompt: str,
+                transcript_path: str, session_id: str) -> None:
+    """Remote (Team Server) submit path — fully isolated from the local-store path.
+
+    READ: inject shared context via the API (/query). WRITE: extract the assistant's
+    new turn per-prompt and batch user prompts, both routed to the server via a
+    detached `--remote` worker. Buffer/watermark live in a small JSON file, so no
+    local graph DB is created. Always fail-open: never block the prompt.
+    """
+    import asyncio
+
+    from waystone.config import get_db_path, make_remote_client
+    from waystone.extractor import ExtractionBuffer
+
+    paused = PAUSE_FILE.exists()
+    db_path = get_db_path(config, project)  # local path for state files only (no graph)
+    inc_cfg = config.get("incremental", {})
+
+    if not paused:
+        state = _load_remote_state(project)
+
+        # Assistant's new turn → extract per-turn (mirrors the local path).
+        if transcript_path:
+            assistant_text, new_wm = _read_assistant_since(
+                transcript_path, int(state.get("watermark", 0)))
+            state["watermark"] = new_wm
+            if assistant_text:
+                _spawn_extraction(assistant_text, project, db_path,
+                                  source="assistant", session_id=session_id, remote=True)
+
+        # Buffer user prompts; flush to the server when the threshold is met.
+        buffer = ExtractionBuffer(
+            min_turns=inc_cfg.get("min_turns"),
+            min_words=inc_cfg.get("min_words"),
+            max_turns=inc_cfg.get("max_turns"),
+            short_turn_words=inc_cfg.get("short_turn_words"),
+        )
+        buffer._turns = list(state.get("buffer", []))
+        if buffer.add(prompt):
+            flushed = buffer.flush()
+            state["buffer"] = []
+            _spawn_extraction(flushed, project, db_path,
+                              source="live", session_id=session_id, remote=True)
+        else:
+            state["buffer"] = buffer._turns
+        _save_remote_state(project, state)
+
+    # Context injection from the shared graph. Cap the timeout HARD (~8s): this runs
+    # synchronously before the prompt reaches Claude, so a slow/hung server must never
+    # stall submission. The (backgrounded) extraction worker keeps the full timeout.
+    defaults = config.get("defaults", {})
+    _llm = config.get("llm", {})
+    hook_cfg = {**config, "llm": {**_llm, "timeout": min(_llm.get("timeout", 120.0), 8.0)}}
+    client = make_remote_client(hook_cfg)
+    try:
+        result = asyncio.run(client.query(
+            project, prompt,
+            hops=defaults.get("hops", 3), top_k=defaults.get("top_k", 25)))
+    except Exception:
+        sys.exit(0)  # fail-open — a server hiccup must never block the prompt
+
+    markdown = result.get("markdown", "")
+    nodes_returned = result.get("nodes_returned", 0)
+    total_nodes = result.get("total_nodes", 0)
+    tokens = result.get("tokens_estimated", 0)
+
+    _write_state({
+        "project": project,
+        "status": "paused" if paused else "ok",
+        "nodes_retrieved": nodes_returned,
+        "nodes_total": total_nodes,
+        "tokens_injected": tokens,
+        "remote": True,
+        "timestamp": time.time(),
+    }, session_id=session_id)
+
+    if nodes_returned == 0 or not markdown:
+        sys.exit(0)
+
+    preamble = (
+        f"[Waystone: retrieved {nodes_returned} of {total_nodes} graph nodes "
+        f"for project '{project}' (~{tokens} tokens, remote).]\n\n"
+    )
+    print(json.dumps({
+        "hookSpecificOutput": {
+            "hookEventName": "UserPromptSubmit",
+            "additionalContext": preamble + markdown,
+        }
+    }))
+    sys.exit(0)
 
 
 def _read_assistant_since(transcript_path: str, watermark: int) -> tuple[str, int]:

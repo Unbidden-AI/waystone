@@ -47,6 +47,9 @@ def main():
                         help="Path to session_state.md; bullets used to guide verification pass")
     parser.add_argument("--session-id", default="",
                         help="Claude Code session ID for per-session state files")
+    parser.add_argument("--remote", action="store_true",
+                        help="Post text to the Team Server (/extract) instead of "
+                             "extracting + merging locally")
     args = parser.parse_args()
 
     text = sys.stdin.read().strip()
@@ -61,6 +64,10 @@ def main():
         "extract_started_at": time.time(),
         "extract_source": args.source,
     }, session_id=args.session_id)
+
+    if args.remote:
+        _run_remote(args, text)
+        return
 
     try:
         from waystone.config import load_config
@@ -141,6 +148,38 @@ def main():
         except Exception:
             pass
 
+    except Exception as e:
+        _merge_state({
+            "extracting": False,
+            "extract_started_at": None,
+            "extract_error": str(e),
+        }, session_id=args.session_id)
+        sys.exit(1)
+
+
+def _run_remote(args, text: str) -> None:
+    """Remote (Team Server) extraction: POST the text to /extract; the server runs
+    the LLM and merges into the shared graph. No local store is opened."""
+    try:
+        from waystone.config import load_config, make_remote_client
+
+        config = load_config()
+        client = make_remote_client(config)
+        res = asyncio.run(client.extract(args.project, text, source_name=args.source))
+        # The /extract response carries nodes_extracted/edges_extracted (not a graph
+        # total), so we don't update nodes_total here — the next /query refreshes it.
+        _merge_state({
+            "extracting": False,
+            "extract_started_at": None,
+            "last_extract_nodes": res.get("nodes_extracted", 0),
+        }, session_id=args.session_id)
+        # last_extract_at lets the submit hook expire stale session-state entries.
+        try:
+            p = Path(args.db_path).parent
+            p.mkdir(parents=True, exist_ok=True)
+            (p / "last_extract_at").write_text(str(time.time()))
+        except Exception:
+            pass
     except Exception as e:
         _merge_state({
             "extracting": False,
