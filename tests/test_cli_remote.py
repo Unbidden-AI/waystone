@@ -34,6 +34,16 @@ def _fake_client(**methods):
 
 # --------------------------------------------------------------------------- switch
 
+def test_version_derives_from_package_metadata():
+    """The API /v1/health version must track the installed package, not a stale
+    hardcoded string (regression: it reported 0.2.0 while the package was 0.4.x)."""
+    from importlib.metadata import version
+
+    import waystone
+    assert waystone.__version__ == version("waystone")
+    assert waystone.__version__ != "0.2.0"
+
+
 def test_store_backend_env_override(tmp_path, monkeypatch):
     """The Team Server Docker image configures Postgres purely via env."""
     cfg = tmp_path / "config.yaml"
