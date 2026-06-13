@@ -73,8 +73,10 @@ def client(tmp_path, monkeypatch):
     monkeypatch.delenv("RESEND_API_KEY", raising=False)
     db = tmp_path / "admin.db"
     monkeypatch.setenv("CB_ADMIN_DB", str(db))
-    conn = sqlite3.connect(str(db)); conn.row_factory = sqlite3.Row
-    init_admin_db(conn); conn.close()
+    conn = sqlite3.connect(str(db))
+    conn.row_factory = sqlite3.Row
+    init_admin_db(conn)
+    conn.close()
     cfg = {"llm": {"base_url": "http://x", "model": "t"}, "defaults": {},
            "strategies": {}, "projects_dir": str(tmp_path / "p")}
     from waystone.api_server import app
