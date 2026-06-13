@@ -18,6 +18,7 @@ if you also want Claude's reply to succeed — NOT required for this check.
 Usage:  python ci/e2e_claude_hooks.py            # exit 0 = pass, 1 = fail
 """
 
+import json
 import subprocess
 import sys
 import tempfile
@@ -25,7 +26,12 @@ import time
 from pathlib import Path
 
 PROJECT = "waystone_e2e_smoke"
-SECRET = "FLINT-MEATBALL-7731"
+# A BENIGN, unguessable canary — NOT a credential. (A secret-shaped canary trips
+# Claude's anti-exfiltration safety: it reads the injected value but refuses to echo
+# it, which would make the optional reply check a false negative.)
+CANARY = "Gerald Snufflewump"
+FACT = f"The team mascot is a capybara named {CANARY}"
+QUESTION = "What is the team mascot's name? Reply in one short sentence."
 
 
 def _run(cmd, **kw):
@@ -47,9 +53,7 @@ def main() -> int:
     # Fresh project seeded with a secret only the graph could know.
     _run(["waystone", "reset", PROJECT, "--yes"])
     _run(["waystone", "init", PROJECT])
-    seed = _run(["waystone", "remember",
-                 f"The production deploy passphrase is {SECRET}",
-                 "--project", PROJECT])
+    seed = _run(["waystone", "remember", FACT, "--project", PROJECT])
     if seed.returncode != 0:
         print("FAIL: seed (waystone remember) failed:\n" + seed.stderr, file=sys.stderr)
         return 1
@@ -57,22 +61,33 @@ def main() -> int:
     work = Path(tempfile.mkdtemp())
     (work / ".waystone").write_text(PROJECT + "\n")
 
-    # Real headless Claude Code run. Model reply may fail on billing — that's fine,
-    # the hooks fire regardless; we ignore Claude's exit status and stdout.
-    _run(["claude", "-p",
-          "What is the production deploy passphrase? Reply with only the value.",
-          "--dangerously-skip-permissions"],
-         cwd=str(work), timeout=180)
+    # Real headless Claude Code run (JSON output to capture the reply + model).
+    claude = _run(["claude", "-p", QUESTION,
+                   "--output-format", "json", "--dangerously-skip-permissions"],
+                  cwd=str(work), timeout=180)
     time.sleep(3)  # let the Stop hook flush
 
     ok = True
+    # PRIMARY (billing-robust): the hook fires before the model call.
     last_ctx = proj_dir / "last_context.md"
-    if last_ctx.exists() and SECRET in last_ctx.read_text(encoding="utf-8", errors="replace"):
-        print("PASS: UserPromptSubmit injected the graph secret into last_context.md")
+    if last_ctx.exists() and CANARY in last_ctx.read_text(encoding="utf-8", errors="replace"):
+        print("PASS: UserPromptSubmit injected the graph fact into last_context.md")
     else:
         ok = False
-        print("FAIL: last_context.md missing or did not contain the injected secret "
+        print("FAIL: last_context.md missing or did not contain the injected fact "
               "(UserPromptSubmit hook did not fire / inject)", file=sys.stderr)
+
+    # BONUS (needs a funded key): did the model actually read + speak the injected fact?
+    try:
+        reply = json.loads(claude.stdout).get("result", "")
+        if CANARY in reply:
+            print("PASS: Claude's reply echoed the hook-injected fact (full loop)")
+        else:
+            print("INFO: model did not echo the fact (empty/credit-limited key, or "
+                  "phrased differently) — injection still proven above")
+    except Exception:
+        print("INFO: no parseable model reply (e.g. credit-limited key) — "
+              "injection still proven above")
 
     tdir = proj_dir / "transcripts"
     if tdir.exists() and any(tdir.iterdir()):
