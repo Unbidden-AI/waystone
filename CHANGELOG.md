@@ -6,6 +6,14 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.36] – 2026-06-13
+
+### Fixed
+
+- **`/v1/health` (and OpenAPI) reported a stale `version: 0.2.0`** while the package was 0.4.x — `waystone/__init__.__version__` was a hardcoded string. It now derives from the installed package metadata (single source of truth = `pyproject`), so the API server and CLI can never disagree about the version. Found during end-to-end validation of the published 0.4.35.
+
+---
+
 ## [0.4.35] – 2026-06-12
 
 ### Added
