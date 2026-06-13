@@ -4,6 +4,10 @@ All notable changes to Waystone are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **Sell self-hosted Team Server licenses via Stripe.** A purchase of the Team-license price (`STRIPE_TEAM_LICENSE_PRICE_ID`) makes the `/webhooks/stripe` handler mint a signed Ed25519 license token (seats from the checkout `seats` metadata, default 5) and email it — no API key; the customer runs their own server and the token is verified offline. The billing server holds the private signing key via `WAYSTONE_LICENSE_PRIVKEY` (or `_FILE`); if it's unset the webhook acks + logs loudly rather than 500. Backward-compatible: inert unless both env vars are set, and normal hosted-tier purchases are untouched. (`issue_license_from_env`, `is_team_license_price`, `send_license_email`.)
+
 ### Fixed
 
 - **README Claude Code hook setup was wrong** — it showed `waystone hook query my-project` / `waystone hook extract my-project`, but there is no `hook` subcommand (those fail). Corrected to run `waystone configure` (the auto-installer) or wire the real `waystone-hook-submit` / `waystone-hook-stop` console scripts. Verified the entrypoint end-to-end (stdin JSON → injected context).

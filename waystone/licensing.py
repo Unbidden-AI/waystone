@@ -132,6 +132,32 @@ def load_license() -> License | None:
     return verify_license(token)
 
 
+def issue_license_from_env(
+    *, seats: int, org: str = "", plan: str = "team", valid_days: int = 400,
+) -> str | None:
+    """Server-side mint: read the signing key from the environment and issue a license.
+
+    The billing server (which fulfils purchases) holds the PRIVATE key via
+    ``WAYSTONE_LICENSE_PRIVKEY`` (PEM) or ``WAYSTONE_LICENSE_PRIVKEY_FILE`` (path).
+    Returns the token, or ``None`` when no signing key is configured (caller should
+    log + alert rather than crash a webhook). ``valid_days`` defaults to ~13 months so
+    a yearly subscription has grace before the license cliff; pass 0 for perpetual.
+    """
+    from datetime import timedelta
+
+    priv = os.environ.get("WAYSTONE_LICENSE_PRIVKEY", "").strip()
+    if not priv:
+        pf = os.environ.get("WAYSTONE_LICENSE_PRIVKEY_FILE", "").strip()
+        if pf and Path(pf).exists():
+            priv = Path(pf).read_text(encoding="utf-8")
+    if not priv:
+        return None
+    now = datetime.now(timezone.utc)
+    expires = now + timedelta(days=int(valid_days)) if valid_days else None
+    return issue_license(priv, seats=seats, org=org, plan=plan,
+                         issued_at=now, expires_at=expires)
+
+
 def issue_license(
     private_key: str,
     *,

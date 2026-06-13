@@ -11,6 +11,10 @@ Environment variables:
   STRIPE_PRO_ANNUAL_PRICE_ID  — Stripe price ID for Pro annual
   STRIPE_TEAM_PRICE_ID     — Stripe price ID for Team monthly
   STRIPE_TEAM_ANNUAL_PRICE_ID — Stripe price ID for Team annual
+  STRIPE_TEAM_LICENSE_PRICE_ID — price ID(s), comma-separated, for the SELF-HOSTED
+                                 Team Server license (mints a signed token, not a key)
+  WAYSTONE_LICENSE_PRIVKEY / _FILE — Ed25519 PRIVATE signing key (PEM / path) used to
+                                 mint Team licenses on purchase (billing server only)
   RESEND_API_KEY           — Resend email API key (omit for dev/stdout mode)
 """
 
@@ -512,6 +516,70 @@ def tier_from_price(price_id: str) -> str:
     if price_id in pro_ids:
         return "pro"
     return "free"
+
+
+def is_team_license_price(price_id: str) -> bool:
+    """True if this Stripe price is a SELF-HOSTED Team Server license (not the hosted
+    Team API tier). Set ``STRIPE_TEAM_LICENSE_PRICE_ID`` (comma-separated for multiple
+    seat-count tiers)."""
+    if not price_id:
+        return False
+    ids = {p.strip() for p in os.environ.get("STRIPE_TEAM_LICENSE_PRICE_ID", "").split(",")} - {""}
+    return price_id in ids
+
+
+def send_license_email(email: str, token: str, seats: int,
+                       expires_at: str | None = None,
+                       admin_conn: sqlite3.Connection | None = None) -> None:
+    """Email a self-hosted Team Server license token to the customer (Resend; stdout
+    in dev). Mirrors send_key_email's delivery + dead-letter handling."""
+    subject = f"Your Waystone Team Server license ({seats} seats)"
+    exp_line = f"Valid until: {expires_at[:10]}\n\n" if expires_at else ""
+    body = (
+        "Hi,\n\n"
+        f"Thanks for purchasing a Waystone Team Server license — {seats} seats.\n\n"
+        f"{exp_line}"
+        "Set this token on your server, then `docker compose up`:\n\n"
+        f"  WAYSTONE_LICENSE={token}\n\n"
+        "Issue a key per teammate with:  waystone team issue <email>\n"
+        "Full setup: https://unbidden.ai/docs/team-server/\n\n"
+        "The license is verified offline on your own server — no phone-home.\n"
+        "Keep the token safe; contact support to re-issue.\n\n"
+        "— Waystone Team\n"
+    )
+
+    resend_key = os.environ.get("RESEND_API_KEY", "")
+    if not resend_key:
+        log.info("[DEV] Would send license email to %r: %s", email, subject)
+        print(f"[DEV] License email to {email}\n{subject}\n\n{body}")
+        return
+    try:
+        import httpx
+        resp = httpx.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {resend_key}"},
+            json={
+                "from": "Waystone <noreply@waystone.unbidden.ai>",
+                "to": [email],
+                "subject": subject,
+                "text": body,
+            },
+            timeout=10.0,
+        )
+        resp.raise_for_status()
+    except Exception as exc:
+        log.error("License email delivery failed for %r: %s", email, exc)
+        print(f"[WARN] License email delivery failed for {email!r}: {exc}")
+        if admin_conn is not None:
+            try:
+                admin_conn.execute(
+                    """INSERT INTO dead_letter_emails (email, api_key, tier, created_at, retry_count, last_attempt)
+                       VALUES (?, ?, ?, ?, 0, ?)""",
+                    (email, f"LICENSE:{token}", "team_license", time.time(), time.time()),
+                )
+                admin_conn.commit()
+            except Exception:
+                pass
 
 
 def revoke_key_by_stripe_customer(conn: sqlite3.Connection, stripe_customer_id: str) -> int:
