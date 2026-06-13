@@ -90,6 +90,19 @@ def test_register_convention():
     assert isinstance(ctx.registered, WaystoneMemoryProvider)
 
 
+def test_real_hermes_base_class_compatibility():
+    """When hermes-agent is actually installed, our provider must bind to and satisfy
+    its real MemoryProvider ABC — not just the test stub. Skips in CI (hermes absent);
+    runs on a hermes-runner. Verified live against hermes-agent 0.16.0."""
+    pytest.importorskip("agent", reason="hermes-agent not installed")
+    from agent.memory_provider import MemoryProvider
+
+    import hermes_plugin
+    assert hermes_plugin._get_base() is MemoryProvider
+    assert issubclass(hermes_plugin.WaystoneMemoryProvider, MemoryProvider)
+    hermes_plugin.WaystoneMemoryProvider()  # instantiates → no missing abstract methods
+
+
 def test_disabled_without_project(tmp_path, monkeypatch):
     monkeypatch.delenv("WAYSTONE_PROJECT", raising=False)
     cfg = tmp_path / "config.yaml"
