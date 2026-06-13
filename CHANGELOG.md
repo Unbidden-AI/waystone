@@ -4,6 +4,14 @@ All notable changes to Waystone are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **README Claude Code hook setup was wrong** — it showed `waystone hook query my-project` / `waystone hook extract my-project`, but there is no `hook` subcommand (those fail). Corrected to run `waystone configure` (the auto-installer) or wire the real `waystone-hook-submit` / `waystone-hook-stop` console scripts. Verified the entrypoint end-to-end (stdin JSON → injected context).
+
+### Tests
+
+- **Hermes Agent memory provider** (`hermes_plugin/`) now has coverage (was zero): the provider contract Hermes depends on — name, initialize, is_available, prefetch, the query/recall tools, tool schemas, and the `register()` convention — exercised against a real local graph.
+
 ---
 
 ## [0.4.36] – 2026-06-13

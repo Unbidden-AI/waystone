@@ -32,18 +32,39 @@ Restart your editor. `waystone_query`, `waystone_extract`, and `waystone_stats` 
 
 ### Option 2: Claude Code hooks (zero manual calls)
 
-Add to `~/.claude/settings.json`:
+Run the installer — it wires the hooks into `~/.claude/settings.json` for you:
+
+```bash
+waystone configure
+```
+
+Then mark a project directory so the hooks know which graph to use:
+
+```bash
+cd ~/code/my-project && waystone hook-init my-project
+```
+
+Context is injected automatically before every prompt (`UserPromptSubmit`), and facts
+are extracted automatically when Claude finishes (`Stop`). Verify any time with
+`waystone doctor`.
+
+<details>
+<summary>Manual setup (what <code>configure</code> writes)</summary>
+
+The hooks are pip-installed console scripts that read Claude Code's hook JSON on
+stdin — add to `~/.claude/settings.json`:
 
 ```json
 {
   "hooks": {
-    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "waystone hook query my-project" }] }],
-    "Stop": [{ "hooks": [{ "type": "command", "command": "waystone hook extract my-project" }] }]
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "waystone-hook-submit" }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "waystone-hook-stop" }] }]
   }
 }
 ```
 
-Context is injected automatically before every prompt. Facts are extracted automatically when Claude finishes.
+The project is auto-detected from the nearest `.waystone` marker (see `hook-init`).
+</details>
 
 ## Supported clients
 
