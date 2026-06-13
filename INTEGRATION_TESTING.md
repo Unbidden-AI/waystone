@@ -1,5 +1,20 @@
 # Integration Testing — real-product verification on self-hosted runners
 
+> **Status (2026-06-13): both Claude Code and Hermes e2e are AUTHORED + validated.**
+> Committed runner scripts:
+> - `ci/e2e_claude_hooks.py` — a real `claude -p` run; asserts the hooks injected a
+>   graph-only secret into `last_context.md` + saved a transcript. **Credit-robust:**
+>   the UserPromptSubmit hook fires *before* the model call, so injection is verifiable
+>   even when Claude's reply fails on billing (see the credit note below).
+> - `ci/e2e_hermes_provider.py` — binds the provider to **real hermes-agent**'s
+>   `MemoryProvider` ABC, instantiates it, and asserts prefetch injects (validated
+>   against `hermes-agent==0.16.0`; PyPI package name is `hermes-agent`).
+>
+> **⚠ Anthropic credit:** on the dev box, headless `claude -p` returned *"Credit balance
+> is too low"* — it auths via the `ANTHROPIC_API_KEY` env (pay-go), which is empty.
+> The injection check passes anyway (hook runs pre-model). To also get Claude's *reply*
+> green (and any token-spending e2e), top up that key on the runner.
+
 Waystone's CI has two tiers, split by whether a test can run on a blank machine:
 
 | Tier | Runs where | Needs | What it proves |
@@ -77,7 +92,14 @@ Gate it to **release or nightly**, not every commit — it makes real, paid API 
 
 ---
 
-## 3. The e2e check itself (`ci/e2e_claude_hooks.py` — to author + validate on the runner)
+## 3. The e2e check itself (`ci/e2e_claude_hooks.py` — AUTHORED + validated 2026-06-13)
+
+`ci/e2e_claude_hooks.py` implements **Strategy A** below, improved to be **billing-robust**:
+it seeds a graph-only secret, runs a real `claude -p`, and asserts the secret landed in
+`<projects_dir>/<proj>/last_context.md`. Because UserPromptSubmit fires *before* the model
+call, this passes even when Claude's reply errors on credit — so it proves
+retrieval+injection without spending a token. (A separate run with a funded key confirms
+the model then *reads* the injected secret.) Run it: `python ci/e2e_claude_hooks.py`.
 
 Goal: prove Claude Code actually *fires our hooks* during a real run — the one thing the hermetic synthetic-payload smoke can't. Two viable strategies:
 
@@ -119,9 +141,27 @@ All three support headless/server auth, so a per-product runner is feasible. Aut
 
 | Product | Headless auth | Runner | e2e |
 |---------|---------------|--------|-----|
-| Claude Code | ✅ API key / token in env (`ANTHROPIC_API_KEY`) | `claude-runner` | this doc |
-| Hermes Agent | ✅ API keys + `.env` env vars; runs as a background service (`hermes gateway install` → systemd); also Codex OAuth | `hermes-runner` (TBD) | TBD |
-| OpenClaw | ✅ device-pairing + cryptographic **Ed25519 token** handshake with the gateway; tokens rotatable/revocable via CLI | `openclaw-runner` (TBD) | TBD |
+| Claude Code | ✅ API key / token in env (`ANTHROPIC_API_KEY`) | `claude-runner` | ✅ `ci/e2e_claude_hooks.py` (validated; reply needs a funded key) |
+| Hermes Agent | ✅ API keys + `.env` env vars; runs as a background service (`hermes gateway install` → systemd); also Codex OAuth | `hermes-runner` | ✅ `ci/e2e_hermes_provider.py` (validated vs `hermes-agent==0.16.0`) |
+| OpenClaw | ✅ device-pairing + cryptographic **Ed25519 token** handshake with the gateway; tokens rotatable/revocable via CLI | `openclaw-runner` (TBD) | unit-covered (`tests/test_openclaw.py`, 42 tests); real-runner TBD |
+
+**Hermes runner job** (gate to release/nightly; `hermes-runner` label):
+
+```yaml
+  integration-hermes:
+    name: E2E — Waystone provider loads in real Hermes
+    needs: publish
+    runs-on: [self-hosted, hermes-runner]
+    steps:
+      - uses: actions/checkout@v4                 # repo root has hermes_plugin/
+      - run: pip install hermes-agent "waystone==${GITHUB_REF_NAME#v}"
+      - run: python ci/e2e_hermes_provider.py
+```
+
+**To activate Waystone in a real Hermes install** (not auto-listed in `hermes memory setup`):
+drop the plugin at `~/.hermes/plugins/memory/waystone/` and set `memory.provider: waystone`
+in the Hermes config. Hermes discovers memory plugins via `plugins.memory` (built-ins:
+honcho/openviking/mem0/hindsight/holographic/retaindb/byterover).
 
 **Setup nuance per product:**
 - **Hermes** is the simplest — same shape as Claude (API key / `.env`), plus a `systemd` background-service install for 24/7. Wire the extraction LLM key + the Hermes auth env vars on the runner.
@@ -132,5 +172,6 @@ All three support headless/server auth, so a per-product runner is feasible. Aut
 ## Recommended path
 
 1. **Now:** keep the hermetic post-publish smoke (`selfcheck --deep`) — it already catches install/packaging/hook-execution/MCP bugs on every release.
-2. **When ready to automate real Claude e2e:** stand up one `claude-runner`, author + validate `ci/e2e_claude_hooks.py`, add the `integration-claude` job gated to release/nightly.
-3. **As OpenClaw/Hermes integrations mature:** confirm headless auth, then add a runner + job per product.
+2. **Claude e2e — script done (`ci/e2e_claude_hooks.py`).** Stand up a `claude-runner`, **top up the `ANTHROPIC_API_KEY`** so the model reply (not just injection) is exercised, then add the `integration-claude` job gated to release/nightly.
+3. **Hermes e2e — script done (`ci/e2e_hermes_provider.py`).** Stand up a `hermes-runner` (`pip install hermes-agent`), add the `integration-hermes` job. The same check also runs in the unit suite as `tests/test_hermes_plugin.py::test_real_hermes_base_class_compatibility` (auto-skips when hermes-agent is absent), so any box with Hermes installed exercises it for free.
+4. **OpenClaw:** unit-covered today (42 tests); add an `openclaw-runner` + real e2e when its integration matures (needs the Ed25519 device-pairing token as a runner secret).
