@@ -829,6 +829,7 @@ async def stripe_webhook(request: Request) -> dict:
 
         # Payment Links don't embed metadata.price_id — fall back to fetching
         # the first line item from the Stripe API to determine the price.
+        line_qty = 0  # checkout line-item quantity (→ seats for adjustable-quantity links)
         if not price_id:
             secret_key = os.environ.get("STRIPE_SECRET_KEY", "")
             session_id = obj.get("id", "")
@@ -838,6 +839,10 @@ async def stripe_webhook(request: Request) -> dict:
                     _stripe.api_key = secret_key
                     items = _stripe.checkout.Session.list_line_items(session_id, limit=1)
                     if items and items.data:
+                        try:
+                            line_qty = int(items.data[0].quantity or 0)
+                        except (TypeError, ValueError):
+                            line_qty = 0
                         price_obj = items.data[0].price
                         if price_obj:
                             price_id = price_obj.id
@@ -857,14 +862,17 @@ async def stripe_webhook(request: Request) -> dict:
         # "team" API tier handled below.
         if is_team_license_price(price_id):
             from .licensing import issue_license_from_env, verify_license
+            # Seats: explicit `seats` metadata wins; else the purchased quantity
+            # (adjustable-quantity links → seats = quantity); else the default.
             try:
                 seats = int(str(metadata.get("seats", "")).strip() or 0)
             except ValueError:
                 seats = 0
+            if seats <= 0 and line_qty > 0:
+                seats = line_qty
             if seats <= 0:
-                log.warning("Team license for %s: missing/invalid seats metadata %r — "
-                            "defaulting to %d", email, metadata.get("seats"),
-                            _DEFAULT_LICENSE_SEATS)
+                log.warning("Team license for %s: no seats from metadata or quantity — "
+                            "defaulting to %d", email, _DEFAULT_LICENSE_SEATS)
                 seats = _DEFAULT_LICENSE_SEATS
             # NOTE: like the API-key path below, this is not idempotent — a duplicate
             # Stripe delivery mints a second (equally valid) license. Acceptable for now

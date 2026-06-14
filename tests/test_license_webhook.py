@@ -136,6 +136,39 @@ def test_purchase_defaults_seats_when_unset(client, signing):
     assert r.json()["license_seats"] == _DEFAULT_LICENSE_SEATS
 
 
+def test_seats_from_checkout_quantity(client, signing, monkeypatch):
+    """Adjustable-quantity links: no `seats` metadata → seats = purchased quantity."""
+    import sys
+    import types
+    fake = types.ModuleType("stripe")
+
+    class _Price:
+        id = LICENSE_PRICE
+
+    class _Item:
+        quantity = 15
+        price = _Price()
+
+    class _Items:
+        data = [_Item()]
+
+    fake.checkout = types.SimpleNamespace(
+        Session=types.SimpleNamespace(list_line_items=lambda sid, limit=1: _Items()))
+    monkeypatch.setitem(sys.modules, "stripe", fake)
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_x")
+
+    payload = {"type": "checkout.session.completed", "data": {"object": {
+        "customer_email": "q@example.com", "customer": "cus_q",
+        "id": "cs_test", "metadata": {}}}}  # no price_id, no seats → triggers fetch
+    with patch("waystone.api_server.send_license_email", lambda *a, **k: None):
+        body = json.dumps(payload).encode()
+        r = client.post("/webhooks/stripe", content=body,
+                        headers={"Content-Type": "application/json",
+                                 "Stripe-Signature": _sign(body)})
+    assert r.status_code == 200, r.text
+    assert r.json()["license_seats"] == 15
+
+
 def test_purchase_without_signing_key_is_deferred(client, monkeypatch):
     monkeypatch.delenv("WAYSTONE_LICENSE_PRIVKEY", raising=False)
     monkeypatch.delenv("WAYSTONE_LICENSE_PRIVKEY_FILE", raising=False)
