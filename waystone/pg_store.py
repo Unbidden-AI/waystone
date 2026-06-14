@@ -17,7 +17,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import struct
+import threading
 from datetime import datetime, timezone
 
 from .store import (
@@ -41,6 +43,11 @@ except Exception:  # pragma: no cover - import guard
     register_vector = None
     Vector = None
     _PSYCOPG_OK = False
+
+try:
+    from psycopg_pool import ConnectionPool  # the `team` extra
+except Exception:  # pragma: no cover
+    ConnectionPool = None
 
 
 def _blob_to_vec(blob: bytes):
@@ -72,6 +79,49 @@ def _writes(method):
 # kind of thing that hangs a server when a stray connection holds a lock.
 _SCHEMA_READY: set = set()
 
+# Process-wide connection pool per DSN. The server opens many short-lived stores
+# (one per request); a pool reuses warm connections instead of connect-and-discard,
+# which keeps latency low and avoids exhausting Postgres `max_connections` under a
+# busy team. Opt out with WAYSTONE_PG_POOL=0; size with WAYSTONE_PG_POOL_MAX.
+_POOLS: dict = {}
+# Guards first-touch creation of _POOLS[dsn] and the one-time _init_schema per DSN —
+# the server runs sync endpoints in a threadpool, so concurrent first requests for a
+# DSN must not both create a pool (leaking one) or both run schema DDL.
+_INIT_LOCK = threading.Lock()
+
+
+def _pooling_enabled() -> bool:
+    return ConnectionPool is not None and os.environ.get(
+        "WAYSTONE_PG_POOL", "1").lower() not in ("0", "false", "no")
+
+
+def _get_pool(dsn: str):
+    """Return (creating once) the shared ConnectionPool for `dsn`. Each physical
+    connection is configured with dict rows + pgvector adaptation via `configure`."""
+    pool = _POOLS.get(dsn)
+    if pool is not None:
+        return pool
+    with _INIT_LOCK:
+        pool = _POOLS.get(dsn)  # double-checked under the lock
+        if pool is not None:
+            return pool
+
+        def _configure(conn):
+            conn.row_factory = dict_row
+            if register_vector is not None:
+                # Let a failure propagate — the pool rejects the connection rather
+                # than handing out one that can't adapt vectors.
+                register_vector(conn)
+
+        max_size = int(os.environ.get("WAYSTONE_PG_POOL_MAX", "10"))
+        pool = ConnectionPool(
+            dsn, min_size=1, max_size=max_size,
+            kwargs={"autocommit": False, "row_factory": dict_row},
+            configure=_configure, open=True, name="waystone",
+        )
+        _POOLS[dsn] = pool
+        return pool
+
 # Per-type half-lives for proactive staleness detection (mirror of GraphStore's).
 _INVALIDATION_HALF_LIVES = {
     "transition": 14, "question": 30, "implementation": 60, "process": 90,
@@ -99,11 +149,23 @@ class PostgresGraphStore:
             from . import embedder
             embedding_dim = embedder.get_embedding_dim()
         self._dim = int(embedding_dim)
-        self.conn = psycopg.connect(dsn, row_factory=dict_row, autocommit=False)
-        if dsn not in _SCHEMA_READY:
-            self._init_schema()        # once per process+DSN (idempotent DDL)
-            _SCHEMA_READY.add(dsn)
-        register_vector(self.conn)     # adapt pgvector <-> Python lists
+        self._pool = _get_pool(dsn) if _pooling_enabled() else None
+        if self._pool is not None:
+            # Borrowed conn already has dict rows + pgvector (pool `configure`).
+            self.conn = self._pool.getconn()
+        else:
+            self.conn = psycopg.connect(dsn, row_factory=dict_row, autocommit=False)
+            register_vector(self.conn)  # adapt pgvector <-> Python lists
+        try:
+            if dsn not in _SCHEMA_READY:
+                with _INIT_LOCK:
+                    if dsn not in _SCHEMA_READY:  # double-checked under the lock
+                        self._init_schema()       # once per process+DSN (idempotent DDL)
+                        _SCHEMA_READY.add(dsn)
+        except Exception:
+            # Don't leak the just-borrowed connection if schema init fails.
+            self.close()
+            raise
 
     # ------------------------------------------------------------------ schema
     def _init_schema(self) -> None:
@@ -873,7 +935,24 @@ class PostgresGraphStore:
             return [r["id"] for r in cur.fetchall()]
 
     def close(self) -> None:
+        conn = getattr(self, "conn", None)
+        if conn is None:
+            return
+        pool = getattr(self, "_pool", None)
+        if pool is not None:
+            # Roll back any open transaction so the next borrower never inherits a
+            # dirty/aborted one (a no-op after a committed write). A broken conn is
+            # detected + discarded by the pool on putconn.
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            try:
+                pool.putconn(conn)
+                return  # the pool owns it now — do NOT also close it
+            except Exception:
+                pass  # putconn failed → it wasn't returned; hard-close as cleanup
         try:
-            self.conn.close()
+            conn.close()
         except Exception:
             pass
