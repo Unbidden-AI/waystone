@@ -6,6 +6,14 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.38] – 2026-06-14
+
+### Fixed
+
+- **Fresh-database Postgres Team Server failed on first graph use (`PoolTimeout`).** The connection pool's `configure` callback registers the pgvector type via `register_vector()`, which looks up the `vector` type in the database — but on a brand-new database the `vector` extension isn't created until schema init, which itself needs a pooled connection. That chicken-and-egg made every pooled connection fail to configure, and the pool timed out after 30s on the buyer's first `extract`/`query` (health checks and `team` commands hit SQLite, so `docker compose up` looked healthy and the failure only surfaced on first real graph work). Now the `vector` extension is bootstrapped once — on a throwaway autocommit connection before the pool opens, and before `register_vector` on the non-pooled path — so a fresh self-hosted server works on first use. Caught by CI's fresh-DB run; verified against a clean pgvector database (29 Postgres tests pass in <1s, previously 30s timeouts each).
+
+---
+
 ## [0.4.37] – 2026-06-14
 
 ### Added

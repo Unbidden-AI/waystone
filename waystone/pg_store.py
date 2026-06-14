@@ -106,6 +106,17 @@ def _get_pool(dsn: str):
         if pool is not None:
             return pool
 
+        # Ensure pgvector exists BEFORE the pool hands out any connection. The
+        # `configure` callback below calls register_vector(), which looks up the
+        # `vector` type — on a fresh database that type doesn't exist until
+        # CREATE EXTENSION runs, but schema init needs a pooled connection first.
+        # That chicken-and-egg made every pooled connection fail to configure and
+        # the pool time out (PoolTimeout) on a brand-new server. Bootstrap it once
+        # here, on a throwaway autocommit connection, so register_vector succeeds.
+        if register_vector is not None:
+            with psycopg.connect(dsn, autocommit=True) as _boot:
+                _boot.execute("CREATE EXTENSION IF NOT EXISTS vector")
+
         def _configure(conn):
             conn.row_factory = dict_row
             if register_vector is not None:
@@ -155,6 +166,12 @@ class PostgresGraphStore:
             self.conn = self._pool.getconn()
         else:
             self.conn = psycopg.connect(dsn, row_factory=dict_row, autocommit=False)
+            # The vector type must exist before register_vector can look it up —
+            # create the extension first so a fresh database works on first use
+            # (mirrors the pooled path's bootstrap).
+            with self.conn.cursor() as _cur:
+                _cur.execute("CREATE EXTENSION IF NOT EXISTS vector")
+            self.conn.commit()
             register_vector(self.conn)  # adapt pgvector <-> Python lists
         try:
             if dsn not in _SCHEMA_READY:
