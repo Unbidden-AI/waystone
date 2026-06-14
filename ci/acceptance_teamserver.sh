@@ -8,12 +8,15 @@
 #   ci/acceptance_teamserver.sh --full    # also areas 4-6 (real extraction = LLM cost)
 #
 # Env:
-#   WAYSTONE_IMAGE   server image to test (default: ghcr.io/unbidden-ai/waystone-server:latest)
-#   LLM_API_KEY      required for --full (or GEMINI_API_KEY); the server's extraction key
-#   ACCEPT_PORT      host port base (default 8097)
+#   WAYSTONE_IMAGE     server image to test (default: ghcr.io/unbidden-ai/waystone-server:latest)
+#   LLM_API_KEY        required for --full (or GEMINI_API_KEY); the server's extraction key
+#   ACCEPT_PORT        host port base (default 8097; uses base..base+3)
+#   ACCEPT_PREV_IMAGE  the "from" image for the upgrade test (default :0.4.38)
 #
-# Structural areas (always): 1 boot & safety, 2 auth, 3 licensing & seats, 7 persistence.
-# Full areas (--full):       4 multiplayer (shared graph), 5 tenant isolation, 6 remote-client wiring.
+# Structural areas (always): 1 boot & safety, 2 auth, 3 licensing & seats, 7 persistence,
+#                            8 concurrency (pool under load), 9 shared-key mode, 10 expired license.
+# Full areas (--full):       4 multiplayer (shared graph), 5 tenant isolation,
+#                            6 remote-client wiring, 11 upgrade path (data survives a version bump).
 # Exit code is non-zero if any area fails.
 # NOTE: deliberately NOT using `pipefail` — several checks pipe a long/streaming
 # producer (e.g. `docker compose logs`) into `grep -q`, which closes the pipe on
@@ -29,6 +32,7 @@ IMAGE="${WAYSTONE_IMAGE:-ghcr.io/unbidden-ai/waystone-server:latest}"
 LLM_KEY="${LLM_API_KEY:-${GEMINI_API_KEY:-}}"
 FULL=0; [ "${1:-}" = "--full" ] && FULL=1
 WORK="$(mktemp -d)"
+SIGNKEY="${WAYSTONE_LICENSE_PRIVKEY_FILE:-$HOME/.waystone/license_signing_key.pem}"
 PASS=0; FAIL=0
 
 c_g="\033[32m"; c_r="\033[31m"; c_b="\033[1m"; c_0="\033[0m"
@@ -37,7 +41,30 @@ bad()  { FAIL=$((FAIL+1)); echo -e "  ${c_r}✗ $1${c_0}"; }
 area() { echo -e "\n${c_b}── $1${c_0}"; }
 
 compose() { docker compose -p "$PROJ" --env-file "$WORK/.env" -f "$COMPOSE" "$@"; }
-cleanup() { compose down -v >/dev/null 2>&1 || true; rm -rf "$WORK"; }
+
+# Independent stacks (shared-key / expired-license / upgrade) on their own project
+# name + port + env file, so they can run without colliding with the main instance.
+alt_up() {  # <proj> <port> <license> <apikey> [image]
+  cat > "$WORK/$1.env" <<EOF
+WAYSTONE_IMAGE=${5:-$IMAGE}
+WAYSTONE_PORT=$2
+WAYSTONE_LICENSE=${3:-}
+WAYSTONE_API_KEY=${4:-}
+LLM_API_KEY=${LLM_KEY:-dummy-not-used-by-structural-tests}
+EOF
+  docker compose -p "$1" --env-file "$WORK/$1.env" -f "$COMPOSE" up -d >/dev/null 2>&1
+}
+alt() { docker compose -p "$1" --env-file "$WORK/$1.env" -f "$COMPOSE" "${@:2}"; }
+alt_health() { for _ in $(seq 1 40); do curl -sf "http://localhost:$1/v1/health" >/dev/null 2>&1 && return 0; sleep 2; done; return 1; }
+
+ALT_PROJECTS="ws_accept_shared ws_accept_expired ws_accept_upgrade"
+cleanup() {
+  compose down -v >/dev/null 2>&1 || true
+  for p in $ALT_PROJECTS; do
+    LLM_API_KEY=x docker compose -p "$p" -f "$COMPOSE" down -v >/dev/null 2>&1 || true
+  done
+  rm -rf "$WORK"
+}
 trap cleanup EXIT
 
 write_env() {  # $1=license $2=apikey  (LLM key + image + port always included)
@@ -121,6 +148,19 @@ compose restart server >/dev/null 2>&1; wait_health || true
 after="$(compose exec -T server waystone team members 2>/dev/null | grep -c @ || echo 0)"
 [ "$after" -ge "$before" ] && [ "$before" -gt 0 ] && ok "issued seats survive a restart ($before → $after members)" || bad "seats lost across restart ($before → $after)"
 
+# ── Area 8: concurrency (connection pool under load) ────────────────────────
+area "8. Concurrency (connection pool under load)"
+# Fire 20 simultaneous queries (each opens a store → borrows a pooled connection).
+# A broken/undersized pool would 500 or hang; a healthy one serves them all.
+rm -f "$WORK"/conc.* 2>/dev/null
+for i in $(seq 1 20); do
+  ( c="$(code -X POST -H "Authorization: Bearer $ALICE" -H 'Content-Type: application/json' \
+       -d '{"task":"concurrent load probe"}' "$URL/v1/projects/loadtest/query")"; echo "$c" > "$WORK/conc.$i" ) &
+done
+wait
+n200="$(cat "$WORK"/conc.* 2>/dev/null | grep -c '^200$')"
+[ "$n200" -eq 20 ] && ok "20 concurrent queries all returned 200 (no pool exhaustion)" || bad "concurrency: only $n200/20 returned 200"
+
 # ── Full areas (real extraction) ────────────────────────────────────────────
 if [ "$FULL" = "1" ]; then
   if [ -z "$LLM_KEY" ]; then
@@ -147,24 +187,87 @@ if [ "$FULL" = "1" ]; then
 
     area "6. Remote-client wiring (waystone CLI → server)"
     if command -v waystone >/dev/null; then
-      export HOME="$WORK/home"; mkdir -p "$HOME/.waystone"   # temp HOME: never touches the real config
-      cat > "$HOME/.waystone/config.yaml" <<EOF
+      CH="$WORK/clienthome"; mkdir -p "$CH/.waystone"   # a temp HOME for the client config
+      cat > "$CH/.waystone/config.yaml" <<EOF
 backend: remote
 api_url: $URL
 api_key: $ALICE
 EOF
-      # Run from a clean dir: a stray ./config.yaml in CWD (e.g. the repo's own)
-      # would shadow the temp-HOME remote config and route the CLI locally.
-      ( cd "$HOME"
+      # HOME is overridden ONLY inside these subshells (never the parent — leaking it
+      # breaks docker's daemon context + Path.home() for later areas). Run from $CH so
+      # a stray ./config.yaml in CWD (e.g. the repo's own) can't shadow the remote config.
+      ( export HOME="$CH"; cd "$CH"
         echo "We standardized on Kafka for the event bus across all services." > note.txt
         waystone extract cli-demo note.txt >/dev/null 2>&1 ) \
         && ok "waystone extract (backend: remote) routes to the server" || bad "remote extract via CLI failed"
-      ( cd "$HOME"; waystone query cli-demo "what did we use for the event bus" 2>/dev/null ) | grep -qi kafka \
+      ( export HOME="$CH"; cd "$CH"; waystone query cli-demo "what did we use for the event bus" 2>/dev/null ) | grep -qi kafka \
         && ok "waystone query (backend: remote) retrieves from the team graph" || bad "remote query via CLI failed"
     else bad "waystone CLI not on PATH — cannot test client wiring"; fi
   fi
 else
   echo -e "\n${c_b}── 4-6. Full extraction tests skipped${c_0} (pass --full to run; uses your LLM key)"
+fi
+
+# Main instance done — free it before the independent-stack tests below.
+compose down -v >/dev/null 2>&1
+
+# ── Area 9: shared-key mode (one key for the whole team) ────────────────────
+area "9. Shared-key mode (one shared key, no license)"
+SK="waystone_sharedkey_$$_${RANDOM}"
+alt_up ws_accept_shared $((PORT+1)) "" "$SK"
+if alt_health $((PORT+1)); then ok "boots with a shared API key (no license)"; else bad "shared-key server did not become healthy"; fi
+[ "$(code -H "Authorization: Bearer $SK" "http://localhost:$((PORT+1))/v1/projects")" = "200" ] \
+  && ok "the shared key authenticates" || bad "shared key was rejected"
+[ "$(code -H "Authorization: Bearer waystone_wrong" "http://localhost:$((PORT+1))/v1/projects")" = "401" ] \
+  && ok "a different key is rejected" || bad "wrong key accepted in shared-key mode"
+alt ws_accept_shared down -v >/dev/null 2>&1
+
+# ── Area 10: expired license (fail-closed) ──────────────────────────────────
+area "10. Expired license (fail-closed)"
+EXP="$(SIGNKEY="$SIGNKEY" python3.13 - <<'PY'
+import os
+from pathlib import Path
+from datetime import datetime, timezone, timedelta
+kf = Path(os.environ["SIGNKEY"])
+if not kf.exists():
+    print(""); raise SystemExit
+from waystone.licensing import issue_license
+now = datetime.now(timezone.utc)
+print(issue_license(kf.read_text(encoding="utf-8"), seats=9, org="expired", plan="team",
+                    issued_at=now - timedelta(days=400), expires_at=now - timedelta(days=1)))
+PY
+)"
+if [ -z "$EXP" ]; then bad "no signing key — cannot mint an expired license"; else
+  alt_up ws_accept_expired $((PORT+2)) "$EXP" ""
+  if alt_health $((PORT+2)); then ok "server still boots with an expired license (no crash)"; else bad "expired-license server did not boot"; fi
+  out="$(alt ws_accept_expired exec -T server waystone team license 2>&1)"
+  echo "$out" | grep -qi "expire" \
+    && ok "expired license is refused — its 9 seats are NOT granted (fail-closed)" \
+    || bad "expired license not rejected (got: $(echo "$out" | head -1))"
+  alt ws_accept_expired down -v >/dev/null 2>&1
+fi
+
+# ── Area 11: upgrade path (full — writes data) ──────────────────────────────
+if [ "$FULL" = "1" ] && [ -n "$LLM_KEY" ]; then
+  area "11. Upgrade path (data survives a version upgrade)"
+  PREV="${ACCEPT_PREV_IMAGE:-ghcr.io/unbidden-ai/waystone-server:0.4.38}"
+  UK="waystone_upgrade_$$_${RANDOM}"; UP=$((PORT+3)); UURL="http://localhost:$UP"
+  # Shared-key mode keeps tenancy stable across versions (no per-key prefixing).
+  alt_up ws_accept_upgrade $UP "" "$UK" "$PREV"
+  if alt_health $UP; then
+    code -X POST -H "Authorization: Bearer $UK" -H 'Content-Type: application/json' \
+      -d '{"text":"We deployed the platform on Kubernetes in the us-west-2 region."}' \
+      "$UURL/v1/projects/up-demo/extract" >/dev/null
+    # Upgrade in place: stop containers but KEEP the volumes (no -v), then up on latest.
+    alt ws_accept_upgrade down >/dev/null 2>&1
+    alt_up ws_accept_upgrade $UP "" "$UK" "$IMAGE"
+    if alt_health $UP; then
+      curl -s -X POST -H "Authorization: Bearer $UK" -H 'Content-Type: application/json' \
+        -d '{"task":"where did we deploy the platform"}' "$UURL/v1/projects/up-demo/query" | grep -qi kubernetes \
+        && ok "data written on $PREV survives the upgrade to this image" || bad "data lost across the upgrade"
+    else bad "server did not come back up after the upgrade"; fi
+  else bad "previous image ($PREV) did not boot"; fi
+  alt ws_accept_upgrade down -v >/dev/null 2>&1
 fi
 
 echo -e "\n${c_b}Result: ${c_g}$PASS passed${c_0}, $( [ "$FAIL" -gt 0 ] && echo -e "${c_r}$FAIL failed${c_0}" || echo "0 failed" )"
