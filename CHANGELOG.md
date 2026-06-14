@@ -4,7 +4,16 @@ All notable changes to Waystone are documented here.
 
 ## [Unreleased]
 
+---
+
+## [0.4.37] – 2026-06-14
+
 ### Added
+
+- **Frictionless buyer onboarding for the self-hosted Team Server.** A license now auto-enables per-seat mode: pasting `WAYSTONE_LICENSE` is the only thing a buyer sets — no need to also flip `CB_USE_ADMIN_DB` or invent a throwaway shared key (`_use_admin_db()` falls back to license presence; an explicit `CB_USE_ADMIN_DB` still wins, so the hosted billing server is unaffected). The container **refuses to boot wide-open** — if neither a license nor a `WAYSTONE_API_KEY` is set, the entrypoint exits with the exact one-line fix instead of silently serving unauthenticated. `.env.example` rewritten buyer-first (and dropped stale LemonSqueezy config).
+- **Pre-built Team Server image (no clone, no build).** `publish-image.yml` builds and pushes a multi-arch `ghcr.io/<org>/waystone-server` image on `v*` tags; the `deploy/` bundle (`docker-compose.yml` + `env.example`) lets a buyer `docker compose up` against the published image with no source checkout. `docs/team-server.md` leads with this path; building from source remains supported via the repo's root compose.
+
+### Added (continued)
 
 - **Connection pooling for the Postgres Team backend.** The Team Server opened a new database connection per request; under a busy team that adds latency and risks exhausting Postgres `max_connections`. `PostgresGraphStore` now borrows from a process-wide `psycopg_pool` pool per DSN (warm, reused connections; `register_vector` applied per physical connection via the pool's `configure`). Thread-safe first-touch (lock-guarded pool + one-time schema DDL — the server runs sync endpoints in a threadpool); connections are rolled back + returned on `close()`, never leaked on a failed init. Opt out with `WAYSTONE_PG_POOL=0`; size with `WAYSTONE_PG_POOL_MAX` (default 10). Adds `psycopg-pool` to the `team` extra.
 - **Sell self-hosted Team Server licenses via Stripe.** A purchase of the Team-license price (`STRIPE_TEAM_LICENSE_PRICE_ID`) makes the `/webhooks/stripe` handler mint a signed Ed25519 license token and email it — no API key; the customer runs their own server and the token is verified offline. Seats resolve from the checkout `seats` metadata → purchased **quantity** (so one per-seat price with adjustable quantity just works) → default 5. **Subscription renewals** (`invoice.paid`, `billing_reason=subscription_cycle`) re-mint a fresh token; the first invoice doesn't double-issue. The billing server holds the private signing key via `WAYSTONE_LICENSE_PRIVKEY` (or `_FILE`); if it's unset the webhook acks + logs loudly rather than 500. Backward-compatible: inert unless both env vars are set, and normal hosted-tier purchases are untouched. (`issue_license_from_env`, `is_team_license_price`, `send_license_email`.)
