@@ -58,6 +58,13 @@ def _payload(email="buyer@example.com", price_id=LICENSE_PRICE, seats="10"):
                                 "mode": "payment", "metadata": md}}}
 
 
+def _invoice_payload(reason="subscription_cycle", price_id=LICENSE_PRICE, qty=10,
+                     email="renew@example.com"):
+    return {"type": "invoice.paid", "data": {"object": {
+        "customer_email": email, "customer": "cus_r", "billing_reason": reason,
+        "lines": {"data": [{"price": {"id": price_id}, "quantity": qty}]}}}}
+
+
 @pytest.fixture
 def signing(monkeypatch):
     priv, pub = _keypair()
@@ -198,3 +205,45 @@ def test_tampered_license_rejected(signing):
     token = issue_license_from_env(seats=3)
     with pytest.raises(LicenseError):
         verify_license(token[:-4] + "zzzz")
+
+
+# --------------------------------------------------------------------------- renewals
+
+def test_subscription_renewal_reissues_license(client, signing):
+    captured = {}
+
+    def _cap(email, token, seats, expires_at=None, admin_conn=None):
+        captured.update(email=email, token=token, seats=seats)
+
+    with patch("waystone.api_server.send_license_email", _cap):
+        body = json.dumps(_invoice_payload(reason="subscription_cycle", qty=12)).encode()
+        r = client.post("/webhooks/stripe", content=body,
+                        headers={"Content-Type": "application/json",
+                                 "Stripe-Signature": _sign(body)})
+    assert r.status_code == 200, r.text
+    assert r.json()["license_seats"] == 12
+    assert verify_license(captured["token"]).seats == 12  # fresh token for the new cycle
+
+
+def test_first_invoice_does_not_double_issue(client, signing):
+    """The initial subscription invoice (subscription_create) must NOT re-mint —
+    checkout.session.completed already did."""
+    sent = {"called": False}
+    with patch("waystone.api_server.send_license_email",
+               lambda *a, **k: sent.__setitem__("called", True)):
+        body = json.dumps(_invoice_payload(reason="subscription_create")).encode()
+        r = client.post("/webhooks/stripe", content=body,
+                        headers={"Content-Type": "application/json",
+                                 "Stripe-Signature": _sign(body)})
+    assert r.status_code == 200
+    assert r.json().get("skipped")
+    assert sent["called"] is False
+
+
+def test_renewal_of_non_license_subscription_skipped(client, signing):
+    body = json.dumps(_invoice_payload(price_id="price_some_api_tier")).encode()
+    r = client.post("/webhooks/stripe", content=body,
+                    headers={"Content-Type": "application/json",
+                             "Stripe-Signature": _sign(body)})
+    assert r.status_code == 200
+    assert r.json().get("skipped")

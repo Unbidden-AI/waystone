@@ -784,6 +784,33 @@ async def chat_completions(
 # Stripe webhook
 # ---------------------------------------------------------------------------
 
+def _issue_and_email_license(email: str, seats: int, event_type: str) -> dict:
+    """Mint a self-hosted Team license token for `email` (seats, default-clamped) and
+    email it. Shared by the initial purchase + subscription renewals. Returns a webhook
+    ack dict; never 500s on a missing signing key (the customer already paid)."""
+    from .licensing import issue_license_from_env, verify_license
+    if seats <= 0:
+        log.warning("Team license for %s: no seats resolved — defaulting to %d",
+                    email, _DEFAULT_LICENSE_SEATS)
+        seats = _DEFAULT_LICENSE_SEATS
+    token = issue_license_from_env(seats=seats, org=email)
+    if not token:
+        log.error("Team license for %s but WAYSTONE_LICENSE_PRIVKEY is not configured — "
+                  "cannot mint (support must re-issue manually)", email)
+        return {"ok": True, "event": event_type, "license": "deferred"}
+    try:
+        expires_at = verify_license(token).expires_at
+    except Exception as exc:  # a just-minted token failing self-verify = a bug
+        log.error("Minted Team license for %s failed self-verification: %s", email, exc)
+        expires_at = None
+    conn = open_admin_db()
+    try:
+        send_license_email(email, token, seats=seats, expires_at=expires_at, admin_conn=conn)
+    finally:
+        conn.close()
+    return {"ok": True, "event": event_type, "license_seats": seats}
+
+
 @app.post("/webhooks/stripe", status_code=status.HTTP_200_OK)
 async def stripe_webhook(request: Request) -> dict:
     """Handle Stripe subscription lifecycle events.
@@ -861,7 +888,6 @@ async def stripe_webhook(request: Request) -> dict:
         # (no API key — the customer runs their own server). Distinct from the hosted
         # "team" API tier handled below.
         if is_team_license_price(price_id):
-            from .licensing import issue_license_from_env, verify_license
             # Seats: explicit `seats` metadata wins; else the purchased quantity
             # (adjustable-quantity links → seats = quantity); else the default.
             try:
@@ -870,34 +896,11 @@ async def stripe_webhook(request: Request) -> dict:
                 seats = 0
             if seats <= 0 and line_qty > 0:
                 seats = line_qty
-            if seats <= 0:
-                log.warning("Team license for %s: no seats from metadata or quantity — "
-                            "defaulting to %d", email, _DEFAULT_LICENSE_SEATS)
-                seats = _DEFAULT_LICENSE_SEATS
             # NOTE: like the API-key path below, this is not idempotent — a duplicate
             # Stripe delivery mints a second (equally valid) license. Acceptable for now
             # (seats are per-token, not cumulative); an issued_licenses dedup table keyed
             # on the checkout session id is the follow-up.
-            token = issue_license_from_env(seats=seats, org=email)
-            if not token:
-                # No signing key on this server — ack (so Stripe stops retrying) but
-                # flag loudly; support re-issues manually. Customer paid; do not 500.
-                log.error("Team license purchased by %s but WAYSTONE_LICENSE_PRIVKEY "
-                          "is not configured — cannot mint a license", email)
-                return {"ok": True, "event": event_type, "license": "deferred"}
-            try:
-                expires_at = verify_license(token).expires_at
-            except Exception as exc:  # a just-minted token failing self-verify = a bug
-                log.error("Minted Team license for %s failed self-verification: %s "
-                          "(emailing without an expiry line)", email, exc)
-                expires_at = None
-            conn = open_admin_db()
-            try:
-                send_license_email(email, token, seats=seats,
-                                   expires_at=expires_at, admin_conn=conn)
-            finally:
-                conn.close()
-            return {"ok": True, "event": event_type, "license_seats": seats}
+            return _issue_and_email_license(email, seats, event_type)
 
         conn = open_admin_db()
         raw_key = create_key(conn, email=email, tier=tier, stripe_customer_id=customer_id)
@@ -905,6 +908,30 @@ async def stripe_webhook(request: Request) -> dict:
         conn.close()
 
         return {"ok": True, "event": event_type, "tier": tier}
+
+    elif event_type in ("invoice.paid", "invoice.payment_succeeded"):
+        # Subscription RENEWAL → re-mint a fresh Team-license token (the initial
+        # purchase comes through checkout.session.completed above). Only act on the
+        # recurring cycle, not the first invoice (billing_reason=subscription_create),
+        # to avoid double-issuing on signup.
+        if obj.get("billing_reason") != "subscription_cycle":
+            return {"ok": True, "event": event_type, "skipped": "not a renewal cycle"}
+        lines = (obj.get("lines") or {}).get("data") or []
+        line = lines[0] if lines else {}
+        price_id = ((line.get("price") or {}).get("id")
+                    or (line.get("plan") or {}).get("id") or "")
+        if not is_team_license_price(price_id):
+            return {"ok": True, "event": event_type, "skipped": "not a team license"}
+        try:
+            seats = int(line.get("quantity") or 0)
+        except (TypeError, ValueError):
+            seats = 0
+        email = obj.get("customer_email", "")
+        if not email:
+            log.error("Team license renewal but invoice carries no customer_email "
+                      "(customer=%s) — cannot email a token", obj.get("customer"))
+            return {"ok": True, "event": event_type, "license": "deferred"}
+        return _issue_and_email_license(email, seats, event_type)
 
     elif event_type == "customer.subscription.deleted":
         customer_id = obj.get("customer", "")
