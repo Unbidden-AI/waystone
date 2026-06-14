@@ -135,6 +135,10 @@ class TestNodeLimitFreeTier:
 
         monkeypatch.setenv("CB_USE_ADMIN_DB", "1")
         monkeypatch.setenv("CB_ADMIN_DB", str(admin_db_path))
+        # Per-tier node limits + per-key project isolation are HOSTED-SaaS behavior
+        # (signalled by the Stripe webhook secret); declare it so projects resolve to
+        # the key-scoped paths these tests seed. Self-hosted servers share instead.
+        monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
 
         from waystone.api_server import app
         with patch("waystone.api_server._cfg", return_value=config):
@@ -184,6 +188,10 @@ class TestNodeLimitFreeTier:
 
         monkeypatch.setenv("CB_USE_ADMIN_DB", "1")
         monkeypatch.setenv("CB_ADMIN_DB", str(admin_db_path))
+        # Per-tier node limits + per-key project isolation are HOSTED-SaaS behavior
+        # (signalled by the Stripe webhook secret); declare it so projects resolve to
+        # the key-scoped paths these tests seed. Self-hosted servers share instead.
+        monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
 
         from waystone.api_server import app
         with patch("waystone.api_server._cfg", return_value=config):
@@ -237,6 +245,10 @@ class TestNodeLimitFreeTier:
 
         monkeypatch.setenv("CB_USE_ADMIN_DB", "1")
         monkeypatch.setenv("CB_ADMIN_DB", str(admin_db_path))
+        # Per-tier node limits + per-key project isolation are HOSTED-SaaS behavior
+        # (signalled by the Stripe webhook secret); declare it so projects resolve to
+        # the key-scoped paths these tests seed. Self-hosted servers share instead.
+        monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
 
         from waystone.api_server import app
         with patch("waystone.api_server._cfg", return_value=config):
@@ -291,6 +303,10 @@ class TestNodeLimitProTier:
 
         monkeypatch.setenv("CB_USE_ADMIN_DB", "1")
         monkeypatch.setenv("CB_ADMIN_DB", str(admin_db_path))
+        # Per-tier node limits + per-key project isolation are HOSTED-SaaS behavior
+        # (signalled by the Stripe webhook secret); declare it so projects resolve to
+        # the key-scoped paths these tests seed. Self-hosted servers share instead.
+        monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
 
         from waystone.api_server import app
         with patch("waystone.api_server._cfg", return_value=config):
@@ -338,6 +354,10 @@ class TestNodeLimitProTier:
 
         monkeypatch.setenv("CB_USE_ADMIN_DB", "1")
         monkeypatch.setenv("CB_ADMIN_DB", str(admin_db_path))
+        # Per-tier node limits + per-key project isolation are HOSTED-SaaS behavior
+        # (signalled by the Stripe webhook secret); declare it so projects resolve to
+        # the key-scoped paths these tests seed. Self-hosted servers share instead.
+        monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
 
         from waystone.api_server import app
         with patch("waystone.api_server._cfg", return_value=config):
@@ -455,6 +475,10 @@ class TestNodeLimitTransactionality:
 
         monkeypatch.setenv("CB_USE_ADMIN_DB", "1")
         monkeypatch.setenv("CB_ADMIN_DB", str(admin_db_path))
+        # Per-tier node limits + per-key project isolation are HOSTED-SaaS behavior
+        # (signalled by the Stripe webhook secret); declare it so projects resolve to
+        # the key-scoped paths these tests seed. Self-hosted servers share instead.
+        monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
 
         from waystone.api_server import app
         with patch("waystone.api_server._cfg", return_value=config):
