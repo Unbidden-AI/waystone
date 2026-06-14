@@ -219,6 +219,28 @@ def test_license_auto_enables_per_seat_mode(monkeypatch):
     assert _use_admin_db() is True
 
 
+def test_self_hosted_team_shares_projects_across_members(monkeypatch):
+    """The marquee Team Server feature: members of a self-hosted server SHARE a
+    project graph. Per-key isolation must apply ONLY on the hosted SaaS (signalled
+    by STRIPE_WEBHOOK_SECRET), never on a self-hosted licensed server — otherwise
+    Alice and Bob silently get separate tenants and never see each other's work."""
+    from waystone.api_server import _isolate_by_key
+
+    monkeypatch.setenv("CB_USE_ADMIN_DB", "1")  # per-seat mode
+    alice = {"key_hash": "a" * 64}
+    bob = {"key_hash": "b" * 64}
+
+    # Self-hosted (no Stripe secret) → members are NOT isolated → they share.
+    monkeypatch.delenv("STRIPE_WEBHOOK_SECRET", raising=False)
+    assert _isolate_by_key(alice) is False
+    assert _isolate_by_key(bob) is False
+
+    # Hosted SaaS (Stripe secret set) → per-customer isolation stays on.
+    monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_x")
+    assert _isolate_by_key(alice) is True
+    assert _isolate_by_key(bob) is True
+
+
 def test_tampered_license_rejected(signing):
     token = issue_license_from_env(seats=3)
     with pytest.raises(LicenseError):

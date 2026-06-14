@@ -128,6 +128,27 @@ def _use_admin_db() -> bool:
     )
 
 
+def _hosted_saas() -> bool:
+    """Whether this is the multi-tenant HOSTED service (many separate customer orgs
+    behind one deployment), signalled by a configured Stripe webhook secret — the
+    same signal the rate limiter uses for "production mode". A self-hosted Team
+    Server does NOT set it.
+    """
+    return bool(os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip())
+
+
+def _isolate_by_key(key_info: dict) -> bool:
+    """Whether projects should be scoped per API key.
+
+    TRUE only on the hosted SaaS, where each key belongs to a different customer and
+    must never see another's data. On a SELF-HOSTED Team Server every issued key
+    belongs to the ONE org that runs the server, so members SHARE the project graph
+    — that shared "team brain" is the whole product. Scoping self-hosted members
+    apart by key silently broke that (each member saw only their own writes).
+    """
+    return _hosted_saas() and _use_admin_db() and bool(key_info.get("key_hash"))
+
+
 # ---------------------------------------------------------------------------
 # Clerk JWT validation (for /account/key)
 # ---------------------------------------------------------------------------
@@ -275,9 +296,10 @@ def _cfg() -> dict:
 
 
 def _get_project_dir(config: dict, key_info: dict, project: str) -> Path:
-    """Return the project directory, scoped by API key in multi-tenant mode."""
+    """Return the project directory. Scoped per API key only on the hosted SaaS;
+    self-hosted Team Server members share a project (see _isolate_by_key)."""
     base = Path(config.get("projects_dir", "~/.waystone/projects")).expanduser()
-    if _use_admin_db() and key_info.get("key_hash"):
+    if _isolate_by_key(key_info):
         key_prefix = key_info["key_hash"][:12]
         return base / key_prefix / project
     return base / project
@@ -311,11 +333,11 @@ def _open_store(config: dict, key_info: dict, project: str, must_exist: bool = T
     when store_backend=postgres, else a per-project SQLite file."""
     if config.get("store_backend") == "postgres":
         from .pg_store import PostgresGraphStore
-        # Preserve per-key isolation: tenant = <key-prefix>:<project> in admin mode,
-        # else just the project name. The tenant's schema auto-creates, so there's no
-        # "project not found" — a fresh tenant simply has zero nodes.
-        prefix = (key_info.get("key_hash", "")[:12]
-                  if (_use_admin_db() and key_info.get("key_hash")) else "")
+        # tenant = <key-prefix>:<project> ONLY on the hosted SaaS (per-customer
+        # isolation); on a self-hosted Team Server every member shares the project
+        # graph, so tenant = the project name. The tenant's schema auto-creates, so
+        # there's no "project not found" — a fresh tenant simply has zero nodes.
+        prefix = key_info.get("key_hash", "")[:12] if _isolate_by_key(key_info) else ""
         tenant = f"{prefix}:{project}" if prefix else project
         return PostgresGraphStore(config["database_url"], tenant_id=tenant)
     db_path = _get_db_path(config, key_info, project)
@@ -402,7 +424,7 @@ def get_account(key_info: AuthDep, response: Response) -> AccountResponse:
     config = _cfg()
     projects_base = Path(config.get("projects_dir", "~/.waystone/projects")).expanduser()
 
-    if _use_admin_db() and key_info.get("key_hash"):
+    if _isolate_by_key(key_info):
         key_prefix = key_info["key_hash"][:12]
         projects_dir = projects_base / key_prefix
     else:
@@ -445,7 +467,7 @@ def list_projects(key_info: AuthDep, response: Response) -> list[ProjectInfo]:
     config = _cfg()
     projects_base = Path(config.get("projects_dir", "~/.waystone/projects")).expanduser()
 
-    if _use_admin_db() and key_info.get("key_hash"):
+    if _isolate_by_key(key_info):
         key_prefix = key_info["key_hash"][:12]
         projects_dir = projects_base / key_prefix
     else:
@@ -478,7 +500,7 @@ def init_project(project: str, key_info: AuthDep, response: Response) -> dict:
         return {"project": project, "created": False}
 
     # Enforce project limit for admin-DB-managed keys
-    if _use_admin_db() and key_info.get("key_hash"):
+    if _isolate_by_key(key_info):
         key_prefix = key_info["key_hash"][:12]
         projects_base = Path(config.get("projects_dir", "~/.waystone/projects")).expanduser()
         user_projects_dir = projects_base / key_prefix

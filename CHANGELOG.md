@@ -6,6 +6,18 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.39] – 2026-06-14
+
+### Fixed
+
+- **Self-hosted Team Server members didn't actually share a graph (the headline feature was broken).** In per-seat mode the Postgres tenant was scoped per API key (`<key-prefix>:<project>`), so two members writing the same project got *different* tenants and never saw each other's work — directly contradicting "one shared knowledge graph for your whole team." That per-key isolation is correct for the multi-tenant **hosted** SaaS (different customers must not mix) but wrong for a self-hosted single-org server. Per-key scoping is now gated on `_isolate_by_key()`, which is true only when `STRIPE_WEBHOOK_SECRET` is set (the hosted service); a self-hosted Team Server shares the project graph across all members. Same gate applied to the project-dir/listing/limit paths, so a self-hosted server also no longer wrongly imposes hosted per-tier project limits. (No data migration needed — the Team Server shipped today, so no real per-key tenants exist yet.)
+
+### Added
+
+- **`ci/acceptance_teamserver.sh`** — a black-box acceptance battery that stands up a throwaway server on the published image and verifies boot/safety, auth, licensing & seats, persistence (structural, no LLM cost), and — behind `--full` — multiplayer shared-graph, tenant isolation, and remote-client CLI wiring (real extraction). This is the harness that caught the sharing bug above.
+
+---
+
 ## [0.4.38] – 2026-06-14
 
 ### Fixed
