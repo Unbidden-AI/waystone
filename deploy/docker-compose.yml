@@ -1,22 +1,17 @@
-# Self-hosted Waystone Team Server: Postgres (pgvector) + the API.
+# Waystone Team Server — zero-clone deploy. Uses the PUBLISHED image (no build).
 #
-# Quickstart — `cp .env.example .env`, then pick ONE auth mode:
+#   1. Download this file and the env template, side by side:
+#        curl -O https://unbidden.ai/team-server/docker-compose.yml
+#        curl -o .env https://unbidden.ai/team-server/env.example
+#   2. Edit .env — paste your WAYSTONE_LICENSE + an LLM_API_KEY.
+#   3. docker compose up -d        # pulls the image; no source, no build
+#   4. docker compose exec server waystone team issue teammate@acme.com
 #
-#   A) I bought a license (per-seat):  set WAYSTONE_LICENSE + LLM_API_KEY
-#        docker compose up -d
-#        docker compose exec server waystone team issue teammate@acme.com
-#      → hand each teammate their printed key; the license caps total seats.
+#   curl localhost:8000/v1/health  # {"status":"ok",...}
 #
-#   B) Just me / one shared key:        set WAYSTONE_API_KEY + LLM_API_KEY
-#        docker compose up -d
-#      → every teammate uses that one key.
-#
-#   curl localhost:8000/v1/health   # {"status":"ok",...}
-#
-# Point a teammate's client at it (in ~/.waystone/config.yaml):
-#   backend: remote
-#   api_url: http://<server-host>:8000
-#   api_key: <their per-seat key, or the shared WAYSTONE_API_KEY>
+# Pin a version with WAYSTONE_IMAGE=ghcr.io/unbidden-ai/waystone-server:0.4.37
+# (defaults to :latest). Building from source instead? Use the repo's root
+# docker-compose.yml, which has `build: .`.
 
 services:
   db:
@@ -35,24 +30,18 @@ services:
     restart: unless-stopped
 
   server:
-    build: .
+    image: ${WAYSTONE_IMAGE:-ghcr.io/unbidden-ai/waystone-server:latest}
     depends_on:
       db:
         condition: service_healthy
     environment:
-      # --- Team backend: the shared Postgres graph ---
       WAYSTONE_STORE_BACKEND: postgres
       DATABASE_URL: postgresql://${POSTGRES_USER:-waystone}:${POSTGRES_PASSWORD:-waystone}@db:5432/${POSTGRES_DB:-waystone}
-      # --- Auth (set WAYSTONE_LICENSE *or* WAYSTONE_API_KEY in .env) ---
-      # A license auto-enables per-seat mode — no other flag needed. Otherwise a
-      # single shared key authenticates the whole team. The entrypoint refuses to
-      # start wide-open if neither is set.
+      # Auth: paste a license (per-seat, auto-on) OR set a shared WAYSTONE_API_KEY.
       WAYSTONE_LICENSE: ${WAYSTONE_LICENSE:-}
       WAYSTONE_API_KEY: ${WAYSTONE_API_KEY:-}
-      # Force a mode explicitly if you ever need to (a license implies 1):
       CB_USE_ADMIN_DB: ${CB_USE_ADMIN_DB:-}
       CB_ADMIN_DB: /data/admin.db
-      # --- Extraction LLM (the server runs extraction server-side) ---
       LLM_BASE_URL: ${LLM_BASE_URL:-https://generativelanguage.googleapis.com/v1beta/openai}
       LLM_MODEL: ${LLM_MODEL:-gemini-2.5-flash}
       LLM_API_KEY: ${LLM_API_KEY:?set LLM_API_KEY in .env}
@@ -60,8 +49,6 @@ services:
     ports:
       - "${WAYSTONE_PORT:-8000}:8000"
     volumes:
-      # Persists the admin DB (per-seat member keys) across restarts. The graph
-      # itself lives in Postgres, not here.
       - waystone-serverdata:/data
     healthcheck:
       test: ["CMD", "python", "-c",

@@ -10,32 +10,57 @@ graph (`store_backend: postgres`). Clients talk to it over HTTP in
 
 ## 1. Start the server
 
+You need [Docker](https://docs.docker.com/get-docker/) and **one** of:
+
+- a **license token** (from your purchase email) → per-seat mode, each teammate
+  gets their own key, or
+- any **shared key** you make up → everyone uses the one key.
+
+### Fastest: no clone, no build (pull the published image)
+
 ```bash
-cp .env.example .env
-# edit .env: set WAYSTONE_API_KEY (shared team key) and LLM_API_KEY (extraction LLM)
+curl -O https://unbidden.ai/team-server/docker-compose.yml
+curl -o .env https://unbidden.ai/team-server/env.example
+# edit .env — paste WAYSTONE_LICENSE (or set WAYSTONE_API_KEY) + LLM_API_KEY
 docker compose up -d
 curl localhost:8000/v1/health      # {"status":"ok", ...}
 ```
 
-`docker compose up` brings up two services:
+### Or build from source (clone the repo)
+
+```bash
+git clone https://github.com/Unbidden-AI/waystone && cd waystone
+cp .env.example .env               # then edit it the same way
+docker compose up -d
+```
+
+Either way `docker compose up` brings up two services:
 
 | service | image | role |
 |---------|-------|------|
 | `db`    | `pgvector/pgvector:pg16` | the shared graph (data in the `waystone-pgdata` volume) |
-| `server`| built from `./Dockerfile` | the API; reads `WAYSTONE_STORE_BACKEND=postgres` + `DATABASE_URL` |
+| `server`| `ghcr.io/unbidden-ai/waystone-server` (or built from `./Dockerfile`) | the API; reads `WAYSTONE_STORE_BACKEND=postgres` + `DATABASE_URL` |
 
 The Postgres schema is created automatically on the first request — no migration
 step.
 
-### Required `.env` values
+### What to put in `.env`
 
-- `WAYSTONE_API_KEY` — the shared bearer token teammates authenticate with.
-  Generate one: `python -c "import secrets; print('waystone_'+secrets.token_urlsafe(32))"`
+Set **one** auth value:
+
+- **Bought a license?** Paste it as `WAYSTONE_LICENSE=<token>`. That alone switches
+  the server into per-seat mode — issue each teammate a key (see §3). No other flag.
+- **Just want one shared key?** Set `WAYSTONE_API_KEY` instead (leave the license
+  blank). Generate one:
+  `python -c "import secrets; print('waystone_'+secrets.token_urlsafe(32))"`
+
+Plus the extraction LLM:
+
 - `LLM_API_KEY` (+ optional `LLM_BASE_URL`, `LLM_MODEL`) — the OpenAI-compatible
   endpoint the **server** uses to extract facts. Defaults target Gemini 2.5 Flash.
 
-> Auth here is a single shared key (`CB_USE_ADMIN_DB=0`). Per-seat keys, RBAC, and
-> usage metering are the Enterprise tier — separate from this quickstart.
+> The server **refuses to start** if you set neither a license nor a shared key —
+> it won't silently come up unauthenticated.
 
 ## 2. Point a client at it
 
@@ -59,34 +84,36 @@ That's it. Now:
 Use `backend: local` to force a machine back to its private SQLite graph even if
 `api_url` is set.
 
-## Per-seat licensing (optional)
+## 3. Per-seat licensing
 
-The default above uses one shared key. To give each member their own key and cap
-the team to a licensed seat count, switch to **per-seat mode**:
+If you set `WAYSTONE_LICENSE` in step 1, the server is already in per-seat mode —
+just hand out keys:
 
-1. In `.env`, set `CB_USE_ADMIN_DB=1` (and optionally `WAYSTONE_LICENSE=<token>`).
-   `docker compose up -d`.
-2. Issue a member key per person:
-
-   ```bash
-   docker compose exec server waystone team issue alice@acme.com
-   docker compose exec server waystone team members      # who has a seat
-   docker compose exec server waystone team license      # seats used / total
-   docker compose exec server waystone team revoke bob@acme.com   # free a seat
-   ```
+```bash
+docker compose exec server waystone team issue alice@acme.com   # prints her key
+docker compose exec server waystone team members      # who has a seat
+docker compose exec server waystone team license      # seats used / total
+docker compose exec server waystone team revoke bob@acme.com    # free a seat
+```
 
 Each member sets their own issued key as `api_key`. Seats are enforced offline
 against the signed license — **no phone-home**. Without a license you get
-`TRIAL_SEATS` (3) to evaluate; a license raises the cap. Licenses are
-Ed25519-signed tokens verified locally against a key bundled in the binary; the
-admin DB (member keys) persists in the `waystone-serverdata` volume.
+`TRIAL_SEATS` (3) to evaluate; your license raises the cap (issuing the seat past
+the limit is refused with a clear message). Licenses are Ed25519-signed tokens
+verified locally against a public key bundled in the server; the admin DB (member
+keys) persists in the `waystone-serverdata` volume.
+
+> Evaluating before you buy? Skip the license and run with the 3 trial seats, or
+> use a single shared `WAYSTONE_API_KEY`. Add the license later with no data loss —
+> it's just an env change + `docker compose up -d`.
 
 ## Notes & ops
 
 - **Data** lives in the `waystone-pgdata` Docker volume. Back it up with
   `docker compose exec db pg_dump -U waystone waystone > backup.sql`.
-- **Upgrades**: `docker compose pull && docker compose up -d --build`. Schema
-  migrations are additive (`ADD COLUMN IF NOT EXISTS`), so rolling forward is safe.
+- **Upgrades**: image deploy → `docker compose pull && docker compose up -d`;
+  source build → `git pull && docker compose up -d --build`. Schema migrations are
+  additive (`ADD COLUMN IF NOT EXISTS`), so rolling forward is safe.
 - **TLS / public exposure**: put the server behind a reverse proxy (Caddy/nginx) or
   a private network (Tailscale) — the bearer key is the only gate.
 - **Tenancy**: each `project` is an isolated tenant inside the one Postgres graph.

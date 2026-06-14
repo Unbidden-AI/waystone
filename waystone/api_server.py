@@ -111,8 +111,21 @@ def _use_admin_db() -> bool:
     non-admin test importing the module first silently disabled auth for every
     admin test that ran later, and in an embedding host the same race could leave
     auth off. A per-call env read costs nothing and removes the ordering hazard.
+
+    A self-hosted Team **license** implies per-seat mode: a buyer who pastes their
+    WAYSTONE_LICENSE gets admin-DB auth automatically, without also having to flip
+    CB_USE_ADMIN_DB. An explicit CB_USE_ADMIN_DB (0/1) always wins, so the hosted
+    billing server (which never sets a license token) is unaffected.
     """
-    return os.environ.get("CB_USE_ADMIN_DB", "").lower() in ("1", "true", "yes")
+    explicit = os.environ.get("CB_USE_ADMIN_DB", "").strip().lower()
+    if explicit in ("1", "true", "yes"):
+        return True
+    if explicit in ("0", "false", "no"):
+        return False
+    return bool(
+        os.environ.get("WAYSTONE_LICENSE", "").strip()
+        or os.environ.get("WAYSTONE_LICENSE_FILE", "").strip()
+    )
 
 
 # ---------------------------------------------------------------------------

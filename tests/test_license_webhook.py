@@ -201,6 +201,24 @@ def test_non_license_price_still_creates_api_key(client, signing):
     assert captured.get("sent")
 
 
+def test_license_auto_enables_per_seat_mode(monkeypatch):
+    """A buyer who pastes WAYSTONE_LICENSE gets admin-DB (per-seat) auth without
+    also having to flip CB_USE_ADMIN_DB — but an explicit setting always wins."""
+    from waystone.api_server import _use_admin_db
+
+    for var in ("CB_USE_ADMIN_DB", "WAYSTONE_LICENSE", "WAYSTONE_LICENSE_FILE"):
+        monkeypatch.delenv(var, raising=False)
+    assert _use_admin_db() is False  # nothing set → shared-key/local mode
+
+    monkeypatch.setenv("WAYSTONE_LICENSE", "tok")
+    assert _use_admin_db() is True  # license alone flips per-seat on
+
+    monkeypatch.setenv("CB_USE_ADMIN_DB", "0")  # explicit opt-out wins
+    assert _use_admin_db() is False
+    monkeypatch.setenv("CB_USE_ADMIN_DB", "1")
+    assert _use_admin_db() is True
+
+
 def test_tampered_license_rejected(signing):
     token = issue_license_from_env(seats=3)
     with pytest.raises(LicenseError):

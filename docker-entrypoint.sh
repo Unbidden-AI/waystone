@@ -7,6 +7,29 @@
 # WAYSTONE_STORE_BACKEND / DATABASE_URL env directly by config.load_config.
 set -e
 
+# --- Auth preflight: never boot a wide-open server -------------------------
+# A license implies per-seat (admin-DB) mode; an explicit CB_USE_ADMIN_DB wins.
+# If neither per-seat mode nor a shared WAYSTONE_API_KEY is configured, the API
+# would accept unauthenticated requests — refuse with an actionable message
+# instead (mirrors waystone.api_server._use_admin_db).
+_admin="$(printf '%s' "${CB_USE_ADMIN_DB:-}" | tr '[:upper:]' '[:lower:]')"
+case "$_admin" in
+  1|true|yes)  _perseat=1 ;;
+  0|false|no)  _perseat=0 ;;
+  *) if [ -n "${WAYSTONE_LICENSE:-}" ] || [ -n "${WAYSTONE_LICENSE_FILE:-}" ]; then
+       _perseat=1
+     else
+       _perseat=0
+     fi ;;
+esac
+if [ "$_perseat" = "0" ] && [ -z "${WAYSTONE_API_KEY:-}" ]; then
+  echo "waystone: refusing to start — no auth configured." >&2
+  echo "  Set ONE of these in your .env, then 'docker compose up' again:" >&2
+  echo "    WAYSTONE_LICENSE=<your license token>   # per-seat (you bought a license)" >&2
+  echo "    WAYSTONE_API_KEY=<a strong random string> # one shared key for the team" >&2
+  exit 1
+fi
+
 CONFIG=/app/config.yaml
 
 if [ ! -f "$CONFIG" ]; then
