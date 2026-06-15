@@ -901,7 +901,7 @@ def assign_ids(extraction: dict) -> dict:
         edges.append({
             "from_id": from_id,
             "to_id": to_id,
-            "relation": edge["relation"],
+            "relation": edge.get("relation", "relates_to"),
         })
 
     return {"nodes": nodes, "edges": edges}
@@ -967,7 +967,7 @@ def assign_ids_incremental(extraction: dict, existing_node_ids: set) -> dict:
         edges.append({
             "from_id": resolve(raw_from),
             "to_id": resolve(raw_to),
-            "relation": edge["relation"],
+            "relation": edge.get("relation", "relates_to"),
         })
 
     return {"nodes": nodes, "edges": edges}

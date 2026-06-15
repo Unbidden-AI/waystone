@@ -145,7 +145,7 @@ def load_config(path: str | Path | None = None) -> dict:
     if path is not None:
         p = Path(path)
         if p.exists():
-            with open(p) as f:
+            with open(p, encoding="utf-8") as f:
                 user_cfg = yaml.safe_load(f) or {}
             return _apply_env_overrides(_merge(DEFAULTS, user_cfg))
         raise FileNotFoundError(f"Config file not found: {p}")
@@ -153,7 +153,7 @@ def load_config(path: str | Path | None = None) -> dict:
     result = dict(DEFAULTS)
     for candidate in CONFIG_SEARCH_PATHS:
         if candidate.exists():
-            with open(candidate) as f:
+            with open(candidate, encoding="utf-8") as f:
                 file_cfg = yaml.safe_load(f) or {}
             result = _merge(result, file_cfg)
     return _apply_env_overrides(result)

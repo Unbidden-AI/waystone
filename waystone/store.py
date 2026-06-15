@@ -1852,13 +1852,13 @@ class GraphStore:
         p = self._buf_path()
         if p.exists():
             try:
-                return json.loads(p.read_text())
+                return json.loads(p.read_text(encoding="utf-8"))
             except Exception:
                 pass
         return {}
 
     def _save_buf_data(self, data: dict) -> None:
-        self._buf_path().write_text(json.dumps(data))
+        self._buf_path().write_text(json.dumps(data), encoding="utf-8")
 
     def load_buffer(self) -> list[str]:
         """Load persisted turn buffer from disk."""

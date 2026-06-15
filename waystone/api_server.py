@@ -250,8 +250,10 @@ def _check_auth(
         if not creds:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing API key")
         conn = open_admin_db()
-        key_info = validate_key(conn, creds.credentials)
-        conn.close()
+        try:
+            key_info = validate_key(conn, creds.credentials)
+        finally:
+            conn.close()  # never leak the admin-DB connection if validate_key throws
         if key_info is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or revoked API key")
 
@@ -908,8 +910,11 @@ async def stripe_webhook(request: Request) -> dict:
                         price_obj = items.data[0].price
                         if price_obj:
                             price_id = price_obj.id
-                except Exception:
-                    pass  # degraded gracefully — tier defaults to "pro" below
+                except Exception as exc:
+                    # Degrade gracefully (tier falls back below) but make it
+                    # diagnosable — an operator must be able to see why a purchase
+                    # resolved to a default tier/quantity.
+                    log.warning("Stripe line-item lookup failed for session %s: %s", session_id, exc)
 
         tier = tier_from_price(price_id) if price_id else metadata.get("tier", "pro")
 

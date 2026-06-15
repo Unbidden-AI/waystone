@@ -66,7 +66,7 @@ def _find_project_marker(start: Path | None = None) -> str | None:
     for candidate in [path, *path.parents]:
         marker = candidate / ".waystone"
         if marker.exists():
-            return marker.read_text().strip()
+            return marker.read_text(encoding="utf-8").strip()
     return None
 
 

@@ -78,7 +78,7 @@ def load_openclaw_config() -> dict:
         resolved = p.expanduser()
         if resolved.exists():
             try:
-                file_cfg = yaml.safe_load(resolved.read_text()) or {}
+                file_cfg = yaml.safe_load(resolved.read_text(encoding="utf-8")) or {}
                 cfg = _merge(cfg, file_cfg)
             except Exception:
                 pass  # Corrupt config file — fall through to defaults

@@ -282,7 +282,7 @@ def _build_delta_snippet(
 def _load_state(state_path: Path) -> dict:
     if state_path.exists():
         try:
-            return json.loads(state_path.read_text())
+            return json.loads(state_path.read_text(encoding="utf-8"))
         except Exception:
             pass
     return {"last_extracted_idx": 0}
@@ -290,7 +290,7 @@ def _load_state(state_path: Path) -> dict:
 
 def _save_state(state_path: Path, state: dict) -> None:
     try:
-        state_path.write_text(json.dumps(state))
+        state_path.write_text(json.dumps(state), encoding="utf-8")
     except Exception:
         pass
 
@@ -334,7 +334,7 @@ def _maybe_spawn_reconcile(project: str, current_nodes: int, project_dir: Path, 
     state: dict = {}
     if state_path.exists():
         try:
-            state = json.loads(state_path.read_text())
+            state = json.loads(state_path.read_text(encoding="utf-8"))
         except Exception:
             pass
 
@@ -348,7 +348,7 @@ def _maybe_spawn_reconcile(project: str, current_nodes: int, project_dir: Path, 
     state["last_reconcile_nodes"] = current_nodes
     state["last_reconcile_at"] = datetime.now().isoformat()
     try:
-        state_path.write_text(json.dumps(state))
+        state_path.write_text(json.dumps(state), encoding="utf-8")
     except Exception:
         pass
 
@@ -411,7 +411,7 @@ def _detect_project(cwd: str) -> str:
         marker = directory / ".waystone"
         if marker.exists():
             try:
-                name = marker.read_text().strip()
+                name = marker.read_text(encoding="utf-8").strip()
                 if name:
                     return name
             except Exception:

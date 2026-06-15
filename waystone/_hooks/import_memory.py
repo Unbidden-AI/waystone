@@ -41,7 +41,7 @@ def _detect_project(cwd: str) -> str:
         marker = directory / ".waystone"
         if marker.exists():
             try:
-                name = marker.read_text().strip()
+                name = marker.read_text(encoding="utf-8").strip()
                 if name:
                     return name
             except Exception:

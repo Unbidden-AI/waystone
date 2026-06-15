@@ -144,7 +144,7 @@ def main():
         }, session_id=args.session_id)
         # Write per-project extraction timestamp so the hook can expire session state entries
         try:
-            (db_path.parent / "last_extract_at").write_text(str(completed_at))
+            (db_path.parent / "last_extract_at").write_text(str(completed_at), encoding="utf-8")
         except Exception:
             pass
 
@@ -177,7 +177,7 @@ def _run_remote(args, text: str) -> None:
         try:
             p = Path(args.db_path).parent
             p.mkdir(parents=True, exist_ok=True)
-            (p / "last_extract_at").write_text(str(time.time()))
+            (p / "last_extract_at").write_text(str(time.time()), encoding="utf-8")
         except Exception:
             pass
     except Exception as e:
@@ -199,7 +199,7 @@ def _load_state(session_id: str = "") -> dict:
     try:
         p = _state_path(session_id)
         if p.exists():
-            return json.loads(p.read_text())
+            return json.loads(p.read_text(encoding="utf-8"))
     except Exception:
         pass
     return {}
@@ -212,7 +212,7 @@ def _merge_state(updates: dict, session_id: str = "") -> None:
         p.parent.mkdir(parents=True, exist_ok=True)
         state = _load_state(session_id)
         state.update(updates)
-        p.write_text(json.dumps(state))
+        p.write_text(json.dumps(state), encoding="utf-8")
     except Exception:
         pass
 

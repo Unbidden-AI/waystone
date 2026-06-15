@@ -106,7 +106,7 @@ def write_llm_config(
 
     existing: dict = {}
     if WAYSTONE_CONFIG_PATH.exists():
-        with open(WAYSTONE_CONFIG_PATH) as f:
+        with open(WAYSTONE_CONFIG_PATH, encoding="utf-8") as f:
             existing = yaml.safe_load(f) or {}
 
     llm: dict = {
@@ -122,7 +122,7 @@ def write_llm_config(
         llm["api_key"] = api_key
 
     existing["llm"] = llm
-    with open(WAYSTONE_CONFIG_PATH, "w") as f:
+    with open(WAYSTONE_CONFIG_PATH, "w", encoding="utf-8") as f:
         yaml.dump(existing, f, default_flow_style=False, sort_keys=False)
 
     return WAYSTONE_CONFIG_PATH
@@ -169,7 +169,7 @@ def install_hooks(hook_dir: Path | None = None) -> tuple[list[str], list[str]]:
     settings: dict = {}
     if SETTINGS_PATH.exists():
         try:
-            settings = json.loads(SETTINGS_PATH.read_text()) or {}
+            settings = json.loads(SETTINGS_PATH.read_text(encoding="utf-8")) or {}
         except json.JSONDecodeError:
             pass
 
@@ -266,7 +266,7 @@ def install_hooks(hook_dir: Path | None = None) -> tuple[list[str], list[str]]:
         added.append("status line")
 
     SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    SETTINGS_PATH.write_text(json.dumps(settings, indent=2))
+    SETTINGS_PATH.write_text(json.dumps(settings, indent=2), encoding="utf-8")
     return added, skipped
 
 
@@ -279,12 +279,12 @@ def install_claude_md() -> bool:
 
     Returns True if the file was modified.
     """
-    existing = CLAUDE_MD_PATH.read_text() if CLAUDE_MD_PATH.exists() else ""
+    existing = CLAUDE_MD_PATH.read_text(encoding="utf-8") if CLAUDE_MD_PATH.exists() else ""
     if CLAUDE_MD_MARKER in existing:
         return False
 
     CLAUDE_MD_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with CLAUDE_MD_PATH.open("a") as f:
+    with CLAUDE_MD_PATH.open("a", encoding="utf-8") as f:
         f.write(CLAUDE_MD_SECTION)
     return True
 
@@ -312,7 +312,7 @@ def install_slash_commands() -> list[str]:
     COMMANDS_DIR.mkdir(parents=True, exist_ok=True)
     btw_path = COMMANDS_DIR / "btw.md"
     if not btw_path.exists():
-        btw_path.write_text(_BTW_COMMAND)
+        btw_path.write_text(_BTW_COMMAND, encoding="utf-8")
         written.append("btw")
     return written
 
@@ -411,7 +411,7 @@ def _write_mcp_config_directly() -> tuple[bool, str]:
     existing: dict = {}
     if config_path.exists():
         try:
-            existing = json.loads(config_path.read_text())
+            existing = json.loads(config_path.read_text(encoding="utf-8"))
         except Exception:
             pass
 
@@ -420,7 +420,7 @@ def _write_mcp_config_directly() -> tuple[bool, str]:
         return True, f"MCP server already registered in {config_path}"
 
     servers["waystone"] = {"command": "waystone", "args": ["mcp-serve"]}
-    config_path.write_text(json.dumps(existing, indent=2))
+    config_path.write_text(json.dumps(existing, indent=2), encoding="utf-8")
     return True, f"MCP server config written to {config_path}"
 
 
@@ -481,7 +481,7 @@ def install_antigravity_hooks(hook_dir: Path | None = None) -> tuple[list[str], 
     settings: dict = {}
     if ANTIGRAVITY_SETTINGS_PATH.exists():
         try:
-            settings = json.loads(ANTIGRAVITY_SETTINGS_PATH.read_text()) or {}
+            settings = json.loads(ANTIGRAVITY_SETTINGS_PATH.read_text(encoding="utf-8")) or {}
         except json.JSONDecodeError:
             pass
 
@@ -509,7 +509,7 @@ def install_antigravity_hooks(hook_dir: Path | None = None) -> tuple[list[str], 
 
     if added:
         ANTIGRAVITY_SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
-        ANTIGRAVITY_SETTINGS_PATH.write_text(json.dumps(settings, indent=2))
+        ANTIGRAVITY_SETTINGS_PATH.write_text(json.dumps(settings, indent=2), encoding="utf-8")
 
     return added, skipped
 
@@ -520,14 +520,14 @@ def register_antigravity_mcp() -> tuple[bool, str]:
     existing: dict = {}
     if ANTIGRAVITY_MCP_PATH.exists():
         try:
-            existing = json.loads(ANTIGRAVITY_MCP_PATH.read_text())
+            existing = json.loads(ANTIGRAVITY_MCP_PATH.read_text(encoding="utf-8"))
         except Exception:
             pass
     servers = existing.setdefault("mcpServers", {})
     if "waystone" in servers:
         return True, f"MCP server already in {ANTIGRAVITY_MCP_PATH}"
     servers["waystone"] = {"command": "waystone", "args": ["mcp-serve"]}
-    ANTIGRAVITY_MCP_PATH.write_text(json.dumps(existing, indent=2))
+    ANTIGRAVITY_MCP_PATH.write_text(json.dumps(existing, indent=2), encoding="utf-8")
     return True, f"MCP server written to {ANTIGRAVITY_MCP_PATH}"
 
 
@@ -549,7 +549,7 @@ def _install_hooks_json(
     settings: dict = {}
     if hooks_path.exists():
         try:
-            settings = json.loads(hooks_path.read_text()) or {}
+            settings = json.loads(hooks_path.read_text(encoding="utf-8")) or {}
         except json.JSONDecodeError:
             pass
 
@@ -571,7 +571,7 @@ def _install_hooks_json(
 
     if added:
         hooks_path.parent.mkdir(parents=True, exist_ok=True)
-        hooks_path.write_text(json.dumps(settings, indent=2))
+        hooks_path.write_text(json.dumps(settings, indent=2), encoding="utf-8")
 
     return added, skipped
 
@@ -593,15 +593,15 @@ def register_codex_mcp() -> tuple[bool, str]:
     try:
         import tomlkit
     except ImportError:
-        existing = CODEX_CONFIG_PATH.read_text() if CODEX_CONFIG_PATH.exists() else ""
+        existing = CODEX_CONFIG_PATH.read_text(encoding="utf-8") if CODEX_CONFIG_PATH.exists() else ""
         if "waystone" in existing and "mcp_servers" in existing:
             return True, f"MCP server already in {CODEX_CONFIG_PATH}"
         snippet = '\n[mcp_servers.waystone]\ncommand = "waystone"\nargs = ["mcp-serve"]\n'
         CODEX_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        CODEX_CONFIG_PATH.write_text(existing + snippet)
+        CODEX_CONFIG_PATH.write_text(existing + snippet, encoding="utf-8")
         return True, f"MCP server appended to {CODEX_CONFIG_PATH}"
 
-    doc = tomlkit.parse(CODEX_CONFIG_PATH.read_text()) if CODEX_CONFIG_PATH.exists() else tomlkit.document()
+    doc = tomlkit.parse(CODEX_CONFIG_PATH.read_text(encoding="utf-8")) if CODEX_CONFIG_PATH.exists() else tomlkit.document()
     mcp = doc.get("mcp_servers", tomlkit.table())
     if "waystone" in mcp:
         return True, f"MCP server already in {CODEX_CONFIG_PATH}"
@@ -611,7 +611,7 @@ def register_codex_mcp() -> tuple[bool, str]:
     mcp["waystone"] = entry
     doc["mcp_servers"] = mcp
     CODEX_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    CODEX_CONFIG_PATH.write_text(tomlkit.dumps(doc))
+    CODEX_CONFIG_PATH.write_text(tomlkit.dumps(doc), encoding="utf-8")
     return True, f"MCP server written to {CODEX_CONFIG_PATH}"
 
 
@@ -701,7 +701,7 @@ def install_opencode_plugin() -> tuple[bool, str]:
         return True, f"OpenCode plugin already at {OPENCODE_PLUGIN_PATH}"
     try:
         OPENCODE_PLUGIN_DIR.mkdir(parents=True, exist_ok=True)
-        OPENCODE_PLUGIN_PATH.write_text(_OPENCODE_PLUGIN)
+        OPENCODE_PLUGIN_PATH.write_text(_OPENCODE_PLUGIN, encoding="utf-8")
         return True, f"OpenCode plugin written to {OPENCODE_PLUGIN_PATH}"
     except Exception as exc:
         return False, f"Could not write OpenCode plugin: {exc}"
@@ -725,10 +725,10 @@ def save_integration_mode(choice: str, extra_tools: list[str] | None = None) -> 
     WAYSTONE_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     existing: dict = {}
     if WAYSTONE_CONFIG_PATH.exists():
-        with open(WAYSTONE_CONFIG_PATH) as f:
+        with open(WAYSTONE_CONFIG_PATH, encoding="utf-8") as f:
             existing = yaml.safe_load(f) or {}
     existing["integration_mode"] = mode
     if extra_tools is not None:
         existing["integration_tools"] = extra_tools
-    with open(WAYSTONE_CONFIG_PATH, "w") as f:
+    with open(WAYSTONE_CONFIG_PATH, "w", encoding="utf-8") as f:
         yaml.dump(existing, f, default_flow_style=False, sort_keys=False)

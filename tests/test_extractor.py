@@ -444,3 +444,32 @@ class TestExtractAdaptive:
                 assert False, "should have raised"
             except ValueError:
                 pass  # auth error must NOT trigger pointless re-splitting
+
+
+class TestEdgeRelationFallback:
+    """A model that omits the edge 'relation' field must not crash extraction
+    (the historical Mistral KeyError). It falls back to 'relates_to'."""
+
+    def test_assign_ids_tolerates_missing_relation(self):
+        from waystone.extractor import assign_ids
+
+        extraction = {
+            "nodes": [
+                {"id": "n1", "fact": "Use Postgres", "type": "decision"},
+                {"id": "n2", "fact": "Needs ACID", "type": "constraint"},
+            ],
+            "edges": [{"from_id": "n1", "to_id": "n2"}],  # no "relation" key
+        }
+        out = assign_ids(extraction)  # must not raise KeyError
+        assert len(out["edges"]) == 1
+        assert out["edges"][0]["relation"] == "relates_to"
+
+    def test_assign_ids_incremental_tolerates_missing_relation(self):
+        from waystone.extractor import assign_ids_incremental
+
+        extraction = {
+            "nodes": [{"id": "n1", "fact": "Use Kafka", "type": "decision"}],
+            "edges": [{"from_id": "n1", "to_id": "n_existing"}],  # no "relation"
+        }
+        out = assign_ids_incremental(extraction, existing_node_ids={"n_existing"})
+        assert out["edges"][0]["relation"] == "relates_to"

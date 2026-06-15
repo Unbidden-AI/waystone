@@ -131,7 +131,7 @@ def _load_summary_state(state_path: Path) -> dict:
     """Load summary state from disk; default if missing/unreadable."""
     if state_path.exists():
         try:
-            return json.loads(state_path.read_text())
+            return json.loads(state_path.read_text(encoding="utf-8"))
         except Exception:
             pass
     return {"turns_since_last_summary": 0}
@@ -141,7 +141,7 @@ def _save_summary_state(state_path: Path, state: dict) -> None:
     """Persist summary state, best-effort."""
     try:
         state_path.parent.mkdir(parents=True, exist_ok=True)
-        state_path.write_text(json.dumps(state))
+        state_path.write_text(json.dumps(state), encoding="utf-8")
     except Exception:
         pass
 

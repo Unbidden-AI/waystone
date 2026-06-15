@@ -186,7 +186,7 @@ def _read_active_session_state(session_state_path: Path) -> str:
     last_extract_at_path = session_state_path.parent / "last_extract_at"
     try:
         if last_extract_at_path.exists():
-            last_extracted_at = float(last_extract_at_path.read_text().strip())
+            last_extracted_at = float(last_extract_at_path.read_text(encoding="utf-8").strip())
     except Exception:
         pass
 
@@ -462,7 +462,7 @@ def _extract_new_inbox_attachments(
 
         ledger_path = db_path.parent / "extracted_inbox.json"
         try:
-            ledger = set(json.loads(ledger_path.read_text())) if ledger_path.exists() else set()
+            ledger = set(json.loads(ledger_path.read_text(encoding="utf-8"))) if ledger_path.exists() else set()
         except Exception:
             ledger = set()
 
@@ -481,7 +481,7 @@ def _extract_new_inbox_attachments(
 
         if new_ledger != ledger:
             try:
-                ledger_path.write_text(json.dumps(sorted(new_ledger)))
+                ledger_path.write_text(json.dumps(sorted(new_ledger)), encoding="utf-8")
             except Exception:
                 pass
     except Exception:
@@ -729,7 +729,7 @@ def _detect_project(cwd: str) -> str:
         marker = directory / ".waystone"
         if marker.exists():
             try:
-                name = marker.read_text().strip()
+                name = marker.read_text(encoding="utf-8").strip()
                 if name:
                     return name
             except Exception:
@@ -750,13 +750,13 @@ def _write_state(state: dict, session_id: str = "") -> None:
             p = STATE_DIR / "state.json"
         if p.exists():
             try:
-                existing = json.loads(p.read_text())
+                existing = json.loads(p.read_text(encoding="utf-8"))
             except Exception:
                 pass
         if existing.get("extracting"):
             state["extracting"] = True
             state["extract_started_at"] = existing.get("extract_started_at")
-        p.write_text(json.dumps(state))
+        p.write_text(json.dumps(state), encoding="utf-8")
     except Exception:
         pass
 
@@ -779,7 +779,7 @@ def _read_cached_tokens(session_id: str, db_path) -> int | None:
         db_mtime = db_path.stat().st_mtime
         if db_mtime > state_mtime:
             return None  # DB was modified (extraction ran) — must recompute
-        cached = json.loads(p.read_text()).get("tokens_in_graph")
+        cached = json.loads(p.read_text(encoding="utf-8")).get("tokens_in_graph")
         return int(cached) if cached else None
     except Exception:
         return None
@@ -848,7 +848,7 @@ def _read_reflect_watermark(project: str) -> int:
     if not watermark_path.exists():
         return 0
     try:
-        return int(watermark_path.read_text().strip())
+        return int(watermark_path.read_text(encoding="utf-8").strip())
     except Exception:
         return 0
 
@@ -857,7 +857,7 @@ def _write_reflect_watermark(project: str, watermark: int) -> None:
     """Write the reflect watermark (turn count) for a project."""
     watermark_path = _get_reflect_watermark_path(project)
     try:
-        watermark_path.write_text(str(watermark))
+        watermark_path.write_text(str(watermark), encoding="utf-8")
     except Exception:
         pass
 
@@ -877,7 +877,7 @@ def _spawn_reflect(project: str, transcript_path: str, since_turn: int) -> None:
             "--domain", "software_dev",
         ]
 
-        with open(log_file, "w") as log_f:
+        with open(log_file, "w", encoding="utf-8") as log_f:
             subprocess.Popen(
                 cmd,
                 stdout=log_f,

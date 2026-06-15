@@ -6,6 +6,17 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.41] – 2026-06-15
+
+### Fixed
+
+- **Windows cp1252 crashes — pinned `encoding="utf-8"` on 79 file-I/O sites across 14 modules** (CLI, setup/configure, hooks, config, store, mcp_server, openclaw). Unpinned `read_text()`/`write_text()`/`open()` used the platform default, so on Windows any non-ASCII content (in a transcript, a `.jsonl` session, a user-edited `~/.claude/settings.json`, etc.) raised `UnicodeDecodeError`/`UnicodeEncodeError` — and in the hooks that could break a live Claude Code session. Reads of external/untrusted data also get `errors="replace"`. (Same class as the 0.4.5 hotfix; this is the comprehensive sweep, surfaced by a multi-agent review.)
+- **Extraction crashed (`KeyError: 'relation'`) on edges from a model that omits the field** — `assign_ids`/`assign_ids_incremental` now default a missing edge relation to `relates_to` instead of raising. (The historical Mistral-style non-compliant-output failure.)
+- **Admin-DB connection leak in `_check_auth`** — if `validate_key()` raised, the connection was never closed; now wrapped in `try/finally`. Slow connection exhaustion on a busy Team Server under DB errors.
+- **Silent error-swallowing made purchases undiagnosable** — the Stripe line-item lookup and the admin-DB schema migrations now `log.warning(...)` instead of `except: pass`, so an operator can see why a checkout resolved to a default tier/seat count or why a migration didn't apply. The expected "duplicate column" migration case stays quiet.
+
+---
+
 ## [0.4.40] – 2026-06-15
 
 ### Fixed

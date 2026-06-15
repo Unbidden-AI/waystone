@@ -113,7 +113,7 @@ def _load_cb_state(session_id: str = "") -> dict:
         age = time.time() - p.stat().st_mtime
         if age > STATE_MAX_AGE_SECS:
             return {}
-        return json.loads(p.read_text())
+        return json.loads(p.read_text(encoding="utf-8"))
     except Exception:
         return {}
 

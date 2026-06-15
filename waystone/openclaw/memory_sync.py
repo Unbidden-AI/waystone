@@ -297,7 +297,7 @@ def _atomic_write(path: Path, content: str) -> None:
     try:
         # Use a lock file alongside MEMORY.md to coordinate with OpenClaw
         lock_path = path.with_suffix(".engram_lock")
-        with open(lock_path, "w") as lock_file:
+        with open(lock_path, "w", encoding="utf-8") as lock_file:
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
             try:
                 # Write to temp file in same dir (ensures same filesystem for rename)

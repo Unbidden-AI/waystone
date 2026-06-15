@@ -118,13 +118,16 @@ def init_admin_db(conn: sqlite3.Connection) -> None:
         try:
             conn.execute(f"ALTER TABLE api_keys ADD COLUMN {col} {definition}")
             conn.commit()
-        except Exception:
-            pass  # Column already exists
+        except sqlite3.OperationalError as e:
+            # "duplicate column name" is the expected idempotent case; anything
+            # else (locked/corrupt DB) is a real problem an operator should see.
+            if "duplicate column" not in str(e).lower():
+                log.warning("api_keys migration for column %s did not apply: %s", col, e)
     try:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_api_keys_stripe ON api_keys(stripe_customer_id)")
         conn.commit()
-    except Exception:
-        pass
+    except sqlite3.OperationalError as e:
+        log.warning("api_keys stripe-customer index not created: %s", e)
     conn.executescript("""
 
         CREATE TABLE IF NOT EXISTS usage_log (

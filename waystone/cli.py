@@ -493,7 +493,7 @@ def extract_cmd(ctx, project, transcript_file, verify, lessons, decisions, quest
         sys.exit(1)
 
     try:
-        transcript_text = transcript_path.read_text()
+        transcript_text = transcript_path.read_text(encoding="utf-8", errors="replace")
     except UnicodeDecodeError as e:
         click.echo(
             f"Error: Could not read {transcript_path} as UTF-8: {e}\n"
@@ -968,7 +968,7 @@ def reflect_cmd(ctx, project, transcript, since_turn, domain, chunk_size):
     if transcript_path.suffix.lower() == ".jsonl":
         utterances = from_claude_jsonl(transcript_path)
     else:
-        text = transcript_path.read_text()
+        text = transcript_path.read_text(encoding="utf-8", errors="replace")
         utterances = from_plain_text(text)
 
     if not utterances:
@@ -1496,7 +1496,7 @@ def _detect_marker_project(cwd: Path | None = None) -> str | None:
         marker = directory / ".waystone"
         if marker.exists():
             try:
-                name = marker.read_text().strip()
+                name = marker.read_text(encoding="utf-8").strip()
                 if name:
                     return name
             except Exception:
@@ -2465,13 +2465,13 @@ def hook_init_cmd(ctx, project, target_dir):
     """
     marker = Path(target_dir).resolve() / ".waystone"
     if marker.exists():
-        existing = marker.read_text().strip()
+        existing = marker.read_text(encoding="utf-8").strip()
         click.echo(f"Already marked as project '{existing}'. Overwrite? [y/N] ", nl=False)
         if input().strip().lower() != "y":
             click.echo("Aborted.")
             return
 
-    marker.write_text(project + "\n")
+    marker.write_text(project + "\n", encoding="utf-8")
     click.echo(f"Marked {marker.parent} as project '{project}'")
     click.echo(f"The Claude Code hook will now query the '{project}' graph for context.")
 
@@ -2505,7 +2505,7 @@ def extract_turn_cmd(ctx, project, turn_file, context_k, context_hops):
         if not p.exists():
             click.echo(f"Error: {turn_file} not found", err=True)
             sys.exit(1)
-        turn_text = p.read_text()
+        turn_text = p.read_text(encoding="utf-8", errors="replace")
 
     store = GraphStore(db_path)
     persisted_turns = store.load_buffer()
@@ -2601,7 +2601,7 @@ def extract_replay_cmd(ctx, project, transcript_file, turn_size, context_k, cont
     ctx_hops = context_hops if context_hops is not None else inc_cfg.get("context_hops", 2)
 
     transcript_path = Path(transcript_file)
-    transcript_text = transcript_path.read_text()
+    transcript_text = transcript_path.read_text(encoding="utf-8", errors="replace")
 
     turns = split_transcript_into_turns(transcript_text, turn_size)
     click.echo(f"Split transcript into {len(turns)} turns (turn_size={turn_size})")
@@ -2758,7 +2758,7 @@ def last_context_cmd(ctx, raw):
             marker = directory / ".waystone"
             if marker.exists():
                 try:
-                    name = marker.read_text().strip()
+                    name = marker.read_text(encoding="utf-8").strip()
                     if name:
                         return name
                 except Exception:
@@ -2792,7 +2792,7 @@ def last_context_cmd(ctx, raw):
     # Show metrics from last retrieval
     if state_path.exists():
         try:
-            state = _json.loads(state_path.read_text())
+            state = _json.loads(state_path.read_text(encoding="utf-8"))
             age_s = _time.time() - state.get("timestamp", 0)
             age_str = f"{int(age_s)}s ago" if age_s < 3600 else f"{int(age_s/3600)}h ago"
             project = state.get("project", "?")
@@ -2812,7 +2812,7 @@ def last_context_cmd(ctx, raw):
 
     click.echo()
 
-    content = context_path.read_text()
+    content = context_path.read_text(encoding="utf-8")
     if raw or not sys.stdout.isatty():
         click.echo(content)
     else:
@@ -3081,7 +3081,7 @@ def onboard_cmd(ctx, project, limit, verify, chunk_size, timeout):
     if not project:
         marker = Path.cwd() / ".waystone"
         if marker.exists():
-            project = marker.read_text().strip()
+            project = marker.read_text(encoding="utf-8").strip()
         if not project:
             click.echo("Error: specify a project name or run 'waystone hook-init <project>' first.", err=True)
             sys.exit(1)
@@ -3774,7 +3774,7 @@ def doctor_cmd(ctx, do_fix):
         marker = candidate / ".waystone"
         if marker.is_file():
             marker_found = True
-            marker_project = marker.read_text().strip()
+            marker_project = marker.read_text(encoding="utf-8").strip()
             break
     _check(
         ".waystone marker found",
@@ -3818,7 +3818,7 @@ def doctor_cmd(ctx, do_fix):
     for _mcp_path in [mcp_config_path, settings_path]:
         if _mcp_path.exists():
             try:
-                _cfg = _json.loads(_mcp_path.read_text())
+                _cfg = _json.loads(_mcp_path.read_text(encoding="utf-8"))
                 if "waystone" in _cfg.get("mcpServers", {}):
                     mcp_registered = True
                     break
@@ -3839,7 +3839,7 @@ def doctor_cmd(ctx, do_fix):
     # Detect hooks
     if settings_path.exists():
         try:
-            settings = _json.loads(settings_path.read_text())
+            settings = _json.loads(settings_path.read_text(encoding="utf-8"))
             hooks = settings.get("hooks", {})
             has_submit = any(
                 "waystone" in str(h)
@@ -3879,7 +3879,7 @@ def doctor_cmd(ctx, do_fix):
         _ag_has_hooks = False
         if ANTIGRAVITY_SETTINGS_PATH.exists():
             try:
-                _ag_cfg = _json.loads(ANTIGRAVITY_SETTINGS_PATH.read_text())
+                _ag_cfg = _json.loads(ANTIGRAVITY_SETTINGS_PATH.read_text(encoding="utf-8"))
                 _ag_hooks = _ag_cfg.get("hooks", {})
                 _ag_has_hooks = any(
                     "waystone" in str(h)
@@ -3892,13 +3892,13 @@ def doctor_cmd(ctx, do_fix):
 
     if "codex" in _extra_tools:
         from .setup import CODEX_HOOKS_PATH
-        _cx_has_hooks = CODEX_HOOKS_PATH.exists() and "waystone" in CODEX_HOOKS_PATH.read_text()
+        _cx_has_hooks = CODEX_HOOKS_PATH.exists() and "waystone" in CODEX_HOOKS_PATH.read_text(encoding="utf-8")
         _check("Codex CLI hook", _cx_has_hooks,
                "" if _cx_has_hooks else "run 'waystone configure' to reinstall Codex hooks")
 
     if "openhands" in _extra_tools:
         from .setup import OPENHANDS_HOOKS_PATH
-        _oh_has_hooks = OPENHANDS_HOOKS_PATH.exists() and "waystone" in OPENHANDS_HOOKS_PATH.read_text()
+        _oh_has_hooks = OPENHANDS_HOOKS_PATH.exists() and "waystone" in OPENHANDS_HOOKS_PATH.read_text(encoding="utf-8")
         _check("OpenHands hook", _oh_has_hooks,
                "" if _oh_has_hooks else "run 'waystone configure' to reinstall OpenHands hooks")
 
@@ -4642,13 +4642,13 @@ def watch_cmd(ctx, project, paths, interval, verify, extensions):
     manifest: dict = {}
     if manifest_path.exists():
         try:
-            manifest = json.loads(manifest_path.read_text())
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         except Exception:
             pass
 
     def _save_manifest():
         try:
-            manifest_path.write_text(json.dumps(manifest))
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
         except Exception:
             pass
 
@@ -4876,7 +4876,7 @@ def auto_import_cmd(ctx, project, directory, verify, extensions, force, dry_run)
     manifest: dict = {}
     if manifest_path.exists():
         try:
-            manifest = json.loads(manifest_path.read_text())
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         except Exception:
             pass
 
@@ -4930,7 +4930,7 @@ def auto_import_cmd(ctx, project, directory, verify, extensions, force, dry_run)
             if result.returncode == 0:
                 manifest[str(f)] = mtime
                 try:
-                    manifest_path.write_text(json.dumps(manifest))
+                    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
                 except Exception:
                     pass
                 summary = result.stdout.strip().splitlines()[-1] if result.stdout.strip() else "done"

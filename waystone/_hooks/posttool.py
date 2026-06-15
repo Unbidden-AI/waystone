@@ -39,7 +39,7 @@ def _detect_project(cwd: str) -> str:
         marker = directory / ".waystone"
         if marker.exists():
             try:
-                name = marker.read_text().strip()
+                name = marker.read_text(encoding="utf-8").strip()
                 if name:
                     return name
             except Exception:
@@ -121,7 +121,7 @@ def main() -> None:
         # plain read-modify-write is safe here.
         db_path.parent.mkdir(parents=True, exist_ok=True)
         try:
-            buffer = json.loads(buf_path.read_text()) if buf_path.exists() else []
+            buffer = json.loads(buf_path.read_text(encoding="utf-8")) if buf_path.exists() else []
             if not isinstance(buffer, list):
                 buffer = []
         except Exception:
@@ -135,7 +135,7 @@ def main() -> None:
             buffer = []  # clear after flush
 
         try:
-            buf_path.write_text(json.dumps(buffer))
+            buf_path.write_text(json.dumps(buffer), encoding="utf-8")
         except Exception:
             pass
 
