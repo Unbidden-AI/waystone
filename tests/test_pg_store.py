@@ -60,6 +60,38 @@ def _node(id="n_a", fact=None, type="implementation", **kw):
     return n
 
 
+def test_concurrent_writes_through_the_pool_are_safe():
+    """Many threads sharing the process-wide connection pool write at once without
+    crashing, losing writes, or racing the one-time schema init / pool first-touch.
+    Each node has distinct content so the final count is exact (no dedup ambiguity)."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from waystone.pg_store import PostgresGraphStore
+
+    tenant = "concurrency_" + uuid.uuid4().hex[:8]
+    n_threads, per = 8, 12
+
+    def worker(tid):
+        s = PostgresGraphStore(DSN, tenant_id=tenant)
+        try:
+            for j in range(per):
+                s.add_node(_node(id=f"t{tid}_n{j}", fact=f"concurrent fact {tid}-{j}"))
+        finally:
+            s.close()
+        return per
+
+    with ThreadPoolExecutor(max_workers=n_threads) as ex:
+        counts = list(ex.map(worker, range(n_threads)))
+
+    assert sum(counts) == n_threads * per  # every worker finished, no exceptions
+    checker = PostgresGraphStore(DSN, tenant_id=tenant)
+    try:
+        # Every distinct node persisted — no lost writes under concurrency.
+        assert checker.get_stats()["node_count"] == n_threads * per
+    finally:
+        checker.close()
+
+
 def test_add_and_get(store):
     store.add_node(_node(id="n1", fact="Use JWT for auth", tags=["jwt", "auth"]))
     n = store.get_node("n1")

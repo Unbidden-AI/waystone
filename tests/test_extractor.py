@@ -473,3 +473,84 @@ class TestEdgeRelationFallback:
         }
         out = assign_ids_incremental(extraction, existing_node_ids={"n_existing"})
         assert out["edges"][0]["relation"] == "relates_to"
+
+
+class TestClassifyLLMError:
+    """The error classifier drives retry/abort decisions — pin its categories."""
+
+    @pytest.mark.parametrize("exc,status,expected", [
+        (Exception("Invalid API key"), None, "auth"),
+        (Exception("nope"), 401, "auth"),
+        (Exception("nope"), 403, "auth"),
+        (Exception("Rate limit exceeded"), None, "rate_limit"),
+        (Exception("nope"), 429, "rate_limit"),
+        (Exception("insufficient quota for billing"), None, "quota"),
+        (TimeoutError("slow"), None, "timeout"),
+        (Exception("connection timeout"), None, "timeout"),
+        (Exception("some unexpected 500"), None, "api"),
+    ])
+    def test_classification(self, exc, status, expected):
+        from waystone.extractor import _classify_llm_error
+        assert _classify_llm_error(exc, status) == expected
+
+
+class TestCallLLMRetry:
+    """The native-provider retry path: transient errors retry, truncation + auth
+    propagate immediately. asyncio.sleep is stubbed so the test is instant."""
+
+    @staticmethod
+    def _patch(monkeypatch, provider):
+        monkeypatch.setattr("waystone.llm.get_provider", lambda config: provider)
+
+        async def _no_sleep(*a, **k):
+            return None
+        monkeypatch.setattr("asyncio.sleep", _no_sleep)
+
+    @pytest.mark.asyncio
+    async def test_retries_on_429_then_succeeds(self, monkeypatch):
+        from waystone import extractor
+
+        calls = {"n": 0}
+
+        class P:
+            async def complete_async(self, *a, **k):
+                calls["n"] += 1
+                if calls["n"] < 3:
+                    raise Exception("429 Too Many Requests")
+                return '{"nodes":[],"edges":[]}'
+
+        self._patch(monkeypatch, P())
+        out = await extractor._call_llm("prompt", {"llm": {}})
+        assert calls["n"] == 3 and "nodes" in out
+
+    @pytest.mark.asyncio
+    async def test_truncation_propagates_without_retry(self, monkeypatch):
+        from waystone import extractor
+
+        calls = {"n": 0}
+
+        class P:
+            async def complete_async(self, *a, **k):
+                calls["n"] += 1
+                raise Exception("finish_reason=MAX_TOKENS")
+
+        self._patch(monkeypatch, P())
+        with pytest.raises(Exception, match="finish_reason"):
+            await extractor._call_llm("p", {"llm": {}})
+        assert calls["n"] == 1  # truncation is not retried (bisection handles it)
+
+    @pytest.mark.asyncio
+    async def test_auth_error_not_retried(self, monkeypatch):
+        from waystone import extractor
+
+        calls = {"n": 0}
+
+        class P:
+            async def complete_async(self, *a, **k):
+                calls["n"] += 1
+                raise Exception("invalid api key")
+
+        self._patch(monkeypatch, P())
+        with pytest.raises(Exception):
+            await extractor._call_llm("p", {"llm": {}})
+        assert calls["n"] == 1  # not a 429/5xx, so no retry
