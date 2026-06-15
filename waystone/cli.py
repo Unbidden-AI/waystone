@@ -4214,11 +4214,16 @@ def configure_cmd(non_interactive):
                 prefix = "    "
 
         if integration_choice in ("2", "3"):  # hooks
+            # install_hooks() wires ~/.claude/settings.json to the pip-installed
+            # console scripts (waystone-hook-submit, …) and only needs hook_dir as
+            # a fallback for repo clones. The hooks/ dir does NOT ship in the wheel,
+            # so gating on its existence meant pip users got NO hooks wired — pass
+            # it only when present, but always call install_hooks.
             hooks_dir = Path(__file__).resolve().parent.parent / "hooks"
             if not hooks_dir.exists():
                 hooks_dir = Path(__file__).resolve().parent / "hooks"
-            if hooks_dir.exists():
-                added, skipped = install_hooks(hooks_dir)
+            try:
+                added, skipped = install_hooks(hooks_dir if hooks_dir.exists() else None)
                 for label in added:
                     click.echo(f"  ✓  {label} added to ~/.claude/settings.json")
                 for label in skipped:
@@ -4227,6 +4232,8 @@ def configure_cmd(non_interactive):
                     click.echo("  ✓  Waystone section appended to ~/.claude/CLAUDE.md")
                 else:
                     click.echo("  –  CLAUDE.md already has Waystone section")
+            except RuntimeError as e:
+                click.echo(f"  ✗  Could not wire hooks: {e}")
 
         # Slash commands (e.g. /btw) — useful with any Claude Code method
         installed_cmds = install_slash_commands()

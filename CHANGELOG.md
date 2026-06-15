@@ -6,6 +6,18 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.40] – 2026-06-15
+
+### Fixed
+
+- **`waystone configure` wired NO Claude Code hooks for pip-installed users** — the core "auto-inject context before every prompt" feature silently never activated after a normal `pip install waystone`. `configure` only called `install_hooks()` when a repo-relative `hooks/` directory existed, but that directory doesn't ship in the wheel. `install_hooks()` already handles the pip case correctly (it wires `~/.claude/settings.json` to the installed `waystone-hook-*` console-script entry points and only needs `hooks/` as a repo-clone fallback) — so it's now always called, with `hook_dir` passed only when present. Pip users running `configure` now get all five hooks (UserPromptSubmit, Stop, PostToolUse, SessionStart, SessionEnd) and the CLAUDE.md section. The publish smoke test missed this because it runs the hooks directly rather than through `configure`; a new end-to-end install harness (`ci/acceptance_install.sh`) caught it.
+
+### Added
+
+- **`ci/acceptance_install.sh`** — end-USER install acceptance: installs the real published artifact from PyPI into a clean virtualenv and verifies the actual commands work (console scripts, `--version`, `selfcheck --deep`, `configure` wiring Claude Code) and, behind `--full`, a real solo extraction round-trip plus a pip-installed client talking to a Team Server. Complements `acceptance_teamserver.sh` (which tests the server in Docker).
+
+---
+
 ## [0.4.39] – 2026-06-14
 
 ### Fixed
