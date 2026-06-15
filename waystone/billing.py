@@ -150,8 +150,37 @@ def init_admin_db(conn: sqlite3.Connection) -> None:
             last_attempt REAL
         );
         CREATE INDEX IF NOT EXISTS idx_dead_letter_email ON dead_letter_emails(email);
+
+        -- Stripe delivers webhooks at-least-once and retries on any non-2xx, so the
+        -- same event can arrive multiple times. We record each processed event id and
+        -- skip duplicates, so a retry never double-issues a key/license or double-emails.
+        CREATE TABLE IF NOT EXISTS processed_events (
+            event_id     TEXT PRIMARY KEY,
+            processed_at REAL NOT NULL
+        );
     """)
     conn.commit()
+
+
+def claim_event(conn: sqlite3.Connection, event_id: str) -> bool:
+    """Atomically claim a Stripe event id for processing.
+
+    Returns True if this caller is the first to see ``event_id`` (proceed), or False
+    if it was already processed (a duplicate/retry — skip). A blank id can't be
+    deduped, so it always returns True. Race-safe via the PRIMARY KEY: a concurrent
+    duplicate hits the UNIQUE constraint and is rejected.
+    """
+    if not event_id:
+        return True
+    try:
+        conn.execute(
+            "INSERT INTO processed_events (event_id, processed_at) VALUES (?, ?)",
+            (event_id, time.time()),
+        )
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        return False
 
 
 # ---------------------------------------------------------------------------

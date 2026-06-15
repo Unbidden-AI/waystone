@@ -6,6 +6,18 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.43] – 2026-06-15
+
+### Fixed
+
+- **Stripe webhook idempotency — duplicate/retried events no longer double-issue.** Stripe delivers webhooks at-least-once and retries on any non-2xx, so the same `checkout.session.completed` / `invoice.paid` could mint a second key/license and send a second email. The handler now **claims each event id** (new `processed_events` table + `claim_event()`) and acks-and-skips a duplicate. (A delivery that fails before the claim commits can still be retried, so genuine failures aren't lost.)
+
+### Tests
+
+- Webhook idempotency (`claim_event` dedup; a replayed event mints+emails exactly once) and Stripe **signature-verification edge cases** — malformed headers (empty, no `=`, missing `t`/`v1`), a forged signature, key-rotation (multiple `v1`, one valid), and "no secret configured rejects everything".
+
+---
+
 ## [0.4.42] – 2026-06-15
 
 ### Added

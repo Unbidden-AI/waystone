@@ -37,6 +37,7 @@ from .billing import (
     RateLimiter,
     check_node_limit,
     check_project_limit,
+    claim_event,
     create_key,
     get_or_create_key_by_email,
     is_team_license_price,
@@ -916,6 +917,24 @@ async def stripe_webhook(request: Request) -> dict:
 
     event_type = payload.get("type", "")
     obj = payload.get("data", {}).get("object", {})
+
+    # Idempotency: Stripe delivers at-least-once and retries, so the same event can
+    # arrive more than once. Claim the event id; a duplicate is acked and skipped so
+    # we never double-issue a key/license or double-email. (Failures before the claim
+    # commits aren't deduped, so a genuinely failed delivery can still be retried.)
+    event_id = payload.get("id", "")
+    try:
+        _ev_conn = open_admin_db()
+        try:
+            first_time = claim_event(_ev_conn, event_id)
+        finally:
+            _ev_conn.close()
+    except Exception as exc:
+        log.warning("Webhook idempotency check skipped (admin DB unavailable): %s", exc)
+        first_time = True
+    if not first_time:
+        log.info("Duplicate Stripe webhook %s (%s) — skipping", event_id, event_type)
+        return {"ok": True, "event": event_type, "duplicate": True}
 
     if event_type == "checkout.session.completed":
         email = obj.get("customer_email", "")

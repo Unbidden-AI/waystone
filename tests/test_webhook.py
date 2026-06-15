@@ -310,3 +310,51 @@ class TestUnknownEvents:
         )
         assert r.status_code == 200
         assert r.json()["ignored"] is True
+
+
+# ---------------------------------------------------------------------------
+# Signature verification edge cases (security-critical)
+# ---------------------------------------------------------------------------
+
+class TestStripeSignatureEdgeCases:
+    """verify_stripe_signature must reject every malformed/forged header and only
+    accept a genuine HMAC — including key-rotation (multiple v1 sigs)."""
+
+    def _good_header(self, body: bytes, secret: str) -> str:
+        ts = str(int(time.time()))
+        sig = hmac.new(secret.encode(), ts.encode() + b"." + body,
+                       hashlib.sha256).hexdigest()
+        return f"t={ts},v1={sig}"
+
+    def test_valid_signature_accepted(self, monkeypatch):
+        from waystone.billing import verify_stripe_signature
+        monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", WEBHOOK_SECRET)
+        body = b'{"hello":"world"}'
+        assert verify_stripe_signature(body, self._good_header(body, WEBHOOK_SECRET))
+
+    def test_rotation_one_of_many_v1_valid(self, monkeypatch):
+        from waystone.billing import verify_stripe_signature
+        monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", WEBHOOK_SECRET)
+        body = b'{"a":1}'
+        good = self._good_header(body, WEBHOOK_SECRET)
+        ts, v1 = good.split(",")
+        header = f"{ts},v1=deadbeef,{v1}"  # a bad sig plus the good one
+        assert verify_stripe_signature(body, header)
+
+    @pytest.mark.parametrize("header", [
+        "",                                   # empty
+        "garbage-no-equals",                  # no k=v
+        "t=123",                              # missing v1
+        "v1=abc123",                          # missing timestamp
+        "t=123,v1=deadbeef",                  # wrong signature
+    ])
+    def test_malformed_or_forged_rejected(self, monkeypatch, header):
+        from waystone.billing import verify_stripe_signature
+        monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", WEBHOOK_SECRET)
+        assert verify_stripe_signature(b'{"x":1}', header) is False
+
+    def test_no_secret_configured_rejects_everything(self, monkeypatch):
+        from waystone.billing import verify_stripe_signature
+        monkeypatch.delenv("STRIPE_WEBHOOK_SECRET", raising=False)
+        body = b'{"x":1}'
+        assert verify_stripe_signature(body, self._good_header(body, WEBHOOK_SECRET)) is False

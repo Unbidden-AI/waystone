@@ -20,7 +20,7 @@ pytest.importorskip("fastapi", reason="fastapi not installed")
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from waystone.billing import init_admin_db, is_team_license_price  # noqa: E402
+from waystone.billing import claim_event, init_admin_db, is_team_license_price  # noqa: E402
 from waystone.licensing import (  # noqa: E402
     LicenseError,
     issue_license_from_env,
@@ -239,6 +239,39 @@ def test_self_hosted_team_shares_projects_across_members(monkeypatch):
     monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_x")
     assert _isolate_by_key(alice) is True
     assert _isolate_by_key(bob) is True
+
+
+def test_claim_event_dedupes(tmp_path):
+    db = tmp_path / "admin.db"
+    conn = sqlite3.connect(str(db))
+    init_admin_db(conn)
+    assert claim_event(conn, "evt_1") is True      # first time → process
+    assert claim_event(conn, "evt_1") is False     # duplicate → skip
+    assert claim_event(conn, "evt_2") is True       # a different event proceeds
+    assert claim_event(conn, "") is True            # blank id can't be deduped
+    assert claim_event(conn, "") is True
+    conn.close()
+
+
+def test_duplicate_webhook_does_not_double_issue(client, signing):
+    """A replayed Stripe event (same id) must mint+email exactly once."""
+    calls = {"n": 0}
+
+    def _count(*a, **k):
+        calls["n"] += 1
+
+    payload = _payload(seats="10")
+    payload["id"] = "evt_dup_123"
+    body = json.dumps(payload).encode()
+    headers = {"Content-Type": "application/json", "Stripe-Signature": _sign(body)}
+    with patch("waystone.api_server.send_license_email", _count):
+        r1 = client.post("/webhooks/stripe", content=body, headers=headers)
+        r2 = client.post("/webhooks/stripe", content=body, headers=headers)
+
+    assert r1.status_code == 200 and r2.status_code == 200
+    assert r1.json().get("license_seats") == 10
+    assert r2.json().get("duplicate") is True
+    assert calls["n"] == 1  # issued+emailed only once despite the replay
 
 
 def test_tampered_license_rejected(signing):
