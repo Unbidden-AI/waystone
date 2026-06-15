@@ -6,6 +6,16 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.42] – 2026-06-15
+
+### Added
+
+- **Production observability (P1) — you can now diagnose a deployed Team Server.** A central logging layer (`waystone/_logging.py`) wires the sinks the modules never configured: the **API server logs one structured access line per request** to stderr (method, path, status, latency, and a one-way-hashed key id — never the key itself), plus pool/webhook events; `docker compose logs -f server` is now useful. Verbosity via `WAYSTONE_LOG_LEVEL`.
+- **Hooks now record failures instead of vanishing.** A `@hook_entry` decorator on every Claude Code hook routes logs to a rotating `~/.waystone/logs/hooks.log` (hook **stdout stays the protocol channel** — logs never leak into it) and guarantees fail-open: any unhandled error is logged and the hook exits 0, so it can't crash or block the editor session. Previously a hook failure in a deployed server was completely invisible.
+- **Postgres connection pool diagnostics** — logs pool creation and, critically, a `WARNING` on a checkout timeout, so connection-starvation surfaces as a clear signal instead of an opaque 500.
+
+---
+
 ## [0.4.41] – 2026-06-15
 
 ### Fixed

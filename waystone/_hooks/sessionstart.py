@@ -11,7 +11,10 @@ rather than letting the user discover it via silent extraction failures later.
 
 import sys
 
+from .._logging import hook_entry
 
+
+@hook_entry
 def main() -> None:
     try:
         from waystone._io import force_utf8

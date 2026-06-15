@@ -117,3 +117,6 @@ keys) persists in the `waystone-serverdata` volume.
 - **TLS / public exposure**: put the server behind a reverse proxy (Caddy/nginx) or
   a private network (Tailscale) — the bearer key is the only gate.
 - **Tenancy**: each `project` is an isolated tenant inside the one Postgres graph.
+- **Logs**: the server logs to stderr — `docker compose logs -f server` shows one
+  access line per request (method, path, status, latency, hashed key) plus pool and
+  webhook events. Set `WAYSTONE_LOG_LEVEL=DEBUG` (or `INFO`/`WARNING`) to tune verbosity.

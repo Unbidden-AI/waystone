@@ -131,6 +131,7 @@ def _get_pool(dsn: str):
             configure=_configure, open=True, name="waystone",
         )
         _POOLS[dsn] = pool
+        log.info("Postgres connection pool created (min=1 max=%s)", max_size)
         return pool
 
 # Per-type half-lives for proactive staleness detection (mirror of GraphStore's).
@@ -163,7 +164,14 @@ class PostgresGraphStore:
         self._pool = _get_pool(dsn) if _pooling_enabled() else None
         if self._pool is not None:
             # Borrowed conn already has dict rows + pgvector (pool `configure`).
-            self.conn = self._pool.getconn()
+            try:
+                self.conn = self._pool.getconn()
+            except Exception as e:
+                # Pool exhausted / timed out — surface it so an operator can see
+                # the server is connection-starved instead of just a 500.
+                log.warning("Postgres pool checkout failed (max=%s): %s",
+                            os.environ.get("WAYSTONE_PG_POOL_MAX", "10"), e)
+                raise
         else:
             self.conn = psycopg.connect(dsn, row_factory=dict_row, autocommit=False)
             # The vector type must exist before register_vector can look it up —

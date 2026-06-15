@@ -16,10 +16,13 @@ import sys
 import time
 from pathlib import Path
 
+from .._logging import hook_entry
+
 STATE_DIR = Path.home() / ".waystone"
 STATE_MAX_AGE_SECS = 300  # Don't show stale CB state after 5 min
 
 
+@hook_entry
 def main():
     # Harden stdout/stderr against legacy consoles (Windows cp1252) so the
     # status line's Unicode glyphs never raise UnicodeEncodeError.

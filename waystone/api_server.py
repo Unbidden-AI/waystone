@@ -70,6 +70,12 @@ _ADMIN_EMAILS: frozenset[str] = frozenset(
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI lifespan handler for startup checks."""
+    # Startup: send our module logs to stderr (default INFO so the access log
+    # below is visible; WAYSTONE_LOG_LEVEL overrides). 12-factor: the platform
+    # captures stderr.
+    from ._logging import setup_stream_logging
+    setup_stream_logging(logging.INFO)
+
     # Startup: initialize Sentry
     init_sentry()
 
@@ -89,6 +95,32 @@ app = FastAPI(
     description="DAG-based context intelligence layer for LLM workflows",
     lifespan=lifespan,
 )
+
+
+@app.middleware("http")
+async def _access_log(request, call_next):
+    """One structured access-log line per request so an operator can see traffic,
+    latency, and errors. The API key is one-way hashed (8 hex) for correlation —
+    never logged in the clear."""
+    import hashlib
+    import time as _time
+
+    start = _time.perf_counter()
+    auth = request.headers.get("authorization", "")
+    keyid = "-"
+    if auth[:7].lower() == "bearer ":
+        keyid = hashlib.sha256(auth[7:].encode("utf-8", "ignore")).hexdigest()[:8]
+    try:
+        response = await call_next(request)
+    except Exception:
+        dur = (_time.perf_counter() - start) * 1000
+        log.exception("%s %s -> ERR (%.0fms) key=%s",
+                      request.method, request.url.path, dur, keyid)
+        raise
+    dur = (_time.perf_counter() - start) * 1000
+    log.info("%s %s -> %s (%.0fms) key=%s",
+             request.method, request.url.path, response.status_code, dur, keyid)
+    return response
 
 _bearer = HTTPBearer(auto_error=False)
 _rate_limiter = RateLimiter()

@@ -29,6 +29,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from .._logging import hook_entry
+
 STATE_DIR = Path.home() / ".waystone"
 PAUSE_FILE = STATE_DIR / "paused"
 
@@ -95,6 +97,7 @@ def _spawn_import(project: str, mem_dir: Path) -> None:
         pass
 
 
+@hook_entry
 def main() -> None:
     try:
         from waystone._io import force_utf8

@@ -20,6 +20,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from .._logging import hook_entry
+
 WORKER = Path(__file__).resolve().parent / "worker.py"
 STATE_DIR = Path.home() / ".waystone"
 PAUSE_FILE = STATE_DIR / "paused"
@@ -74,6 +76,7 @@ def _summarize(tool_name: str, tool_input: dict) -> str:
     return f"Used tool {tool_name}"
 
 
+@hook_entry
 def main() -> None:
     try:
         from waystone._io import force_utf8

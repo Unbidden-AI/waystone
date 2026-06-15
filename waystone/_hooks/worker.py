@@ -21,6 +21,8 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .._logging import hook_entry
+
 # Load project .env before Waystone imports — override=True ensures a fresh
 # key in .env wins over a stale value inherited from the parent process.
 try:
@@ -33,6 +35,7 @@ STATE_DIR = Path.home() / ".waystone"
 PAUSE_FILE = STATE_DIR / "paused"
 
 
+@hook_entry
 def main():
     try:
         from waystone._io import force_utf8

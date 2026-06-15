@@ -27,6 +27,8 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .._logging import hook_entry
+
 try:
     from waystone._io import force_utf8
     force_utf8()
@@ -42,6 +44,7 @@ PAUSE_FILE = STATE_DIR / "paused"
 SUMMARY_CONTEXT_TURNS = 30
 
 
+@hook_entry
 def main():
     """Entry point for the detached summary worker."""
     parser = argparse.ArgumentParser()

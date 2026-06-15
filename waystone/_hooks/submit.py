@@ -27,6 +27,8 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from .._logging import hook_entry
+
 WORKER = Path(__file__).resolve().parent / "worker.py"
 
 
@@ -233,6 +235,7 @@ def _latest_session_narrative(store, session_id: str = "") -> str:
         return ""
 
 
+@hook_entry
 def main():
     try:
         from waystone._io import force_utf8

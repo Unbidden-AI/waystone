@@ -31,6 +31,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from .._logging import hook_entry
+
 TRANSCRIPTS_DIR = Path.home() / ".waystone" / "transcripts"
 
 # Number of already-extracted turns to prepend as read-only co-reference context
@@ -48,6 +50,7 @@ DEFAULT_RECONCILE_THRESHOLD = 75   # new nodes since last reconcile
 DEFAULT_RECONCILE_MIN_TOTAL = 100  # minimum graph size before reconcile
 
 
+@hook_entry
 def main():
     try:
         from waystone._io import force_utf8
