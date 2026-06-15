@@ -209,6 +209,26 @@ def test_merge_extraction(store):
     assert store.get_edges_from("a")[0]["to_id"] == "b"
 
 
+def test_merge_extraction_is_idempotent(store):
+    """Re-merging the same extraction must NOT duplicate (exact fact-hash dedup).
+
+    This is the property that makes a partially-failed merge safe: merge_extraction
+    is not atomic across nodes, so a mid-run DB error leaves some nodes committed —
+    but re-running heals it (committed nodes dedupe, the rest get added) with no
+    duplicates. Proves the self-healing-on-retry behavior."""
+    nodes = [
+        {"id": "a", "fact": "Auth uses JWT", "type": "decision", "tags": ["jwt"],
+         "confidence": 0.9, "supersedes": [], "created_at": "2026-03-01T00:00:00+00:00"},
+        {"id": "b", "fact": "Cache uses Redis", "type": "implementation", "tags": ["redis"],
+         "confidence": 0.9, "supersedes": [], "created_at": "2026-03-01T00:00:00+00:00"},
+    ]
+    edges = [{"from_id": "a", "to_id": "b", "relation": "relates_to"}]
+    store.merge_extraction(nodes, edges)
+    store.merge_extraction(nodes, edges)  # retry the exact same extraction
+    # Still exactly 2 nodes / 1 edge — no duplication from the re-run.
+    assert store.get_stats() == {"node_count": 2, "edge_count": 1}
+
+
 def test_merge_extraction_supersedes(store):
     store.add_node(_node(id="old", fact="Auth uses sessions", type="decision"))
     nodes = [{"id": "new", "fact": "Auth uses JWT now", "type": "decision", "tags": ["jwt"],
