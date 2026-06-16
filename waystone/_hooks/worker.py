@@ -16,12 +16,42 @@ Usage (internal — called by waystone_submit.py):
 import argparse
 import asyncio
 import json
+import logging
+import re
 import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 
 from .._logging import hook_entry
+
+log = logging.getLogger(__name__)
+
+
+def _elapsed_ms_since(started) -> int:
+    """Milliseconds since `started` (a float epoch timestamp). When `started` is None
+    — which is exactly what completion writes back to state — treat it as 'now' (0ms)
+    instead of doing `float - None`, the TypeError that surfaced as a phantom
+    'extraction error' on a SUCCESSFUL extract (dict.get returns the present None, so
+    a default arg never fired)."""
+    return int((time.time() - (started or time.time())) * 1000)
+
+
+def _short_error(exc: Exception) -> str:
+    """A concise, actionable status-bar message for an extraction failure (the full
+    error goes to the log). Classifies LLM API errors so a 403 reads as 'auth' rather
+    than a wall of HTTP text."""
+    s = str(exc)
+    try:
+        from waystone.extractor import _classify_llm_error
+        m = re.search(r"\b(\d{3})\b", s)
+        code = int(m.group(1)) if m else None
+        kind = _classify_llm_error(exc, code)
+        if kind != "api":
+            return f"LLM {kind} error" + (f" ({code})" if code else "")
+    except Exception:
+        pass
+    return s.splitlines()[0][:120] if s else type(exc).__name__
 
 # Load project .env before Waystone imports — override=True ensures a fresh
 # key in .env wins over a stale value inherited from the parent process.
@@ -136,7 +166,7 @@ def main():
         stats = store.get_stats()
         store.close()
 
-        elapsed_ms = int((time.time() - _load_state(args.session_id).get("extract_started_at", time.time())) * 1000)
+        elapsed_ms = _elapsed_ms_since(_load_state(args.session_id).get("extract_started_at"))
         completed_at = time.time()
         _merge_state({
             "extracting": False,
@@ -152,10 +182,11 @@ def main():
             pass
 
     except Exception as e:
+        log.warning("local extraction failed for project %s: %s", args.project, e, exc_info=True)
         _merge_state({
             "extracting": False,
             "extract_started_at": None,
-            "extract_error": str(e),
+            "extract_error": _short_error(e),
         }, session_id=args.session_id)
         sys.exit(1)
 
@@ -184,10 +215,11 @@ def _run_remote(args, text: str) -> None:
         except Exception:
             pass
     except Exception as e:
+        log.warning("remote extraction failed for project %s: %s", args.project, e, exc_info=True)
         _merge_state({
             "extracting": False,
             "extract_started_at": None,
-            "extract_error": str(e),
+            "extract_error": _short_error(e),
         }, session_id=args.session_id)
         sys.exit(1)
 

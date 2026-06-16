@@ -6,6 +6,18 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.45] – 2026-06-16
+
+### Fixed
+
+- **Phantom "extraction error" in the status bar on a SUCCESSFUL extract.** The worker writes `extract_started_at: None` back to state on completion, so the next extraction's elapsed-ms calc did `time.time() - state.get("extract_started_at", time.time())` → `float - None` (a present `None` means `dict.get`'s default never fires). The extraction actually succeeded; only the status-line timing crashed, surfacing a scary error. Fixed via `_elapsed_ms_since()` (coerces None → now) + regression test.
+
+### Changed
+
+- **Extraction failures are now logged + classified.** The worker logs the full failure (with traceback) to `~/.waystone/logs/hooks.log` instead of only stashing it in transient session state — so external errors (e.g. an LLM `403`) leave a durable, diagnosable record. The status-bar message is also classified (`LLM auth error (403)` rather than a raw multi-line HTTP dump).
+
+---
+
 ## [0.4.44] – 2026-06-15
 
 ### Added
