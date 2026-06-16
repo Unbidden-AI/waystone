@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response, Security, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
@@ -53,7 +53,7 @@ from .config import load_config
 from .extractor import extract as _extract
 from .extractor import extract_chunked as _extract_chunked
 from .extractor import score_extraction_quality, verify_extraction
-from .monitoring import init_sentry
+from .monitoring import capture_exception, init_sentry
 from .retriever import retrieve_with_stats
 from .store import GraphStore
 
@@ -122,6 +122,17 @@ async def _access_log(request, call_next):
     log.info("%s %s -> %s (%.0fms) key=%s",
              request.method, request.url.path, response.status_code, dur, keyid)
     return response
+
+
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(request, exc):
+    """Last-resort net: any exception not handled by an endpoint is LOGGED (full
+    traceback) and reported to Sentry (if configured), then the client gets a clean
+    500 instead of a leaked stack trace. Nothing escapes unrecorded. HTTPException
+    is handled by FastAPI's own handler and never reaches here."""
+    log.exception("Unhandled error on %s %s", request.method, request.url.path)
+    capture_exception(exc)
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 _bearer = HTTPBearer(auto_error=False)
 _rate_limiter = RateLimiter()

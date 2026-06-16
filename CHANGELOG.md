@@ -6,6 +6,15 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.44] – 2026-06-15
+
+### Added
+
+- **`waystone diagnostics` — a one-command redacted support bundle.** Collects version, platform, self-check, your config, the relevant env-var *names*, per-project node *counts*, and the tail of the hook/MCP logs into a single shareable file. Secrets (API keys, license tokens, Stripe `sk_`/`whsec_`, DSN passwords, PEM keys, JWTs, Google keys) are **scrubbed**, graph **content is never included**, and nothing is uploaded anywhere — so a stuck user can file a useful bug report without hunting for log paths or leaking their keys. Redaction is unit-tested with planted secrets across config/env/logs.
+- **Sentry: release + environment tagging and a global exception net.** `init_sentry` now tags `release=waystone@<version>` + `environment` (`WAYSTONE_ENV`, default `production`) so the dashboard shows which version introduced a regression. A FastAPI global exception handler logs the full traceback, reports to Sentry (via the new `monitoring.capture_exception` no-op-safe helper), and returns a clean 500 — so an unhandled error never escapes unrecorded or leaks a stack trace to the client. (All inert unless `SENTRY_DSN` is set; never default-on for self-hosted/on-prem.)
+
+---
+
 ## [0.4.43] – 2026-06-15
 
 ### Fixed

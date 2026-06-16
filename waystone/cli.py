@@ -447,6 +447,42 @@ def selfcheck_cmd(ctx, as_json, deep):
         sys.exit(1)
 
 
+@cli.command("diagnostics")
+@click.option("-o", "--output", type=click.Path(), default=None,
+              help="Where to write the bundle (default: ~/.waystone/diagnostics-<ts>.txt)")
+@click.option("--lines", default=200, show_default=True,
+              help="Log lines to include per file")
+@click.pass_context
+def diagnostics_cmd(ctx, output, lines):
+    """Write a REDACTED diagnostic bundle for a bug report.
+
+    Collects version, platform, self-check, your config, the relevant env-var names,
+    per-project node counts, and the tail of the hook/MCP logs into ONE file you can
+    share. Secrets (API keys, license tokens, Stripe keys, DSN passwords, PEM keys)
+    are scrubbed and graph CONTENT is never included — but review the file before
+    sending it. Nothing is uploaded anywhere.
+    """
+    from datetime import datetime, timezone
+
+    from ._diagnostics import build_report
+
+    report = build_report(ctx.obj.get("config_path"), log_lines=lines)
+
+    if output:
+        out_path = Path(output).expanduser()
+    else:
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        out_dir = Path.home() / ".waystone"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path = out_dir / f"diagnostics-{ts}.txt"
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(report, encoding="utf-8")
+    click.echo(f"Wrote diagnostics to {out_path}")
+    click.echo("Secrets are redacted and your graph content is excluded — but please "
+               "skim it before sharing, then send it along with your bug report.")
+
+
 _MAX_FILE_BYTES = 50 * 1024 * 1024  # 50 MB hard limit
 
 
