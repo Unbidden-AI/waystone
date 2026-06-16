@@ -6,6 +6,19 @@ All notable changes to Waystone are documented here.
 
 ---
 
+## [0.4.46] – 2026-06-16
+
+### Fixed
+
+- **A paid customer whose key/license email failed once would never get it.** The dead-letter queue captured failed Resend deliveries for retry, but `retry_dead_letter_emails()` was **never called anywhere** — no scheduler, no endpoint — so queued emails sat forever. The API server now runs a periodic background retry loop (drains shortly after startup, then every `WAYSTONE_DEAD_LETTER_INTERVAL` seconds, default 600), cancelled cleanly on shutdown, only when hosted (`STRIPE_WEBHOOK_SECRET` set).
+- **The retry sent the wrong email for licenses.** License dead-letters are stored as `api_key="LICENSE:<token>"`, but the retry built the generic API-key email for every row — a resent license would have read "your API key: LICENSE:…" with `export WAYSTONE_API_KEY=…`. Email delivery is now refactored into shared `_post_email` / `_key_email_content` / `_license_email_content` helpers used by both the initial send and the retry, and the retry decodes a `LICENSE:` row back into a proper license email (seats/expiry recovered from the signed token).
+
+### Added
+
+- **`email_queue.dead_letters_pending` in `/v1/admin/metrics`** + `count_dead_letters()` — a non-zero value means customers are owed an email, so it's visible instead of silent.
+
+---
+
 ## [0.4.45] – 2026-06-16
 
 ### Fixed

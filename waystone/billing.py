@@ -340,21 +340,28 @@ def log_usage(
 # Email delivery (Resend)
 # ---------------------------------------------------------------------------
 
-def send_key_email(email: str, raw_key: str, tier: str, admin_conn: sqlite3.Connection | None = None) -> None:
-    """Send API key to customer via Resend. Falls back to stdout in dev mode.
-
-    On delivery failure, inserts a row into the dead_letter_emails table for retry.
-
-    Args:
-        email: Customer email address
-        raw_key: The raw API key to send
-        tier: Tier name (free, pro, team)
-        admin_conn: Optional AdminDB connection for dead-letter queueing. If not provided
-                   and delivery fails, the key is lost (dev mode).
-    """
+def _post_email(email: str, subject: str, body: str) -> None:
+    """Deliver one email via Resend. RAISES on failure (so callers can dead-letter)
+    and, in dev mode (no RESEND_API_KEY), prints to stdout and returns. Shared by the
+    initial send AND the dead-letter retry, so both paths format identically."""
     resend_key = os.environ.get("RESEND_API_KEY", "")
-    tier_label = TIERS.get(tier, {}).get("label", tier.title())
+    if not resend_key:
+        log.info("[DEV] Would send email to %r: %s", email, subject)
+        print(f"[DEV] Email to {email}\n{subject}\n\n{body}")
+        return
+    import httpx
+    resp = httpx.post(
+        "https://api.resend.com/emails",
+        headers={"Authorization": f"Bearer {resend_key}"},
+        json={"from": "Waystone <noreply@waystone.unbidden.ai>",
+              "to": [email], "subject": subject, "text": body},
+        timeout=10.0,
+    )
+    resp.raise_for_status()
 
+
+def _key_email_content(raw_key: str, tier: str) -> tuple[str, str]:
+    tier_label = TIERS.get(tier, {}).get("label", tier.title())
     subject = f"Your Waystone {tier_label} API Key"
     body = (
         f"Hi,\n\n"
@@ -369,57 +376,89 @@ def send_key_email(email: str, raw_key: str, tier: str, admin_conn: sqlite3.Conn
         f"Contact support to rotate it.\n\n"
         f"— Waystone Team\n"
     )
+    return subject, body
 
-    if not resend_key:
-        # Dev mode: print to stdout so tests/local runs can see the key
-        log.info("[DEV] Would send email to %r: Subject: %s", email, subject)
-        print(f"[DEV] Email to {email}\n{subject}\n\n{body}")
+
+def _license_email_content(token: str, seats: int, expires_at: str | None) -> tuple[str, str]:
+    subject = f"Your Waystone Team Server license ({seats} seats)"
+    exp_line = f"Valid until: {expires_at[:10]}\n\n" if expires_at else ""
+    body = (
+        "Hi,\n\n"
+        f"Thanks for purchasing a Waystone Team Server license — {seats} seats.\n\n"
+        f"{exp_line}"
+        "Set this token on your server, then `docker compose up`:\n\n"
+        f"  WAYSTONE_LICENSE={token}\n\n"
+        "Issue a key per teammate with:  waystone team issue <email>\n"
+        "Full setup: https://unbidden.ai/docs/team-server/\n\n"
+        "The license is verified offline on your own server — no phone-home.\n"
+        "Keep the token safe; contact support to re-issue.\n\n"
+        "— Waystone Team\n"
+    )
+    return subject, body
+
+
+def _queue_dead_letter(admin_conn, email: str, api_key: str, tier: str) -> None:
+    if admin_conn is None:
         return
-
     try:
-        import httpx
-        resp = httpx.post(
-            "https://api.resend.com/emails",
-            headers={"Authorization": f"Bearer {resend_key}"},
-            json={
-                "from": "Waystone <noreply@waystone.unbidden.ai>",
-                "to": [email],
-                "subject": subject,
-                "text": body,
-            },
-            timeout=10.0,
+        now = time.time()
+        admin_conn.execute(
+            """INSERT INTO dead_letter_emails (email, api_key, tier, created_at, retry_count, last_attempt)
+               VALUES (?, ?, ?, ?, 0, ?)""",
+            (email, api_key, tier, now, now),
         )
-        resp.raise_for_status()
-    except Exception as exc:
-        # Non-fatal: key was already created; queue for retry if we have a connection
-        error_msg = str(exc)
-        log.error("Email delivery failed for %r: %s", email, error_msg)
-        print(f"[WARN] Email delivery failed for {email!r}: {error_msg}")
+        admin_conn.commit()
+        log.info("Queued email for retry: %r", email)
+    except Exception as queue_exc:
+        log.error("Failed to queue email for retry: %s", queue_exc)
 
-        if admin_conn:
-            now = time.time()
-            try:
-                admin_conn.execute(
-                    """INSERT INTO dead_letter_emails (email, api_key, tier, created_at, retry_count, last_attempt)
-                       VALUES (?, ?, ?, ?, 0, ?)""",
-                    (email, raw_key, tier, now, now),
-                )
-                admin_conn.commit()
-                log.info("Queued email for retry: %r", email)
-            except Exception as queue_exc:
-                log.error("Failed to queue email for retry: %s", queue_exc)
+
+def send_key_email(email: str, raw_key: str, tier: str, admin_conn: sqlite3.Connection | None = None) -> None:
+    """Send API key to customer via Resend (stdout in dev). On delivery failure,
+    queues a dead-letter row for retry (if admin_conn given)."""
+    subject, body = _key_email_content(raw_key, tier)
+    try:
+        _post_email(email, subject, body)
+    except Exception as exc:
+        log.error("Email delivery failed for %r: %s", email, exc)
+        print(f"[WARN] Email delivery failed for {email!r}: {exc}")
+        _queue_dead_letter(admin_conn, email, raw_key, tier)
 
 
 # ---------------------------------------------------------------------------
 # Dead-letter email retry
 # ---------------------------------------------------------------------------
 
-def retry_dead_letter_emails(admin_conn: sqlite3.Connection, max_retries: int = 3) -> int:
-    """Retry sending emails from the dead-letter queue.
+def count_dead_letters(admin_conn: sqlite3.Connection) -> int:
+    """How many emails are still queued for retry (visibility for operators)."""
+    try:
+        return admin_conn.execute("SELECT COUNT(*) FROM dead_letter_emails").fetchone()[0]
+    except Exception:
+        return 0
 
-    Returns the number of successfully sent emails.
+
+def _content_for_dead_letter(api_key: str, tier: str) -> tuple[str, str]:
+    """Build the right email for a queued row. License rows are stored as
+    ``api_key='LICENSE:<token>'`` — decode the token to recover seats/expiry so the
+    resent email is a proper LICENSE email (not a malformed API-key one)."""
+    if api_key.startswith("LICENSE:"):
+        token = api_key[len("LICENSE:"):]
+        from .licensing import verify_license
+        lic = verify_license(token)  # raises if expired/tampered → counts as a failed retry
+        exp = lic.expires_at.isoformat() if getattr(lic, "expires_at", None) else None
+        return _license_email_content(token, lic.seats, exp)
+    return _key_email_content(api_key, tier)
+
+
+def retry_dead_letter_emails(admin_conn: sqlite3.Connection, max_retries: int = 3) -> int:
+    """Resend queued emails (API-key AND license). Returns how many were sent.
+
+    Deletes a row on success, bumps its retry_count on failure, and gives up after
+    ``max_retries``. No-op in dev (no RESEND_API_KEY) so rows aren't dropped untested.
     """
-    # Get all pending emails with retry_count < max_retries
+    if not os.environ.get("RESEND_API_KEY", ""):
+        return 0
+
     rows = admin_conn.execute(
         """SELECT id, email, api_key, tier FROM dead_letter_emails
            WHERE retry_count < ?
@@ -428,63 +467,20 @@ def retry_dead_letter_emails(admin_conn: sqlite3.Connection, max_retries: int = 
     ).fetchall()
 
     success_count = 0
-    for row in rows:
-        email_id = row[0]
-        email = row[1]
-        raw_key = row[2]
-        tier = row[3]
-
+    for email_id, email, api_key, tier in rows:
         try:
-            # Try to send (without passing admin_conn to avoid infinite recursion)
-            resend_key = os.environ.get("RESEND_API_KEY", "")
-            if not resend_key:
-                # Skip in dev mode
-                continue
-
-            import httpx
-            tier_label = TIERS.get(tier, {}).get("label", tier.title())
-            subject = f"Your Waystone {tier_label} API Key"
-            body = (
-                f"Hi,\n\n"
-                f"Thanks for subscribing to Waystone {tier_label}!\n\n"
-                f"Your API key:\n\n"
-                f"  {raw_key}\n\n"
-                f"Add it to your environment:\n\n"
-                f"  export WAYSTONE_API_KEY={raw_key}\n\n"
-                f"Or in your config:\n\n"
-                f"  Authorization: Bearer {raw_key}\n\n"
-                f"Keep this key secret — it cannot be recovered if lost. "
-                f"Contact support to rotate it.\n\n"
-                f"— Waystone Team\n"
-            )
-
-            resp = httpx.post(
-                "https://api.resend.com/emails",
-                headers={"Authorization": f"Bearer {resend_key}"},
-                json={
-                    "from": "Waystone <noreply@waystone.unbidden.ai>",
-                    "to": [email],
-                    "subject": subject,
-                    "text": body,
-                },
-                timeout=10.0,
-            )
-            resp.raise_for_status()
-
-            # Success: remove from dead-letter queue
+            subject, body = _content_for_dead_letter(api_key, tier)
+            _post_email(email, subject, body)
             admin_conn.execute("DELETE FROM dead_letter_emails WHERE id = ?", (email_id,))
             admin_conn.commit()
             success_count += 1
             log.info("Email retry succeeded for %r", email)
-
         except Exception as exc:
-            # Update retry count and last_attempt
-            now = time.time()
             admin_conn.execute(
                 """UPDATE dead_letter_emails
                    SET retry_count = retry_count + 1, last_attempt = ?
                    WHERE id = ?""",
-                (now, email_id),
+                (time.time(), email_id),
             )
             admin_conn.commit()
             log.error("Email retry failed for %r: %s", email, exc)
@@ -564,54 +560,15 @@ def send_license_email(email: str, token: str, seats: int,
                        expires_at: str | None = None,
                        admin_conn: sqlite3.Connection | None = None) -> None:
     """Email a self-hosted Team Server license token to the customer (Resend; stdout
-    in dev). Mirrors send_key_email's delivery + dead-letter handling."""
-    subject = f"Your Waystone Team Server license ({seats} seats)"
-    exp_line = f"Valid until: {expires_at[:10]}\n\n" if expires_at else ""
-    body = (
-        "Hi,\n\n"
-        f"Thanks for purchasing a Waystone Team Server license — {seats} seats.\n\n"
-        f"{exp_line}"
-        "Set this token on your server, then `docker compose up`:\n\n"
-        f"  WAYSTONE_LICENSE={token}\n\n"
-        "Issue a key per teammate with:  waystone team issue <email>\n"
-        "Full setup: https://unbidden.ai/docs/team-server/\n\n"
-        "The license is verified offline on your own server — no phone-home.\n"
-        "Keep the token safe; contact support to re-issue.\n\n"
-        "— Waystone Team\n"
-    )
-
-    resend_key = os.environ.get("RESEND_API_KEY", "")
-    if not resend_key:
-        log.info("[DEV] Would send license email to %r: %s", email, subject)
-        print(f"[DEV] License email to {email}\n{subject}\n\n{body}")
-        return
+    in dev). On failure, dead-letters with a ``LICENSE:`` marker so the retry path can
+    tell it apart from an API-key email and resend the right format."""
+    subject, body = _license_email_content(token, seats, expires_at)
     try:
-        import httpx
-        resp = httpx.post(
-            "https://api.resend.com/emails",
-            headers={"Authorization": f"Bearer {resend_key}"},
-            json={
-                "from": "Waystone <noreply@waystone.unbidden.ai>",
-                "to": [email],
-                "subject": subject,
-                "text": body,
-            },
-            timeout=10.0,
-        )
-        resp.raise_for_status()
+        _post_email(email, subject, body)
     except Exception as exc:
         log.error("License email delivery failed for %r: %s", email, exc)
         print(f"[WARN] License email delivery failed for {email!r}: {exc}")
-        if admin_conn is not None:
-            try:
-                admin_conn.execute(
-                    """INSERT INTO dead_letter_emails (email, api_key, tier, created_at, retry_count, last_attempt)
-                       VALUES (?, ?, ?, ?, 0, ?)""",
-                    (email, f"LICENSE:{token}", "team_license", time.time(), time.time()),
-                )
-                admin_conn.commit()
-            except Exception:
-                pass
+        _queue_dead_letter(admin_conn, email, f"LICENSE:{token}", "team_license")
 
 
 def revoke_key_by_stripe_customer(conn: sqlite3.Connection, stripe_customer_id: str) -> int:

@@ -16,6 +16,8 @@ Auth:
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
 import os
 import time
@@ -38,10 +40,12 @@ from .billing import (
     check_node_limit,
     check_project_limit,
     claim_event,
+    count_dead_letters,
     create_key,
     get_or_create_key_by_email,
     is_team_license_price,
     open_admin_db,
+    retry_dead_letter_emails,
     revoke_key_by_stripe_customer,
     send_key_email,
     send_license_email,
@@ -68,6 +72,36 @@ _ADMIN_EMAILS: frozenset[str] = frozenset(
 )
 
 
+_DEAD_LETTER_INTERVAL = int(os.environ.get("WAYSTONE_DEAD_LETTER_INTERVAL", "600"))
+
+
+def _retry_dead_letters_once() -> int:
+    """Open the admin DB, retry the queued emails, close. Sync (runs in a thread)."""
+    conn = open_admin_db()
+    try:
+        return retry_dead_letter_emails(conn)
+    finally:
+        conn.close()
+
+
+async def _dead_letter_retry_loop() -> None:
+    """Periodically re-send any dead-lettered key/license emails. Self-contained:
+    errors are logged, never crash the server; cancelled cleanly on shutdown."""
+    # An initial short delay drains anything left from a crash/redeploy promptly.
+    delay = 30
+    while True:
+        try:
+            await asyncio.sleep(delay)
+            delay = _DEAD_LETTER_INTERVAL
+            sent = await asyncio.to_thread(_retry_dead_letters_once)
+            if sent:
+                log.info("Dead-letter retry: re-sent %d queued email(s)", sent)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.exception("Dead-letter retry loop error")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI lifespan handler for startup checks."""
@@ -86,8 +120,20 @@ async def lifespan(app: FastAPI):
             "WARNING: STRIPE_WEBHOOK_SECRET is not set. Stripe webhooks will be rejected — "
             "customers who pay will not receive API keys."
         )
+
+    # Startup: drain the dead-letter email queue periodically so a paid customer whose
+    # key/license email failed once actually gets it on retry (was queued but never sent).
+    dead_letter_task = None
+    if _use_admin_db() and os.environ.get("STRIPE_WEBHOOK_SECRET", ""):
+        dead_letter_task = asyncio.create_task(_dead_letter_retry_loop())
+
     yield
-    # Shutdown: cleanup if needed
+
+    # Shutdown
+    if dead_letter_task is not None:
+        dead_letter_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await dead_letter_task
 
 
 app = FastAPI(
@@ -1107,6 +1153,10 @@ async def admin_metrics(request: Request) -> dict:
         total_requests_7d = conn.execute(
             "SELECT COUNT(*) FROM usage_log WHERE timestamp > datetime('now', '-7 days')"
         ).fetchone()[0]
+
+        # Emails stuck in the dead-letter queue (paid, but delivery failed) — a
+        # non-zero value means customers are owed a key/license email.
+        dead_letters_pending = count_dead_letters(conn)
     finally:
         conn.close()
 
@@ -1129,6 +1179,9 @@ async def admin_metrics(request: Request) -> dict:
             "last_24h": usage_24h,
             "total_requests_24h": total_requests_24h,
             "total_requests_7d": total_requests_7d,
+        },
+        "email_queue": {
+            "dead_letters_pending": dead_letters_pending,
         },
     }
 
