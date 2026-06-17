@@ -29,7 +29,6 @@ from pathlib import Path
 
 from .._logging import hook_entry
 
-
 # Load project-local .env (e.g. GEMINI_API_KEY) before any Waystone imports.
 try:
     from dotenv import load_dotenv as _load_dotenv
