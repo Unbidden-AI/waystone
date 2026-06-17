@@ -29,8 +29,6 @@ from pathlib import Path
 
 from .._logging import hook_entry
 
-WORKER = Path(__file__).resolve().parent / "worker.py"
-
 
 # Load project-local .env (e.g. GEMINI_API_KEY) before any Waystone imports.
 try:
@@ -501,7 +499,11 @@ def _spawn_extraction(
     and merging into a local graph.
     """
     try:
-        cmd = [sys.executable, str(WORKER),
+        # Invoke as a module (-m), NOT a bare script path: worker.py does
+        # `from .._logging import hook_entry` at import time, which raises
+        # "attempted relative import with no known parent package" when run as
+        # `python /path/worker.py`. -m gives it package context.
+        cmd = [sys.executable, "-m", "waystone._hooks.worker",
                "--project", project,
                "--db-path", str(db_path),
                "--source", source]

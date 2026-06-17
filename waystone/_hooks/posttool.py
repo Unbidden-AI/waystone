@@ -22,7 +22,6 @@ from pathlib import Path
 
 from .._logging import hook_entry
 
-WORKER = Path(__file__).resolve().parent / "worker.py"
 STATE_DIR = Path.home() / ".waystone"
 PAUSE_FILE = STATE_DIR / "paused"
 
@@ -150,8 +149,11 @@ def main() -> None:
 def _spawn_extraction(text: str, project: str, db_path: Path, session_id: str = "") -> None:
     """Fire-and-forget: spawn the extraction worker as a detached subprocess."""
     try:
+        # Invoke as a module (-m), NOT a bare script path — worker.py's
+        # top-level `from .._logging import hook_entry` crashes when run as
+        # `python /path/worker.py` (no package context).
         cmd = [
-            sys.executable, str(WORKER),
+            sys.executable, "-m", "waystone._hooks.worker",
             "--project", project,
             "--db-path", str(db_path),
             "--source", "tooluse",

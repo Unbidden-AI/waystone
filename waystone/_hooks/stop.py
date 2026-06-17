@@ -71,7 +71,11 @@ def main():
         env = {**os.environ, "ENGRAM_STOP_BG": "1"}
         try:
             proc = subprocess.Popen(
-                [sys.executable, str(Path(__file__).resolve())],
+                # -m, NOT the bare script path: stop.py's top-level
+                # `from .._logging import hook_entry` crashes without package
+                # context, which would silently kill the entire detached Stop
+                # background path (transcript save, extraction, summary cadence).
+                [sys.executable, "-m", "waystone._hooks.stop"],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
