@@ -87,6 +87,74 @@ def hook_entry(fn):
     return wrapper
 
 
+def _logs_dir() -> Path:
+    return Path.home() / ".waystone" / "logs"
+
+
+def open_worker_log(name: str = "worker"):
+    """Open ``~/.waystone/logs/<name>.log`` (append, binary) for use as a detached
+    subprocess's **stderr**.
+
+    A detached worker that crashes at IMPORT time (before its ``@hook_entry``
+    logger ever engages) writes its traceback to stderr — which used to go to
+    DEVNULL and vanish. Capturing it here is what turns a silent background
+    failure into a visible, diagnosable one (surfaced by ``waystone doctor``).
+
+    Best-effort size cap (rotate at ~5MB). NEVER raises — falls back to
+    ``subprocess.DEVNULL`` so a logging problem can't stop the spawn. The child
+    process owns the returned fd; the parent should close its copy after Popen.
+    """
+    import subprocess
+    try:
+        log_dir = _logs_dir()
+        log_dir.mkdir(parents=True, exist_ok=True)
+        path = log_dir / f"{name}.log"
+        try:
+            if path.exists() and path.stat().st_size > 5 * 1024 * 1024:
+                path.replace(path.with_name(f"{name}.log.1"))
+        except Exception:
+            pass
+        return open(path, "ab")  # noqa: SIM115 — child process owns this fd
+    except Exception:
+        return subprocess.DEVNULL
+
+
+def read_worker_log_errors(names=("worker", "stop"), max_age_days: float = 7.0,
+                           tail_lines: int = 40) -> str:
+    """Return a short summary of RECENT background-worker crashes, or "" if clean.
+
+    These logs receive only a detached worker's stderr. Benign library warnings
+    can appear there on success (e.g. sentence-transformers chatter), so we key
+    on the precise crash signal — a Python ``Traceback`` — rather than broad
+    "error"/"exception" substrings that would false-positive. We gate on file
+    mtime (``max_age_days``) so a long-since-fixed crash doesn't keep ``doctor``
+    red forever. Used by ``waystone doctor`` to make the silent-failure class loud.
+    """
+    import time
+    markers = ("Traceback (most recent call last)", "attempted relative import")
+    found: list[str] = []
+    try:
+        log_dir = _logs_dir()
+        for name in names:
+            path = log_dir / f"{name}.log"
+            if not path.exists() or path.stat().st_size == 0:
+                continue
+            if (time.time() - path.stat().st_mtime) > max_age_days * 86400:
+                continue  # stale crash — assume resolved
+            try:
+                lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+            except Exception:
+                continue
+            tail = [ln for ln in lines[-tail_lines:] if ln.strip()]
+            if any(any(m in ln for m in markers) for ln in tail):
+                # The last line of a Python traceback is the exception type +
+                # message — the most informative one-liner to show the operator.
+                found.append(f"{name}.log: {tail[-1].strip()[:160]}")
+    except Exception:
+        return ""
+    return "\n      ".join(found)
+
+
 def setup_stream_logging(level: int | None = None) -> None:
     """Route the ``waystone`` logger to stderr (idempotent). For the CLI + API
     server, where the platform/operator captures stderr."""

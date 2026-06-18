@@ -31,7 +31,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from .._logging import hook_entry
+from .._logging import hook_entry, open_worker_log
 
 TRANSCRIPTS_DIR = Path.home() / ".waystone" / "transcripts"
 
@@ -70,6 +70,10 @@ def main():
     if not os.environ.get("ENGRAM_STOP_BG"):
         env = {**os.environ, "ENGRAM_STOP_BG": "1"}
         try:
+            # Capture the re-spawned process's stderr to a log (not DEVNULL):
+            # an import-time/pre-main crash here would silently kill the entire
+            # detached Stop background path. `waystone doctor` reads this log.
+            err = open_worker_log("stop")
             proc = subprocess.Popen(
                 # -m, NOT the bare script path: stop.py's top-level
                 # `from .._logging import hook_entry` crashes without package
@@ -78,10 +82,12 @@ def main():
                 [sys.executable, "-m", "waystone._hooks.stop"],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stderr=err,
                 start_new_session=True,
                 env=env,
             )
+            if hasattr(err, "close"):
+                err.close()  # child inherited the fd; drop the parent's copy
             proc.stdin.write(hook_input_raw.encode())
             proc.stdin.close()
         except Exception:

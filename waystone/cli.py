@@ -3943,6 +3943,21 @@ def doctor_cmd(ctx, do_fix):
         _check("OpenCode plugin installed", OPENCODE_PLUGIN_PATH.exists(),
                "" if OPENCODE_PLUGIN_PATH.exists() else "run 'waystone configure' to reinstall OpenCode plugin")
 
+    # --- Background workers not crashing silently ---
+    # Detached extraction/stop workers capture their stderr to ~/.waystone/logs/.
+    # Those logs are empty on success, so any recent traceback means a passive
+    # background path (extraction, summary cadence) is silently failing — the
+    # exact class of bug that shipped dead in 0.4.42–0.4.46.
+    from ._logging import read_worker_log_errors
+    _worker_errors = read_worker_log_errors()
+    _check(
+        "Background workers (extraction/stop) not crashing",
+        not _worker_errors,
+        "" if not _worker_errors
+        else f"recent background-worker errors — passive capture may be failing:\n"
+             f"      {_worker_errors}\n      see ~/.waystone/logs/",
+    )
+
     click.echo()
     if ok:
         click.echo("All checks passed. Waystone is ready.")

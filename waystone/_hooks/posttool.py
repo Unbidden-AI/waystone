@@ -20,7 +20,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .._logging import hook_entry
+from .._logging import hook_entry, open_worker_log
 
 STATE_DIR = Path.home() / ".waystone"
 PAUSE_FILE = STATE_DIR / "paused"
@@ -160,15 +160,20 @@ def _spawn_extraction(text: str, project: str, db_path: Path, session_id: str = 
         ]
         if session_id:
             cmd += ["--session-id", session_id]
+        # Capture worker stderr to a log (not DEVNULL) so an import-time/pre-main
+        # crash is visible to `waystone doctor` instead of failing silently.
+        err = open_worker_log("worker")
         proc = subprocess.Popen(
             cmd,
             stdin=subprocess.PIPE,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=err,
             start_new_session=True,
         )
         proc.stdin.write(text.encode("utf-8"))
         proc.stdin.close()
+        if hasattr(err, "close"):
+            err.close()  # child inherited the fd; drop the parent's copy
     except Exception:
         pass
 

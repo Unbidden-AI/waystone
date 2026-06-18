@@ -27,7 +27,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from .._logging import hook_entry
+from .._logging import hook_entry, open_worker_log
 
 # Load project-local .env (e.g. GEMINI_API_KEY) before any Waystone imports.
 try:
@@ -512,15 +512,21 @@ def _spawn_extraction(
             cmd += ["--hints-path", str(hints_path)]
         if session_id:
             cmd += ["--session-id", session_id]
+        # Capture the worker's stderr to a log instead of DEVNULL — an import-time
+        # or pre-main crash (the exact failure that silently broke extraction in
+        # 0.4.42–0.4.46) would otherwise vanish. `waystone doctor` surfaces it.
+        err = open_worker_log("worker")
         proc = subprocess.Popen(
             cmd,
             stdin=subprocess.PIPE,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=err,
             start_new_session=True,  # detach so it outlives the hook process
         )
         proc.stdin.write(text.encode("utf-8"))
         proc.stdin.close()
+        if hasattr(err, "close"):
+            err.close()  # child inherited the fd; drop the parent's copy
     except Exception:
         pass
 
