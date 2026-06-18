@@ -296,6 +296,19 @@ def extract_benchmark_graphs(config: dict, project_name: str) -> bool:
         raise
 
 
+def _graph_project(q: dict) -> str:
+    """Map an eval question to its graph PROJECT name.
+
+    eval_questions.yaml's `transcript` field is the transcript label
+    `project_<name>` (e.g. project_api_design), but the extracted graph lives
+    under the un-prefixed project name (api_design / auth_system / data_pipeline).
+    Using the raw transcript label looks for project_api_design — which doesn't
+    exist — and silently triggers a (failing) re-extraction. Strip the prefix so
+    we hit the real cached graphs.
+    """
+    return q["transcript"].removeprefix("project_")
+
+
 def ensure_all_graphs_extracted(config: dict, questions: list[dict], skip_extract: bool = False) -> dict:
     """Ensure all project graphs needed by eval questions are present.
 
@@ -311,7 +324,7 @@ def ensure_all_graphs_extracted(config: dict, questions: list[dict], skip_extrac
         RuntimeError: if any project is missing and extraction fails
     """
     # Collect unique projects referenced in questions
-    projects = sorted({q["transcript"] for q in questions})
+    projects = sorted({_graph_project(q) for q in questions})
 
     if not projects:
         raise ValueError("No questions provided or questions reference no projects")
@@ -393,12 +406,16 @@ def run_retrieval_eval(
         preset_rows = []
 
         for q in questions:
-            project = q["transcript"]
+            project = _graph_project(q)
             db_path = get_db_path(config, project)
 
             if not db_path.exists():
-                print(f"  ✗ {q['id']:12s}  SKIPPED (graph not found: {project})")
-                continue
+                # Fail loud: a missing graph mid-eval would silently shrink the
+                # denominator and report a misleadingly different recall.
+                raise FileNotFoundError(
+                    f"Graph DB not found for {project!r} (question {q['id']}): {db_path}. "
+                    f"Run without --skip-extract, or check the project mapping."
+                )
 
             store = GraphStore(db_path)
             t0 = time.time()
@@ -634,7 +651,9 @@ def main():
     # Self-check: ensure graphs exist and are non-empty
     print("[CHECK] Graph availability...")
     try:
-        graph_stats = ensure_all_graphs_extracted(config, questions, skip_extract=args.skip_extract)
+        # A self-check is a pure availability check — it must NEVER extract.
+        graph_stats = ensure_all_graphs_extracted(
+            config, questions, skip_extract=args.skip_extract or args.self_check_only)
         for project, count in graph_stats.items():
             print(f"  ✓ {project}: {count} nodes")
     except Exception as e:
