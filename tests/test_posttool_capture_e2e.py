@@ -65,9 +65,16 @@ def _events(cwd, session="s"):
 
 def test_posttool_flushes_to_extraction_at_threshold(tmp_path, monkeypatch):
     home = tmp_path / "home"
-    _write_config(home, min_events=3)
-    monkeypatch.setenv("HOME", str(home))
-    monkeypatch.chdir(home)  # so a relative ./config.yaml can't leak in
+    home.mkdir()
+    # Patch load_config directly — config.py's CONFIG_SEARCH_PATHS is frozen at
+    # import time, so monkeypatching $HOME would NOT redirect config loading
+    # (and CI, lacking a real ~/.waystone/config.yaml, would fall back to the
+    # default min_events). Returning the config explicitly is deterministic.
+    test_config = {
+        "posttool": {"enabled": True, "min_events": 3},
+        "projects_dir": str(home / ".waystone" / "projects"),
+    }
+    monkeypatch.setattr("waystone.config.load_config", lambda *a, **k: test_config)
     monkeypatch.setattr(posttool, "PAUSE_FILE", home / ".waystone" / "paused")
     work = _work(home, "pt-demo")
 
