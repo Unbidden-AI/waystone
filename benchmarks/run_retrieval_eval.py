@@ -42,7 +42,6 @@ import asyncio
 import json
 import sys
 import time
-import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -51,15 +50,17 @@ import yaml
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
-# Trustworthiness: print and verify import path BEFORE any other waystone operations
-import waystone
+# Trustworthiness: print and verify import path BEFORE any other waystone operations.
+# (Imports intentionally follow sys.path.insert + the path print, hence noqa E402.)
+import waystone  # noqa: E402
+
 print(f"[IMPORT] waystone module: {waystone.__file__}")
 print()
 
-from waystone.config import get_db_path, get_project_dir, load_config
-from waystone.extractor import extract, split_into_chunks
-from waystone.retriever import retrieve_with_stats
-from waystone.store import GraphStore
+from waystone.config import get_db_path, get_project_dir, load_config  # noqa: E402
+from waystone.extractor import extract, split_into_chunks  # noqa: E402
+from waystone.retriever import retrieve_with_stats  # noqa: E402
+from waystone.store import GraphStore  # noqa: E402
 
 BENCHMARKS_DIR = Path(__file__).parent
 TRANSCRIPTS_DIR = BENCHMARKS_DIR / "transcripts"
