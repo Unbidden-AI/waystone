@@ -119,7 +119,8 @@ def open_worker_log(name: str = "worker"):
         return subprocess.DEVNULL
 
 
-def read_worker_log_errors(names=("worker", "stop"), max_age_days: float = 7.0,
+def read_worker_log_errors(names=("worker", "stop", "summarize"),
+                           max_age_days: float = 7.0,
                            tail_lines: int = 40) -> str:
     """Return a short summary of RECENT background-worker crashes, or "" if clean.
 

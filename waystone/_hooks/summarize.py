@@ -27,7 +27,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .._logging import hook_entry
+from .._logging import hook_entry, open_worker_log
 
 try:
     from waystone._io import force_utf8
@@ -252,6 +252,9 @@ def spawn_background_summary(project: str, db_path: str, session_id: str,
             cli = sys.executable
             args = ["-m", "waystone._hooks.summarize"]
 
+        # Capture stderr to a log (not DEVNULL) so a summarize crash — the path
+        # behind a frozen session narrative — is visible to `waystone doctor`.
+        err = open_worker_log("summarize")
         subprocess.Popen(
             [cli] + args + [
                 "--project", project,
@@ -260,9 +263,11 @@ def spawn_background_summary(project: str, db_path: str, session_id: str,
                 "--transcript-path", transcript_path,
             ],
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=err,
             start_new_session=True,
         )
+        if hasattr(err, "close"):
+            err.close()  # child inherited the fd; drop the parent's copy
     except Exception:
         pass
 
