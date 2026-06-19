@@ -357,22 +357,47 @@ def main():
         _hops = defaults.get("hops", 3)
         _top_k = defaults.get("top_k", 25)
 
+        # Fetch the latest session narrative (used for both retrieval query augmentation
+        # and injection header). Best-effort: missing/erroring narrative doesn't block retrieval.
+        narrative = ""
+        if (config.get("session_summary", {}) or {}).get("inject", True):
+            narrative = _latest_session_narrative(store, session_id)
+
+        # Build retrieval query: optionally augment the bare prompt with recent turns
+        # + session narrative to help short/contentless prompts ("yes, do it") surface
+        # on-topic context. When query_context_turns=0 (default), behavior is byte-identical
+        # to the bare-prompt query. Fail-open on any error (fall back to bare prompt).
+        retrieval_query = prompt
+        _query_context_turns = inc_cfg.get("query_context_turns", 0)
+        if _query_context_turns > 0 and transcript_path:
+            try:
+                context_parts = []
+                recent_turns = _read_recent_turns(transcript_path, _query_context_turns)
+                if recent_turns:
+                    context_parts.append(recent_turns)
+                if narrative:
+                    context_parts.append(f"Session context: {narrative}")
+                if context_parts:
+                    # Prepend context to the prompt so keywords from recent turns and
+                    # session narrative augment the bare prompt's keyword extraction.
+                    retrieval_query = "\n".join(context_parts) + "\n" + prompt
+            except Exception:
+                # Fail-open: any error → fall back to bare prompt
+                pass
+
         # Retrieval runs inline (no thread) — semantic is always False in hook mode,
         # so there's no 3.5s cold-load risk. The existing store connection is reused
         # directly, avoiding a second GraphStore open and ~25ms thread overhead.
         # Force semantic=False to guarantee: embedding model cold-load must never run in hooks.
         _strategies_hook = {**_strategies, "semantic": False}
         retrieval = retrieve_with_stats(
-            store, prompt,
+            store, retrieval_query,
             hops=_hops, top_k=_top_k, strategies=_strategies_hook,
         )
 
         # P4: lead the injected context with the latest rolling session summary —
         # keyword retrieval won't surface it (generic tags), but it's the highest-
         # altitude orientation ("where we are"). Captured before the store closes.
-        narrative = ""
-        if (config.get("session_summary", {}) or {}).get("inject", True):
-            narrative = _latest_session_narrative(store, session_id)
 
         store.close()
 
