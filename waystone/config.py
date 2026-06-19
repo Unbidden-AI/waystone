@@ -86,6 +86,7 @@ from the graph; use it to answer questions about this project accurately.""",
         "max_turns": 10,       # flush unconditionally after this many turns
         "short_turn_words": 20, # turns shorter than this don't count toward min_words
         "prior_turns_window": 0, # raw turns to append to retrieval context (0 = disabled)
+        "query_context_turns": 0, # augment retrieval query with recent turns + session narrative (0 = disabled)
     },
     "statusline": {
         # Claude Code status-line display. The Waystone segment shows from the
