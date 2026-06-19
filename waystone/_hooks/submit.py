@@ -360,9 +360,11 @@ def main():
         # Retrieval runs inline (no thread) — semantic is always False in hook mode,
         # so there's no 3.5s cold-load risk. The existing store connection is reused
         # directly, avoiding a second GraphStore open and ~25ms thread overhead.
+        # Force semantic=False to guarantee: embedding model cold-load must never run in hooks.
+        _strategies_hook = {**_strategies, "semantic": False}
         retrieval = retrieve_with_stats(
             store, prompt,
-            hops=_hops, top_k=_top_k, strategies=_strategies,
+            hops=_hops, top_k=_top_k, strategies=_strategies_hook,
         )
 
         # P4: lead the injected context with the latest rolling session summary —
@@ -535,17 +537,33 @@ MIN_ASSISTANT_WORDS = 40
 
 
 def _read_recent_turns(transcript_path: str, n: int) -> str:
-    """Return the last n user+assistant turns from the session JSONL as plain text."""
+    """Return the last n user+assistant turns from the session JSONL as plain text.
+
+    Reads only the tail of the file (last few KB) to extract the last n turns,
+    avoiding O(file) slurps on large transcripts.
+    """
     path = Path(transcript_path).expanduser()
     if not path.exists() or n <= 0:
         return ""
+
     try:
-        lines = path.read_text(encoding="utf-8").splitlines()
+        file_size = path.stat().st_size
+        # Heuristic: read the last ~50 KB to find n turns (typical turn ~500 bytes)
+        # This is fast even on 60MB files; adjust if turns are consistently larger
+        tail_size = min(file_size, 50_000)
+        with open(path, "rb") as f:
+            f.seek(max(0, file_size - tail_size))
+            raw_bytes = f.read()
+        try:
+            text_chunk = raw_bytes.decode("utf-8")
+        except UnicodeDecodeError:
+            text_chunk = raw_bytes.decode("utf-8", errors="replace")
     except Exception:
         return ""
 
+    # Parse JSONL lines from the tail chunk
     turns: list[str] = []
-    for raw in lines:
+    for raw in text_chunk.splitlines():
         raw = raw.strip()
         if not raw:
             continue
@@ -693,19 +711,44 @@ def _run_remote(config: dict, project: str, prompt: str,
     sys.exit(0)
 
 
-def _read_assistant_since(transcript_path: str, watermark: int) -> tuple[str, int]:
-    """Read assistant text from JSONL lines after watermark."""
+def _read_assistant_since(transcript_path: str, byte_offset: int) -> tuple[str, int]:
+    """Read assistant text from JSONL starting at byte_offset.
+
+    byte_offset: position in the file where to resume reading (0 = start).
+                 On return, new_byte_offset is the file size up to EOF.
+
+    Efficiently seeks to the stored byte offset and reads only newly-appended
+    lines, avoiding O(file) slurps. Handles file truncation/rotation defensively:
+    if byte_offset > file size, resets to 0.
+    """
     path = Path(transcript_path).expanduser()
     if not path.exists():
-        return "", watermark
-    try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except Exception:
-        return "", watermark
+        return "", byte_offset
 
-    new_watermark = len(lines)
+    try:
+        file_size = path.stat().st_size
+        # Defensive: file was truncated/rotated
+        if byte_offset > file_size:
+            byte_offset = 0
+
+        with open(path, "rb") as f:
+            f.seek(byte_offset)
+            raw_bytes = f.read()
+            new_byte_offset = f.tell()
+
+        # Decode the newly-read bytes
+        try:
+            text_chunk = raw_bytes.decode("utf-8")
+        except UnicodeDecodeError:
+            # Handle UTF-8 errors gracefully
+            text_chunk = raw_bytes.decode("utf-8", errors="replace")
+
+    except Exception:
+        return "", byte_offset
+
+    # Parse JSONL lines from the chunk
     text_parts = []
-    for raw in lines[watermark:]:
+    for raw in text_chunk.splitlines():
         raw = raw.strip()
         if not raw:
             continue
@@ -728,8 +771,8 @@ def _read_assistant_since(transcript_path: str, watermark: int) -> tuple[str, in
 
     full_text = "\n\n".join(text_parts)
     if len(full_text.split()) < MIN_ASSISTANT_WORDS:
-        return "", new_watermark
-    return full_text, new_watermark
+        return "", new_byte_offset
+    return full_text, new_byte_offset
 
 
 def _detect_project(cwd: str) -> str:

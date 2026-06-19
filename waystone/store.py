@@ -1877,17 +1877,63 @@ class GraphStore:
         self._save_buf_data(data)
 
     def load_watermark(self, transcript_path: str) -> int:
-        """Return the number of JSONL lines already processed for this transcript."""
+        """Return the byte offset already processed for this transcript.
+
+        New watermarks are byte offsets (O(1) seek + read from there).
+        Old watermarks stored as line counts are migrated on first read
+        by computing the byte offset at that line boundary.
+        """
         data = self._load_buf_data()
         if data.get("transcript_path") != transcript_path:
             return 0
-        return data.get("transcript_watermark", 0)
 
-    def save_watermark(self, transcript_path: str, line_count: int) -> None:
-        """Persist the JSONL line watermark for this transcript."""
+        # Prefer new byte-offset watermark
+        if "transcript_byte_offset" in data:
+            return data["transcript_byte_offset"]
+
+        # Fallback: old line-count watermark — migrate on first read
+        if "transcript_watermark" in data:
+            old_line_count = data["transcript_watermark"]
+            # Compute byte offset at that line boundary for next save
+            path = Path(transcript_path).expanduser()
+            if path.exists():
+                try:
+                    byte_offset = self._compute_byte_offset_at_line(
+                        path, old_line_count
+                    )
+                    # Save the computed byte offset for next time
+                    data["transcript_byte_offset"] = byte_offset
+                    data.pop("transcript_watermark", None)  # Drop old key
+                    self._save_buf_data(data)
+                    return byte_offset
+                except Exception:
+                    # If migration fails, fall back to old line-count behavior
+                    # by returning 0 (re-read from start)
+                    return 0
+
+        return 0
+
+    def _compute_byte_offset_at_line(self, path: Path, line_count: int) -> int:
+        """Compute the byte offset at the end of line_count-th line.
+
+        Used during migration from line-count to byte-offset watermarks.
+        Returns the position in bytes where reading should resume.
+        """
+        with open(path, "rb") as f:
+            current_line = 0
+            while current_line < line_count:
+                if not f.readline():
+                    break
+                current_line += 1
+            return f.tell()
+
+    def save_watermark(self, transcript_path: str, byte_offset: int) -> None:
+        """Persist the byte offset watermark for this transcript."""
         data = self._load_buf_data()
         data["transcript_path"] = transcript_path
-        data["transcript_watermark"] = line_count
+        data["transcript_byte_offset"] = byte_offset
+        # Keep old key for backwards compatibility during rollout, but new code uses byte_offset
+        data.pop("transcript_watermark", None)
         self._save_buf_data(data)
 
     # ------------------------------------------------------------------
