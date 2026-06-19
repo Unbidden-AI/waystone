@@ -414,10 +414,27 @@ def main():
             "tokens_filtered": max(0, tokens_in_graph - retrieval.tokens_estimated),
             "elapsed_ms": elapsed_ms,
             "timestamp": time.time(),
+            # Observability: the actual (possibly context-augmented) query used to
+            # FIND the nodes — lets you see what conversation context was folded in.
+            "retrieval_query": retrieval_query[:4000],
+            "query_augmented": retrieval_query != prompt,
         }, session_id=session_id)
 
         project_dir = get_db_path(config, project).parent
         last_context_path = project_dir / "last_context.md"
+        # Human-readable view of the search query (separate from last_context.md so
+        # it never pollutes the injected context). `cat last_query.md` to inspect
+        # exactly what recent-turn / narrative context was used to retrieve.
+        if retrieval_query != prompt:
+            try:
+                (project_dir / "last_query.md").write_text(
+                    "# Retrieval query (context-augmented)\n\n"
+                    "_Built from recent turns + session narrative + your prompt; "
+                    "this is what searched the graph (NOT what was injected)._\n\n"
+                    "```\n" + retrieval_query.strip() + "\n```\n",
+                    encoding="utf-8")
+            except Exception:
+                pass
 
         narrative_block = (
             "## Where we are (session narrative)\n" + narrative + "\n\n"
