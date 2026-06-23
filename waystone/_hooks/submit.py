@@ -28,6 +28,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .._logging import hook_entry, open_worker_log
+from . import detached_popen_kwargs
 
 # Load project-local .env (e.g. GEMINI_API_KEY) before any Waystone imports.
 try:
@@ -565,7 +566,7 @@ def _spawn_extraction(
             stdin=subprocess.PIPE,
             stdout=subprocess.DEVNULL,
             stderr=err,
-            start_new_session=True,  # detach so it outlives the hook process
+            **detached_popen_kwargs(),  # detach so it outlives the hook process
         )
         proc.stdin.write(text.encode("utf-8"))
         proc.stdin.close()
@@ -977,7 +978,7 @@ def _spawn_reflect(project: str, transcript_path: str, since_turn: int) -> None:
                 cmd,
                 stdout=log_f,
                 stderr=subprocess.STDOUT,
-                start_new_session=True,  # detach so it outlives the hook process
+                **detached_popen_kwargs(),  # detach so it outlives the hook process
             )
     except Exception:
         pass

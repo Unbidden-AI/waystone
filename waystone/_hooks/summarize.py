@@ -28,6 +28,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .._logging import hook_entry, open_worker_log
+from . import detached_popen_kwargs
 
 try:
     from waystone._io import force_utf8
@@ -264,7 +265,7 @@ def spawn_background_summary(project: str, db_path: str, session_id: str,
             ],
             stdout=subprocess.DEVNULL,
             stderr=err,
-            start_new_session=True,
+            **detached_popen_kwargs(),
         )
         if hasattr(err, "close"):
             err.close()  # child inherited the fd; drop the parent's copy

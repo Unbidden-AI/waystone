@@ -24,7 +24,7 @@ defaults:
   hops: 3
   top_k: 10
   format: "markdown"
-projects_dir: "{tmp_path / 'projects'}"
+projects_dir: "{(tmp_path / 'projects').as_posix()}"
 """)
     r = CliRunner()
     return r, str(config_path), tmp_path

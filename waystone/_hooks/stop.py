@@ -32,6 +32,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .._logging import hook_entry, open_worker_log
+from . import detached_popen_kwargs
 
 TRANSCRIPTS_DIR = Path.home() / ".waystone" / "transcripts"
 
@@ -83,7 +84,7 @@ def main():
                 stdin=subprocess.PIPE,
                 stdout=subprocess.DEVNULL,
                 stderr=err,
-                start_new_session=True,
+                **detached_popen_kwargs(),
                 env=env,
             )
             if hasattr(err, "close"):
@@ -328,7 +329,7 @@ def _spawn_background_extraction(project: str, transcript_path: str) -> None:
             _engram_cmd() + ["extract", project, transcript_path, "--verify"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            start_new_session=True,
+            **detached_popen_kwargs(),
         )
     except Exception:
         pass
@@ -370,7 +371,7 @@ def _maybe_spawn_reconcile(project: str, current_nodes: int, project_dir: Path, 
             _engram_cmd() + ["reconcile", project],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            start_new_session=True,
+            **detached_popen_kwargs(),
         )
     except Exception:
         pass

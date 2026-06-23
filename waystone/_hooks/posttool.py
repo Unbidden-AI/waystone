@@ -21,6 +21,7 @@ import sys
 from pathlib import Path
 
 from .._logging import hook_entry, open_worker_log
+from . import detached_popen_kwargs
 
 STATE_DIR = Path.home() / ".waystone"
 PAUSE_FILE = STATE_DIR / "paused"
@@ -168,7 +169,7 @@ def _spawn_extraction(text: str, project: str, db_path: Path, session_id: str = 
             stdin=subprocess.PIPE,
             stdout=subprocess.DEVNULL,
             stderr=err,
-            start_new_session=True,
+            **detached_popen_kwargs(),
         )
         proc.stdin.write(text.encode("utf-8"))
         proc.stdin.close()

@@ -284,7 +284,7 @@ def verify_cmd(ctx, as_json):
     }
 
     if not as_json:
-        click.echo("Waystone — Verify\n")
+        click.echo("Waystone - Verify\n")
         click.echo(f"  Backend : {backend}")
         click.echo(f"  Model   : {model}")
         click.echo(f"  API key : {source}" + ("" if key or source != "none" else " (none — fine only for keyless local models)"))
@@ -434,14 +434,14 @@ def selfcheck_cmd(ctx, as_json, deep):
     if as_json:
         click.echo(_json.dumps(result))
     else:
-        click.echo(f"Waystone selfcheck — v{_ver}\n")
+        click.echo(f"Waystone selfcheck - v{_ver}\n")
         for c in checks:
             icon = "✓" if c["ok"] else ("✗" if c["fatal"] else "–")
             line = f"  {icon}  {c['name']}"
             if c["detail"]:
                 line += f"  ({c['detail']})"
             click.echo(line)
-        click.echo("\n" + ("OK — Waystone installs and runs." if ok else "FAILED — see above."))
+        click.echo("\n" + ("OK - Waystone installs and runs." if ok else "FAILED - see above."))
 
     if not ok:
         sys.exit(1)
@@ -3719,7 +3719,7 @@ def doctor_cmd(ctx, do_fix):
         if not passed:
             ok = False
 
-    click.echo("Waystone — Doctor\n")
+    click.echo("Waystone - Doctor\n")
 
     # --- Config file ---
     try:
