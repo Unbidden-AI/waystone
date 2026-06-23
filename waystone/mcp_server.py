@@ -65,8 +65,14 @@ def _find_project_marker(start: Path | None = None) -> str | None:
     path = (start or Path.cwd()).resolve()
     for candidate in [path, *path.parents]:
         marker = candidate / ".waystone"
-        if marker.exists():
-            return marker.read_text(encoding="utf-8").strip()
+        # Must be a FILE: ~/.waystone is the config DIRECTORY, not a project
+        # marker. Reading a dir as text raises PermissionError on Windows /
+        # IsADirectoryError on POSIX — so guard the read too (fail-soft).
+        if marker.is_file():
+            try:
+                return marker.read_text(encoding="utf-8").strip()
+            except OSError:
+                continue
     return None
 
 

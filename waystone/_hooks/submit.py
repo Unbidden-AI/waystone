@@ -823,7 +823,7 @@ def _detect_project(cwd: str) -> str:
     home = Path.home()
     for directory in [cwd_path, *cwd_path.parents]:
         marker = directory / ".waystone"
-        if marker.exists():
+        if marker.is_file():  # not the ~/.waystone config DIRECTORY
             try:
                 name = marker.read_text(encoding="utf-8").strip()
                 if name:

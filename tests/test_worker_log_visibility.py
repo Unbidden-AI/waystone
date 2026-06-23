@@ -27,9 +27,11 @@ from waystone._logging import open_worker_log, read_worker_log_errors
 def home(tmp_path, monkeypatch):
     h = tmp_path / "home"
     h.mkdir()
-    # Path.home() / expanduser("~") read $HOME live on POSIX, so this isolates
-    # ~/.waystone/logs for both in-process calls and child processes.
+    # Path.home() reads $HOME on POSIX but USERPROFILE on Windows — set both so
+    # ~/.waystone/logs is isolated on every platform (else Windows writes to the
+    # real home and these assertions read the wrong location).
     monkeypatch.setenv("HOME", str(h))
+    monkeypatch.setenv("USERPROFILE", str(h))
     return h
 
 

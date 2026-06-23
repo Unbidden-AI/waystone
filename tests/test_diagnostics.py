@@ -46,6 +46,7 @@ def test_redact_mapping_redacts_secret_named_keys():
 
 def test_build_report_does_not_leak_planted_secrets(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))  # Windows Path.home()
     # A unique sentinel planted in config, env, and a log file.
     sentinel_key = "waystone_PLANTED_SENTINEL_KEY_999"
     sentinel_stripe = "sk_live_PLANTEDSTRIPE999"

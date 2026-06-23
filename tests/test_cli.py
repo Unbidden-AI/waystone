@@ -465,7 +465,9 @@ class TestReset:
         transcript.parent.mkdir(parents=True, exist_ok=True)
         transcript.write_text("Human: hi\n", encoding="utf-8")
 
-        assert GraphStore(db, vec_enabled=False).get_stats()["node_count"] == 1
+        s = GraphStore(db, vec_enabled=False)
+        assert s.get_stats()["node_count"] == 1
+        s.close()  # release the handle so Windows can unlink the db during reset
         r = runner.invoke(cli, ["reset", "proj", "--yes"], env=env)
         assert r.exit_code == 0
         # graph emptied but re-initialized (db still present)

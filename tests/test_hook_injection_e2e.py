@@ -98,6 +98,7 @@ def _run_hook(home: Path, cwd: Path, prompt: str, *, session_id: str = "sess-e2e
     })
     env = dict(os.environ)
     env["HOME"] = str(home)
+    env["USERPROFILE"] = str(home)  # Windows Path.home() reads USERPROFILE
     # Force the local sqlite path regardless of the dev shell's env.
     for k in ("WAYSTONE_STORE_BACKEND", "WAYSTONE_DATABASE_URL", "DATABASE_URL"):
         env.pop(k, None)
@@ -269,6 +270,7 @@ def test_real_claude_session_injects_context(tmp_path, env_home):
 
     env = dict(os.environ)
     env["HOME"] = str(env_home)
+    env["USERPROFILE"] = str(env_home)  # Windows Path.home() reads USERPROFILE
     for k in ("WAYSTONE_STORE_BACKEND", "WAYSTONE_DATABASE_URL", "DATABASE_URL"):
         env.pop(k, None)
 

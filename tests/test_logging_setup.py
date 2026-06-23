@@ -12,6 +12,7 @@ from waystone._logging import hook_entry, setup_file_logging, setup_stream_loggi
 @pytest.fixture(autouse=True)
 def _isolate_home_and_logger(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))  # Windows Path.home()
     monkeypatch.delenv("WAYSTONE_LOG_LEVEL", raising=False)
     # Start each test from a clean waystone logger (handlers are module-global).
     wl = logging.getLogger("waystone")

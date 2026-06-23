@@ -1530,7 +1530,7 @@ def _detect_marker_project(cwd: Path | None = None) -> str | None:
     home = Path.home()
     for directory in [start, *start.parents]:
         marker = directory / ".waystone"
-        if marker.exists():
+        if marker.is_file():  # not the ~/.waystone config DIRECTORY
             try:
                 name = marker.read_text(encoding="utf-8").strip()
                 if name:

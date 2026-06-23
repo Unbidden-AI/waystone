@@ -177,8 +177,10 @@ class TestBash:
         result = await execute_tool(tool_call, cfg)
 
         assert result.error is None
-        # Output should be the sandbox root path
-        assert str(tmp_path).rstrip() in result.output.rstrip()
+        # Output should be the sandbox root. Compare by the unique leaf dir name
+        # so it's path-format independent: Windows git-bash `pwd` returns a POSIX
+        # path (/c/Users/...), not the native C:\Users\... form.
+        assert tmp_path.name in result.output
 
     @pytest.mark.asyncio
     async def test_bash_timeout(self, tmp_path):
