@@ -149,13 +149,21 @@ Full guide: **[docs/team-server.md](./docs/team-server.md)**.
 
 ## Hosted API
 
-The default store is local SQLite — no cloud dependency, no infra to manage. For
-cross-machine sync without running your own server, a hosted API is also available:
+The default store is local SQLite — **free, no cloud dependency, no infra to manage.**
+For cross-machine sync without running your own server, a hosted API is also available:
 
-- **Pro** ($20/mo) — unlimited projects, hosted API, 1 user
-- **Team** ($80/mo) — unlimited projects, hosted API, up to 10 users
+| Tier | Price | Projects | Stored facts | API calls/min |
+|------|-------|----------|--------------|---------------|
+| **Free** | $0 | 1 | 500 | 10 |
+| **Pro** | $20/mo ($200/yr) | unlimited | 25,000 | 100 |
+| **Team** | $80/mo ($800/yr) | unlimited | 250,000 | 500 |
 
-[unbidden.ai/pricing/](https://unbidden.ai/pricing/)
+**Team** adds shared project memory (one graph across your seats, up to 10 users)
+and priority support. Prefer to keep data on your own metal? The **self-hosted
+Team Server** uses offline, signed per-seat licensing (3 trial seats free) — see
+[docs/team-server.md](./docs/team-server.md).
+
+[Full pricing → unbidden.ai/pricing/](https://unbidden.ai/pricing/)
 
 ## Docs
 
