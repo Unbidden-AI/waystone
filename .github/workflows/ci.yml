@@ -56,3 +56,28 @@ jobs:
 
       - name: Smoke test CLI
         run: waystone --help
+
+  # Windows coverage — historically UNTESTED in CI. Every Windows bug so far
+  # (cp1252 console crashes, sqlite-vec cold-start) was found in production and
+  # patched reactively. This job exercises the cross-platform-sensitive paths
+  # (encoding, file I/O, path handling, sqlite-vec load) on a real Windows box.
+  # No Postgres service: the team-backend tests skip without WAYSTONE_TEST_PG_DSN,
+  # exactly as a Windows dev running the suite locally would see.
+  test-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: pip install -e ".[dev,team,api]"
+
+      - name: Run tests
+        run: pytest tests/ -v --tb=short
+
+      - name: Smoke test CLI (UTF-8 glyph output on legacy console)
+        run: waystone --help
