@@ -4,6 +4,48 @@ All notable changes to Waystone are documented here.
 
 ## [Unreleased]
 
+### Security
+
+- **Path traversal in the hosted/Team API.** `_get_project_dir` built the project directory from the client-supplied name with **no validation**, so a name like `../other-tenant/their-project` could escape the per-key sandbox — on the multi-tenant hosted API, one customer could potentially read another's graph. Project names are now validated (`_validate_project_name`: rejects `..`, path separators, absolute paths, leading dot/dash, null/control chars) with a resolved-path boundary assertion.
+
+### Added
+
+- **Windows is now tested in CI.** A `windows-latest` job runs the full suite on every commit (CI was previously Linux-only, so every Windows bug shipped and was found by users). It immediately caught real Windows-only defects (see Fixed). A manual `docs/WINDOWS_VERIFICATION.md` checklist covers what CI can't: first-run install UX, the sqlite-vec cold-start, and Claude Code hook spawn semantics.
+- **CI failure alerting** — a `notify-failure` job posts the branch/sha/run-link to a Discord webhook when CI goes red (active once a `DISCORD_CI_WEBHOOK` repo secret is set; self-skips otherwise).
+- **Context-augmented retrieval for short prompts.** A terse prompt is augmented with the last few turns + the session narrative before retrieval (`incremental.query_context_turns`), and the augmented query is surfaced for inspection (`state.retrieval_query`, `last_query.md`).
+- **Durable retrieval-quality benchmark harness** (`benchmarks/run_retrieval_eval.py`) — reproduces the 86% recall baseline; gates future retrieval changes against regression.
+
+### Fixed
+
+- **Connection leaks under load.** `get_stats` / `query_project` / `list_projects` / `export_project` closed the store only on the success path; an exception leaked the (Postgres) pool connection → exhaustion under load. Now wrapped in `try/finally`.
+- **Expired self-hosted licenses kept working.** A lapsed Team Server license still authenticated; `_check_auth` now rejects an expired license (self-hosted path only — hosted SaaS billing is unaffected).
+- **Windows: the `openclaw` memory-sync module was unimportable** (top-level `import fcntl`, which is Unix-only) — now a portable advisory lock (`fcntl` on POSIX, `msvcrt` on Windows; the atomic temp-file + rename is the real protection on both).
+- **Windows: detached hook spawns crashed.** `start_new_session=True` is POSIX-only and raises `ValueError` on Windows, so every background worker/summarizer spawn failed there. Centralised into `detached_popen_kwargs()` (POSIX `start_new_session`, Windows `creationflags`).
+- **Windows: project-marker detection crashed on the `~/.waystone` config directory** — it read the directory as text (PermissionError on Windows). Markers must now be a file (`is_file()`) in all three detectors.
+
+### Changed
+
+- **Faster UserPromptSubmit hook.** The hot-path seeks to a byte-offset watermark instead of re-reading the whole transcript (~375 ms → ~0.1 ms on a 64 MB transcript).
+- **README pricing aligned** with the canonical pricing page — a Free/Pro/Team table including the stored-fact caps (the real metered limit) and annual pricing, verified against `billing.py` tiers.
+- **CI is green and meaningful again.** Cleared the stale lint backlog (lint is now green, so a red there is a real new finding) and added a hermetic `tests/conftest.py` that clears mode-determining env vars (Stripe secret/prices, API key, license, admin DB) so local runs match clean CI — closing the local-vs-CI drift that silently red-lit the suite.
+
+---
+
+## [0.4.48] – 2026-06-18
+
+### Added
+
+- **Make silent background-worker crashes loud.** Detached workers now capture stderr to `~/.waystone/logs/<name>.log` instead of `/dev/null`, and `waystone doctor` surfaces a recent worker crash as a failed check — so the bug class behind the 0.4.42–0.4.46 silent-extraction failure (below) can never hide again.
+- **Background-path test battery** — end-to-end coverage for the reconcile job, upgrade-in-place migration, the session-summary cadence, and PostToolUse autonomous capture, so these passive paths can't silently rot.
+
+---
+
+## [0.4.47] – 2026-06-17
+
+### Fixed
+
+- **Passive extraction was silently dead in 0.4.42–0.4.46.** The hook's detached background spawns invoked a `_hooks` module as a bare script path, so `worker.py`'s top-level relative import raised `ImportError: attempted relative import with no known parent package` — and with stderr routed to `/dev/null`, nothing ever surfaced. Spawns now use `python -m waystone._hooks.<module>` (correct package context), restoring passive per-turn extraction and the summary cadence.
+
 ---
 
 ## [0.4.46] – 2026-06-16
