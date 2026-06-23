@@ -7,8 +7,9 @@ on:
     branches: ["**"]
 
 jobs:
-  # Lint is an INDEPENDENT job so a pre-existing lint backlog never blocks the
-  # test signal. (The repo carries ~200 legacy ruff findings; tracked separately.)
+  # Lint is a separate job from tests (independent signals). The legacy ruff
+  # backlog has been cleared — `ruff check waystone/ tests/` is GREEN, so any
+  # lint failure here is a real, new finding. Keep it that way.
   lint:
     runs-on: ubuntu-latest
     steps:

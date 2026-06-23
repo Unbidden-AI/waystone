@@ -9,8 +9,6 @@ import json
 import time
 from pathlib import Path
 
-import pytest
-
 from waystone._hooks import submit
 from waystone.store import GraphStore
 
@@ -396,8 +394,8 @@ class TestHookIntegrationMigration:
 
             # Both old and new watermarks are ints (could be line counts or byte offsets,
             # but the new one should be a byte offset in the file)
-            assert old_watermark_type == int
-            assert new_watermark_type == int
+            assert old_watermark_type is int
+            assert new_watermark_type is int
 
             # New watermark should be at most the file size
             assert new_watermark <= Path(transcript_path).stat().st_size
