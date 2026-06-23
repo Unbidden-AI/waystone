@@ -21,7 +21,14 @@ replace it without touching the user's handwritten content.
 
 from __future__ import annotations
 
-import fcntl
+try:
+    import fcntl  # Unix advisory file locking
+except ImportError:  # pragma: no cover - Windows has no fcntl
+    fcntl = None
+try:
+    import msvcrt  # Windows file locking
+except ImportError:  # pragma: no cover - non-Windows
+    msvcrt = None
 import logging
 import os
 import tempfile
@@ -290,15 +297,37 @@ def _strip_waystone_block(text: str) -> str:
     return text[:start] + text[end:]
 
 
+def _lock_exclusive(lock_file) -> None:
+    """Acquire an exclusive advisory lock (fcntl on Unix, msvcrt on Windows).
+
+    The atomic temp-file + rename below is the real torn-write protection on both
+    platforms; this advisory lock coordinates concurrent writers. If neither
+    locking API is available, degrade to rename-only atomicity rather than crash.
+    """
+    if fcntl is not None:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+    elif msvcrt is not None:  # pragma: no cover - Windows
+        lock_file.seek(0)
+        msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
+
+
+def _unlock(lock_file) -> None:
+    if fcntl is not None:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+    elif msvcrt is not None:  # pragma: no cover - Windows
+        lock_file.seek(0)
+        msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+
+
 def _atomic_write(path: Path, content: str) -> None:
-    """Write content to path atomically using flock + temp file + rename."""
+    """Write content to path atomically using an advisory lock + temp file + rename."""
     from .errors import MemoryMDCorruptError
 
     try:
         # Use a lock file alongside MEMORY.md to coordinate with OpenClaw
         lock_path = path.with_suffix(".engram_lock")
         with open(lock_path, "w", encoding="utf-8") as lock_file:
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            _lock_exclusive(lock_file)
             try:
                 # Write to temp file in same dir (ensures same filesystem for rename)
                 fd, tmp_path = tempfile.mkstemp(dir=path.parent, prefix=".engram_tmp_")
@@ -313,7 +342,7 @@ def _atomic_write(path: Path, content: str) -> None:
                         pass
                     raise
             finally:
-                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+                _unlock(lock_file)
     except Exception as e:
         raise MemoryMDCorruptError(f"Atomic write to {path} failed: {e}") from e
 
