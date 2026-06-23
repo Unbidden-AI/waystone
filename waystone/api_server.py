@@ -336,6 +336,7 @@ def _check_auth(
       3. Otherwise — open access (local dev). Returns {"tier": "local"}.
 
     Rate limiting is enforced only when CB_USE_ADMIN_DB=1 and STRIPE_WEBHOOK_SECRET is set.
+    License validity is checked for self-hosted Team servers.
     """
     if _use_admin_db():
         if not creds:
@@ -363,6 +364,15 @@ def _check_auth(
             # Store rate limit info in key_info for use in endpoints
             key_info["_rate_limit_remaining_minute"] = remaining_minute
             key_info["_rate_limit_remaining_day"] = remaining_day
+        else:
+            # Self-hosted Team Server: verify license validity
+            from .licensing import load_license
+            license_obj = load_license()
+            if license_obj and license_obj.is_expired:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="License has expired",
+                )
 
         return key_info
 
@@ -646,13 +656,15 @@ def list_projects(key_info: AuthDep, response: Response) -> list[ProjectInfo]:
     for d in sorted(projects_dir.iterdir()):
         if d.is_dir() and (d / "context.db").exists():
             store = GraphStore(d / "context.db")
-            stats = store.get_stats()
-            store.close()
-            result.append(ProjectInfo(
-                name=d.name,
-                node_count=stats["node_count"],
-                edge_count=stats["edge_count"],
-            ))
+            try:
+                stats = store.get_stats()
+                result.append(ProjectInfo(
+                    name=d.name,
+                    node_count=stats["node_count"],
+                    edge_count=stats["edge_count"],
+                ))
+            finally:
+                store.close()
     return result
 
 
@@ -695,14 +707,16 @@ def get_stats(project: str, key_info: AuthDep, response: Response) -> StatsRespo
 
     config = _cfg()
     store = _open_store(config, key_info, project)
-    stats = store.get_stats()
-    store.close()
-    return StatsResponse(
-        project=project,
-        node_count=stats["node_count"],
-        edge_count=stats["edge_count"],
-        type_counts=stats.get("type_counts", {}),
-    )
+    try:
+        stats = store.get_stats()
+        return StatsResponse(
+            project=project,
+            node_count=stats["node_count"],
+            edge_count=stats["edge_count"],
+            type_counts=stats.get("type_counts", {}),
+        )
+    finally:
+        store.close()
 
 
 @app.post("/v1/projects/{project}/query")
@@ -711,26 +725,27 @@ def query_project(project: str, req: QueryRequest, key_info: AuthDep, response: 
 
     config = _cfg()
     store = _open_store(config, key_info, project)
-    stats = store.get_stats()
-    if stats["node_count"] == 0:
-        store.close()
-        return QueryResponse(markdown="", nodes_returned=0, total_nodes=0, tokens_estimated=0)
+    try:
+        stats = store.get_stats()
+        if stats["node_count"] == 0:
+            return QueryResponse(markdown="", nodes_returned=0, total_nodes=0, tokens_estimated=0)
 
-    defaults = config.get("defaults", {})
-    strategies = dict(config.get("strategies", {}))
-    result = retrieve_with_stats(
-        store, req.task,
-        hops=req.hops,
-        top_k=req.top_k or defaults.get("top_k", 25),
-        strategies=strategies,
-    )
-    store.close()
-    return QueryResponse(
-        markdown=result.markdown,
-        nodes_returned=result.nodes_after_strategies,
-        total_nodes=stats["node_count"],
-        tokens_estimated=result.tokens_estimated,
-    )
+        defaults = config.get("defaults", {})
+        strategies = dict(config.get("strategies", {}))
+        result = retrieve_with_stats(
+            store, req.task,
+            hops=req.hops,
+            top_k=req.top_k or defaults.get("top_k", 25),
+            strategies=strategies,
+        )
+        return QueryResponse(
+            markdown=result.markdown,
+            nodes_returned=result.nodes_after_strategies,
+            total_nodes=stats["node_count"],
+            tokens_estimated=result.tokens_estimated,
+        )
+    finally:
+        store.close()
 
 
 @app.post("/v1/projects/{project}/extract")
@@ -824,24 +839,26 @@ def export_project(project: str, key_info: AuthDep, response: Response) -> dict:
 
     config = _cfg()
     store = _open_store(config, key_info, project)
-    all_nodes = store.get_all_nodes()
-    store.close()
+    try:
+        all_nodes = store.get_all_nodes()
 
-    if not all_nodes:
-        return {"markdown": "", "node_count": 0}
+        if not all_nodes:
+            return {"markdown": "", "node_count": 0}
 
-    by_type: dict[str, list] = {}
-    for n in all_nodes:
-        by_type.setdefault(n["type"], []).append(n)
+        by_type: dict[str, list] = {}
+        for n in all_nodes:
+            by_type.setdefault(n["type"], []).append(n)
 
-    lines = [f"# Waystone Export — {project}\n"]
-    for type_name, nodes in sorted(by_type.items()):
-        lines.append(f"## {type_name.replace('_', ' ').title()}\n")
-        for n in sorted(nodes, key=lambda x: x.get("confidence", 0), reverse=True):
-            lines.append(f"- {n['fact']} *(confidence: {n.get('confidence', 0):.1f})*")
-        lines.append("")
+        lines = [f"# Waystone Export — {project}\n"]
+        for type_name, nodes in sorted(by_type.items()):
+            lines.append(f"## {type_name.replace('_', ' ').title()}\n")
+            for n in sorted(nodes, key=lambda x: x.get("confidence", 0), reverse=True):
+                lines.append(f"- {n['fact']} *(confidence: {n.get('confidence', 0):.1f})*")
+            lines.append("")
 
-    return {"markdown": "\n".join(lines), "node_count": len(all_nodes)}
+        return {"markdown": "\n".join(lines), "node_count": len(all_nodes)}
+    finally:
+        store.close()
 
 
 # ---------------------------------------------------------------------------

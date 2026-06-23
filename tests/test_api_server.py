@@ -343,8 +343,9 @@ class TestPathTraversalProtection:
 
     def test_rejects_parent_directory_traversal(self, api_client):
         """Reject '..' path traversal when embedded in project name."""
-        from waystone.api_server import _validate_project_name
         from fastapi import HTTPException
+
+        from waystone.api_server import _validate_project_name
         with pytest.raises(HTTPException) as exc_info:
             _validate_project_name("..evil")
         assert exc_info.value.status_code == 400
@@ -352,24 +353,27 @@ class TestPathTraversalProtection:
 
     def test_rejects_multiple_parent_traversal(self, api_client):
         """Reject '../../' path traversal."""
-        from waystone.api_server import _validate_project_name
         from fastapi import HTTPException
+
+        from waystone.api_server import _validate_project_name
         with pytest.raises(HTTPException) as exc_info:
             _validate_project_name("../../etc/passwd")
         assert exc_info.value.status_code == 400
 
     def test_rejects_absolute_path(self, api_client):
         """Reject absolute paths."""
-        from waystone.api_server import _validate_project_name
         from fastapi import HTTPException
+
+        from waystone.api_server import _validate_project_name
         with pytest.raises(HTTPException) as exc_info:
             _validate_project_name("/etc/passwd")
         assert exc_info.value.status_code == 400
 
     def test_rejects_forward_slash_in_name(self, api_client):
         """Reject names with forward slashes."""
-        from waystone.api_server import _validate_project_name
         from fastapi import HTTPException
+
+        from waystone.api_server import _validate_project_name
         with pytest.raises(HTTPException) as exc_info:
             _validate_project_name("other/myproject")
         assert exc_info.value.status_code == 400
@@ -377,8 +381,9 @@ class TestPathTraversalProtection:
 
     def test_rejects_backslash_in_name(self, api_client):
         """Reject names with backslashes."""
-        from waystone.api_server import _validate_project_name
         from fastapi import HTTPException
+
+        from waystone.api_server import _validate_project_name
         with pytest.raises(HTTPException) as exc_info:
             _validate_project_name("evil\\project")
         assert exc_info.value.status_code == 400
@@ -386,8 +391,9 @@ class TestPathTraversalProtection:
 
     def test_rejects_null_byte(self, api_client):
         """Reject names containing null bytes."""
-        from waystone.api_server import _validate_project_name
         from fastapi import HTTPException
+
+        from waystone.api_server import _validate_project_name
         with pytest.raises(HTTPException) as exc_info:
             _validate_project_name("evil\x00project")
         assert exc_info.value.status_code == 400
@@ -397,16 +403,18 @@ class TestPathTraversalProtection:
         """Reject empty project names."""
         c, _, _ = api_client
         # Note: FastAPI may strip this before we see it, but test the validator directly
-        from waystone.api_server import _validate_project_name
         from fastapi import HTTPException
+
+        from waystone.api_server import _validate_project_name
         with pytest.raises(HTTPException) as exc_info:
             _validate_project_name("")
         assert exc_info.value.status_code == 400
 
     def test_rejects_whitespace_only(self, api_client):
         """Reject whitespace-only names."""
-        from waystone.api_server import _validate_project_name
         from fastapi import HTTPException
+
+        from waystone.api_server import _validate_project_name
         with pytest.raises(HTTPException) as exc_info:
             _validate_project_name("   ")
         assert exc_info.value.status_code == 400
@@ -484,8 +492,9 @@ class TestPathTraversalProtection:
             "store_backend": "sqlite",  # Use SQLite to test filesystem scoping
         }
 
-        from waystone.api_server import _get_project_dir
         from unittest.mock import patch
+
+        from waystone.api_server import _get_project_dir
 
         # Simulate two tenants with different key_hashes
         key_info_a = {"key_hash": "aaa111222333", "tier": "pro"}
@@ -506,3 +515,134 @@ class TestPathTraversalProtection:
             # They must not escape projects_dir
             assert path_a.resolve().is_relative_to(projects_dir.resolve())
             assert path_b.resolve().is_relative_to(projects_dir.resolve())
+
+
+# ---------------------------------------------------------------------------
+# Connection leak tests (Blocker A)
+# ---------------------------------------------------------------------------
+
+class TestConnectionLeakPrevention:
+    """Verify that stores are always closed, even on exceptions."""
+
+    def test_get_stats_closes_on_exception(self, api_client):
+        """Exception during get_stats() must not leak the connection."""
+        c, config, _ = api_client
+        with patch("waystone.api_server._open_store") as mock_open:
+            mock_store = mock_open.return_value
+            mock_store.get_stats.side_effect = RuntimeError("simulated error")
+            try:
+                c.get("/v1/projects/test-project/stats")
+            except RuntimeError:
+                pass  # Expected, the exception bubbles up from the mock
+        # Even though get_stats raised, store.close() should have been called in finally
+        assert mock_store.close.called, "store.close() was not called despite exception"
+
+    def test_query_project_closes_on_exception(self, api_client):
+        """Exception during query_project() must not leak the connection."""
+        c, _, _ = api_client
+        with patch("waystone.api_server._open_store") as mock_open:
+            mock_store = mock_open.return_value
+            mock_store.get_stats.return_value = {"node_count": 5}
+            with patch("waystone.api_server.retrieve_with_stats", side_effect=RuntimeError("simulated error")):
+                try:
+                    c.post(
+                        "/v1/projects/test-project/query",
+                        json={"task": "test"},
+                    )
+                except RuntimeError:
+                    pass  # Expected
+        assert mock_store.close.called, "store.close() was not called despite exception"
+
+
+    def test_export_project_closes_on_exception(self, api_client):
+        """Exception during export_project() must not leak the connection."""
+        c, _, _ = api_client
+        with patch("waystone.api_server._open_store") as mock_open:
+            mock_store = mock_open.return_value
+            mock_store.get_all_nodes.side_effect = RuntimeError("simulated error")
+            try:
+                c.get("/v1/projects/test-project/export")
+            except RuntimeError:
+                pass  # Expected
+        assert mock_store.close.called, "store.close() was not called despite exception"
+
+
+# ---------------------------------------------------------------------------
+# License validation tests (Blocker B)
+# ---------------------------------------------------------------------------
+
+class TestLicenseValidation:
+    """Verify that self-hosted Team servers reject expired licenses."""
+
+    def test_check_auth_rejects_expired_license_in_selfhosted_mode(self):
+        """_check_auth should reject a request when license is expired in self-hosted mode."""
+        from datetime import datetime, timedelta, timezone
+
+        from fastapi.security import HTTPAuthorizationCredentials
+
+        from waystone.api_server import HTTPException, _check_auth
+        from waystone.licensing import License
+
+        # Create an expired license
+        yesterday = datetime.now(timezone.utc) - timedelta(days=1)
+        expired_lic = License(seats=5, org="test-org", expires_at=yesterday.isoformat())
+
+        # Create mock credentials
+        creds = HTTPAuthorizationCredentials(scheme="bearer", credentials="test-key")
+
+        # Mock the billing module to simulate admin-DB mode but without Stripe webhook
+        with patch("waystone.api_server.open_admin_db"):
+            with patch("waystone.api_server.validate_key", return_value={"tier": "team"}):
+                with patch("waystone.api_server._use_admin_db", return_value=True):
+                    with patch("waystone.api_server.os.environ.get") as mock_env:
+
+                        def env_side_effect(key, default=""):
+                            if key == "STRIPE_WEBHOOK_SECRET":
+                                return ""  # Not set, so we check license in self-hosted mode
+                            return default
+
+                        mock_env.side_effect = env_side_effect
+
+                        # Patch load_license where it's imported
+                        with patch("waystone.licensing.load_license", return_value=expired_lic):
+                            # Should raise 401 due to expired license
+                            with pytest.raises(HTTPException) as exc_info:
+                                _check_auth(creds)
+                            assert exc_info.value.status_code == 401
+                            assert "expired" in exc_info.value.detail.lower()
+
+    def test_check_auth_accepts_valid_license_in_selfhosted_mode(self):
+        """_check_auth should accept a request when license is valid in self-hosted mode."""
+        from datetime import datetime, timedelta, timezone
+
+        from fastapi.security import HTTPAuthorizationCredentials
+
+        from waystone.api_server import _check_auth
+        from waystone.licensing import License
+
+        # Create a valid license
+        tomorrow = datetime.now(timezone.utc) + timedelta(days=1)
+        valid_lic = License(seats=5, org="test-org", expires_at=tomorrow.isoformat())
+
+        # Create mock credentials
+        creds = HTTPAuthorizationCredentials(scheme="bearer", credentials="test-key")
+
+        # Mock the billing module to simulate admin-DB mode but without Stripe webhook
+        with patch("waystone.api_server.open_admin_db"):
+            with patch("waystone.api_server.validate_key", return_value={"tier": "team"}):
+                with patch("waystone.api_server._use_admin_db", return_value=True):
+                    with patch("waystone.api_server.os.environ.get") as mock_env:
+
+                        def env_side_effect(key, default=""):
+                            if key == "STRIPE_WEBHOOK_SECRET":
+                                return ""  # Not set, so we check license in self-hosted mode
+                            return default
+
+                        mock_env.side_effect = env_side_effect
+
+                        # Patch load_license where it's imported
+                        with patch("waystone.licensing.load_license", return_value=valid_lic):
+                            # Should succeed and return key_info
+                            result = _check_auth(creds)
+                            # Should return the validated key info
+                            assert result.get("tier") == "team"
