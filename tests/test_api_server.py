@@ -500,7 +500,12 @@ class TestPathTraversalProtection:
         key_info_a = {"key_hash": "aaa111222333", "tier": "pro"}
         key_info_b = {"key_hash": "bbb222333444", "tier": "pro"}
 
-        with patch("waystone.api_server._use_admin_db", return_value=True):
+        # Force hosted-SaaS isolation mode explicitly — _isolate_by_key requires
+        # BOTH _hosted_saas() (STRIPE_WEBHOOK_SECRET) and _use_admin_db(). Patching
+        # only the latter made this test pass locally (env has the secret) but fail
+        # in CI (no secret) — depend on neither.
+        with patch("waystone.api_server._hosted_saas", return_value=True), \
+             patch("waystone.api_server._use_admin_db", return_value=True):
             path_a = _get_project_dir(config, key_info_a, "myproject")
             path_b = _get_project_dir(config, key_info_b, "myproject")
 
