@@ -20,6 +20,7 @@ import asyncio
 import contextlib
 import logging
 import os
+import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -383,6 +384,56 @@ AuthDep = Annotated[dict, Depends(_check_auth)]
 # Helpers
 # ---------------------------------------------------------------------------
 
+# Project name validation: strict whitelist to prevent path traversal.
+# Allows: alphanumeric (ASCII), dots, hyphens, underscores.
+# Rejects: slashes, backslashes, double-dots, leading dots, leading/trailing
+# whitespace, null bytes, absolute paths, and names longer than 128 chars.
+_PROJECT_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+
+
+def _validate_project_name(project: str) -> None:
+    """Validate a project name to prevent path traversal and injection attacks.
+
+    Raises HTTPException 400 if invalid.
+    Valid names are 1–128 alphanumeric + dot/hyphen/underscore, starting with
+    alphanumeric, containing no path separators or null bytes.
+    """
+    if not project:
+        raise HTTPException(
+            status_code=400,
+            detail="Project name cannot be empty",
+        )
+
+    # Reject null bytes
+    if "\x00" in project:
+        raise HTTPException(
+            status_code=400,
+            detail="Project name contains invalid characters (null byte)",
+        )
+
+    # Reject path traversal and absolute paths
+    if ".." in project or "/" in project or "\\" in project:
+        raise HTTPException(
+            status_code=400,
+            detail="Project name contains invalid characters (path separators or traversal)",
+        )
+
+    # Reject pure whitespace
+    if not project.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Project name cannot be whitespace-only",
+        )
+
+    # Match strict whitelist pattern
+    if not _PROJECT_NAME_PATTERN.match(project):
+        raise HTTPException(
+            status_code=400,
+            detail="Project name must contain only alphanumeric, dot, hyphen, underscore; "
+                   "start with alphanumeric; and be 1–128 characters",
+        )
+
+
 def _cfg() -> dict:
     return load_config(None)
 
@@ -390,11 +441,35 @@ def _cfg() -> dict:
 def _get_project_dir(config: dict, key_info: dict, project: str) -> Path:
     """Return the project directory. Scoped per API key only on the hosted SaaS;
     self-hosted Team Server members share a project (see _isolate_by_key)."""
+    # Validate project name (raises HTTPException on invalid) — prevents path traversal.
+    _validate_project_name(project)
+
     base = Path(config.get("projects_dir", "~/.waystone/projects")).expanduser()
     if _isolate_by_key(key_info):
         key_prefix = key_info["key_hash"][:12]
-        return base / key_prefix / project
-    return base / project
+        result = base / key_prefix / project
+        # Belt-and-suspenders: verify resolved path is under (base/key_prefix)
+        try:
+            result.resolve().relative_to((base / key_prefix).resolve())
+        except ValueError:
+            # Path escaped the intended boundary
+            raise HTTPException(
+                status_code=400,
+                detail="Project name resulted in invalid path",
+            )
+        return result
+
+    # Non-tenant mode
+    result = base / project
+    try:
+        result.resolve().relative_to(base.resolve())
+    except ValueError:
+        # Path escaped the intended base
+        raise HTTPException(
+            status_code=400,
+            detail="Project name resulted in invalid path",
+        )
+    return result
 
 
 def _get_db_path(config: dict, key_info: dict, project: str) -> Path:

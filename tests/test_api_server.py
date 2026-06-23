@@ -332,3 +332,177 @@ class TestExport:
         c, _, _ = api_client
         r = c.get("/v1/projects/gone/export")
         assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Security — Path Traversal Protection
+# ---------------------------------------------------------------------------
+
+class TestPathTraversalProtection:
+    """Verify that malicious project names cannot escape the project directory."""
+
+    def test_rejects_parent_directory_traversal(self, api_client):
+        """Reject '..' path traversal when embedded in project name."""
+        from waystone.api_server import _validate_project_name
+        from fastapi import HTTPException
+        with pytest.raises(HTTPException) as exc_info:
+            _validate_project_name("..evil")
+        assert exc_info.value.status_code == 400
+        assert "traversal" in exc_info.value.detail.lower()
+
+    def test_rejects_multiple_parent_traversal(self, api_client):
+        """Reject '../../' path traversal."""
+        from waystone.api_server import _validate_project_name
+        from fastapi import HTTPException
+        with pytest.raises(HTTPException) as exc_info:
+            _validate_project_name("../../etc/passwd")
+        assert exc_info.value.status_code == 400
+
+    def test_rejects_absolute_path(self, api_client):
+        """Reject absolute paths."""
+        from waystone.api_server import _validate_project_name
+        from fastapi import HTTPException
+        with pytest.raises(HTTPException) as exc_info:
+            _validate_project_name("/etc/passwd")
+        assert exc_info.value.status_code == 400
+
+    def test_rejects_forward_slash_in_name(self, api_client):
+        """Reject names with forward slashes."""
+        from waystone.api_server import _validate_project_name
+        from fastapi import HTTPException
+        with pytest.raises(HTTPException) as exc_info:
+            _validate_project_name("other/myproject")
+        assert exc_info.value.status_code == 400
+        assert "path separator" in exc_info.value.detail.lower()
+
+    def test_rejects_backslash_in_name(self, api_client):
+        """Reject names with backslashes."""
+        from waystone.api_server import _validate_project_name
+        from fastapi import HTTPException
+        with pytest.raises(HTTPException) as exc_info:
+            _validate_project_name("evil\\project")
+        assert exc_info.value.status_code == 400
+        assert "path separator" in exc_info.value.detail.lower()
+
+    def test_rejects_null_byte(self, api_client):
+        """Reject names containing null bytes."""
+        from waystone.api_server import _validate_project_name
+        from fastapi import HTTPException
+        with pytest.raises(HTTPException) as exc_info:
+            _validate_project_name("evil\x00project")
+        assert exc_info.value.status_code == 400
+        assert "null byte" in exc_info.value.detail.lower()
+
+    def test_rejects_empty_name(self, api_client):
+        """Reject empty project names."""
+        c, _, _ = api_client
+        # Note: FastAPI may strip this before we see it, but test the validator directly
+        from waystone.api_server import _validate_project_name
+        from fastapi import HTTPException
+        with pytest.raises(HTTPException) as exc_info:
+            _validate_project_name("")
+        assert exc_info.value.status_code == 400
+
+    def test_rejects_whitespace_only(self, api_client):
+        """Reject whitespace-only names."""
+        from waystone.api_server import _validate_project_name
+        from fastapi import HTTPException
+        with pytest.raises(HTTPException) as exc_info:
+            _validate_project_name("   ")
+        assert exc_info.value.status_code == 400
+
+    def test_rejects_leading_dot(self, api_client):
+        """Reject names starting with dot (hidden files on Unix)."""
+        c, _, _ = api_client
+        r = c.post("/v1/projects/.hidden", json={"text": "test"})
+        assert r.status_code == 400
+
+    def test_rejects_leading_dash(self, api_client):
+        """Reject names starting with dash."""
+        c, _, _ = api_client
+        r = c.post("/v1/projects/-invalid", json={"text": "test"})
+        assert r.status_code == 400
+
+    def test_rejects_name_too_long(self, api_client):
+        """Reject project names exceeding 128 characters."""
+        c, _, _ = api_client
+        long_name = "a" * 150  # Over 128 char limit
+        r = c.post(f"/v1/projects/{long_name}", json={"text": "test"})
+        assert r.status_code == 400
+
+    def test_accepts_valid_names(self, api_client):
+        """Verify legitimate project names still work."""
+        c, config, tmp_path = api_client
+        valid_names = [
+            "myproject",
+            "MyProject",
+            "my-project",
+            "my_project",
+            "my.project",
+            "MyProject123",
+            "a",  # single char
+            "Project_v2.0-beta",
+        ]
+        for name in valid_names:
+            r = c.post(f"/v1/projects/{name}")
+            # Status should be 201 (created) or 200 (OK), not 400 (bad request)
+            assert r.status_code in (200, 201), f"Project name '{name}' should be valid but got {r.status_code}: {r.text}"
+
+    def test_does_not_escape_projects_dir(self, tmp_path):
+        """Verify that even if validation somehow failed, resolved path stays in projects_dir."""
+        projects_dir = tmp_path / "projects"
+        other_dir = tmp_path / "other"
+        projects_dir.mkdir(parents=True)
+        other_dir.mkdir(parents=True)
+
+        config = {
+            "projects_dir": str(projects_dir),
+            "llm": {},
+            "defaults": {},
+            "strategies": {},
+        }
+
+        from waystone.api_server import _get_project_dir
+
+        # With valid names, paths should stay under projects_dir
+        result = _get_project_dir(config, {"tier": "local"}, "valid")
+        assert str(result).startswith(str(projects_dir.resolve()))
+
+    def test_isolate_by_key_prevents_cross_tenant(self, tmp_path):
+        """Verify that per-key isolation prevents one tenant seeing another's dir.
+
+        On hosted SaaS with _isolate_by_key=True, tenant prefix must scope the path.
+        """
+        projects_dir = tmp_path / "projects"
+        projects_dir.mkdir(parents=True)
+
+        config = {
+            "projects_dir": str(projects_dir),
+            "llm": {},
+            "defaults": {},
+            "strategies": {},
+            "store_backend": "sqlite",  # Use SQLite to test filesystem scoping
+        }
+
+        from waystone.api_server import _get_project_dir
+        from unittest.mock import patch
+
+        # Simulate two tenants with different key_hashes
+        key_info_a = {"key_hash": "aaa111222333", "tier": "pro"}
+        key_info_b = {"key_hash": "bbb222333444", "tier": "pro"}
+
+        with patch("waystone.api_server._use_admin_db", return_value=True):
+            path_a = _get_project_dir(config, key_info_a, "myproject")
+            path_b = _get_project_dir(config, key_info_b, "myproject")
+
+            # Both should resolve under projects_dir but in different prefixes
+            assert str(path_a).startswith(str(projects_dir.resolve()))
+            assert str(path_b).startswith(str(projects_dir.resolve()))
+            # And they must be different
+            assert path_a != path_b
+            # Tenant A's path should include "aaa111222" prefix
+            assert "aaa111222" in str(path_a)
+            assert "bbb222333" in str(path_b)
+            # They must not escape projects_dir
+            assert path_a.resolve().is_relative_to(projects_dir.resolve())
+            assert path_b.resolve().is_relative_to(projects_dir.resolve())
