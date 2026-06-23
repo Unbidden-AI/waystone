@@ -82,3 +82,26 @@ jobs:
 
       - name: Smoke test CLI (UTF-8 glyph output on legacy console)
         run: waystone --help
+
+  # Notify Discord the moment CI goes red, so a failure can't sit unnoticed and
+  # turn "red" back into background noise. Dormant until a DISCORD_CI_WEBHOOK
+  # repo secret is set (the step self-skips if it's absent).
+  notify-failure:
+    needs: [lint, test, test-windows]
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post failure to Discord
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_CI_WEBHOOK }}
+          REF: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$WEBHOOK" ]; then
+            echo "No DISCORD_CI_WEBHOOK secret set — skipping notification."
+            exit 0
+          fi
+          MSG="🔴 CI failed on \`${REF}\` (\`${SHA:0:7}\`) — ${RUN_URL}"
+          jq -n --arg c "$MSG" '{content: $c}' | \
+            curl -fsSL -X POST "$WEBHOOK" -H "Content-Type: application/json" -d @-
