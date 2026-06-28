@@ -1,0 +1,44 @@
+# goreleaser config for the Waystone Go CLI (prototype).
+# Local all-platform build:  goreleaser release --snapshot --clean   (or: make cross)
+#
+# Note: goreleaser's schema drifts across major versions. This targets v2. If your
+# installed goreleaser complains about a field (e.g. formats vs format), `make cross`
+# does the same cross-compile without goreleaser — use that as the reliable fallback.
+version: 2
+project_name: waystone-go
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: waystone
+    main: .
+    binary: waystone
+    env:
+      - CGO_ENABLED=0      # pure-Go static binary; no per-platform C toolchain
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-snapshot"
+
+# Prototype: build artifacts locally, don't publish a GitHub release.
+release:
+  disable: true

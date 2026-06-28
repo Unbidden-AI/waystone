@@ -8,7 +8,18 @@ default retrieval path with **zero C dependencies**. See `DESIGN.md` for the why
 > **unbuilt** — the schema/queries were verified against a live `context.db`, but
 > run `go vet ./...` + the build below before trusting it.
 
-## Build
+## Quick start
+
+```bash
+cd prototypes/go-cli
+./build.sh            # checks/installs Go, builds, and smoke-tests against a real graph
+./build.sh --cross    # also cross-compiles static binaries for every OS -> ./dist
+```
+
+`make` targets are also available: `make build`, `make run`, `make cross`,
+`make release-snapshot` (goreleaser), `make clean`.
+
+## Build (manual)
 
 ```bash
 cd prototypes/go-cli
